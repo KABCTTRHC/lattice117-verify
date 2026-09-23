@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all
+
+  determinism:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      # The central claim, checked on every platform: the verdict digest for a
+      # given input must be identical everywhere. If these differ, determinism
+      # is broken and the project's whole premise with it.
+      - name: Verdict digest is platform-independent
+        shell: bash
+        run: |
+          D=$(./target/release/lattice117-audit --input examples/infeasible.json --json | grep verdict_digest)
+          echo "$D"
+          echo "$D" | grep -q "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"

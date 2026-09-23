@@ -1,0 +1,17 @@
+{
+  "schema": "lattice117.audit.v1",
+  "time_unit": "minutes",
+  "nodes": [
+    {"id": "depot",     "ready": 0, "due": 480},
+    {"id": "ACME-Ltd",  "ready": 0, "due": 100},
+    {"id": "Bravo-Eng", "ready": 0, "due": 20}
+  ],
+  "distance_matrix": [
+    [0, 10, 20],
+    [10, 0, 15],
+    [20, 15, 0]
+  ],
+  "routes": [
+    {"vehicle": "VAN-01", "stops": ["depot", "ACME-Ltd", "Bravo-Eng", "depot"]}
+  ]
+}

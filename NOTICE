@@ -1,0 +1,9 @@
+lattice117-verify / lattice117-audit
+Copyright © 2026 Kurtis Brierley / Brierley Sovereign Group Ltd.
+
+Dual-licensed under AGPL-3.0-or-later (see LICENSE) or a commercial licence
+(see LICENSE-COMMERCIAL.md).
+
+This project contains a verification core extracted from the Lattice117 engine.
+The remainder of that engine is not part of this distribution and is not
+licensed under the AGPL.

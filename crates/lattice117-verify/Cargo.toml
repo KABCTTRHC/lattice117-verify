@@ -1,0 +1,14 @@
+[package]
+name = "lattice117-verify"
+description = "Deterministic time-window feasibility verification. Checks whether a schedule is feasible and names the exact violation when it is not."
+keywords = ["scheduling", "verification", "vrptw", "fixed-point", "deterministic"]
+categories = ["algorithms", "science"]
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]

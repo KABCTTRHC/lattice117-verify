@@ -1,0 +1,22 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+!! ACTION REQUIRED BEFORE FIRST PUBLIC PUSH !!
+
+This file must contain the complete, verbatim text of the GNU Affero General
+Public License version 3. It is ~35 KB of legal text and it must be exact —
+an approximation is worse than no licence at all, because it is unenforceable
+while appearing to be enforceable.
+
+Fetch it and replace this file entirely:
+
+    curl -fsSL https://www.gnu.org/licenses/agpl-3.0.txt -o LICENSE
+
+Then verify the first line reads:
+
+    GNU AFFERO GENERAL PUBLIC LICENSE
+
+and the file is approximately 34,500 bytes. Delete this notice.
+
+Until that is done, this project has NO valid open-source licence and must not
+be published.
