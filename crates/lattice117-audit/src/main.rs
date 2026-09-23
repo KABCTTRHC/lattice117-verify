@@ -218,9 +218,9 @@ fn run(cli: &Cli) -> Result<i32, String> {
     let mut distances_q16: Vec<i32> = Vec::with_capacity(nodes_count * nodes_count);
     for (r, row) in input.distance_matrix.iter().enumerate() {
         for (c, value) in row.iter().enumerate() {
-            distances_q16.push(to_q16(*value).map_err(|e| {
-                format!("distance_matrix[{r}][{c}] = {value}: {e}")
-            })?);
+            distances_q16.push(
+                to_q16(*value).map_err(|e| format!("distance_matrix[{r}][{c}] = {value}: {e}"))?,
+            );
         }
     }
 
@@ -254,9 +254,8 @@ fn run(cli: &Cli) -> Result<i32, String> {
 
         let mut ordered: Vec<usize> = Vec::with_capacity(route.stops.len());
         for stop in &route.stops {
-            let idx = index_of(stop).ok_or_else(|| {
-                format!("route \"{label}\" references unknown stop \"{stop}\"")
-            })?;
+            let idx = index_of(stop)
+                .ok_or_else(|| format!("route \"{label}\" references unknown stop \"{stop}\""))?;
             ordered.push(idx);
         }
 
@@ -266,7 +265,11 @@ fn run(cli: &Cli) -> Result<i32, String> {
         }
     }
 
-    let verdict = if violations.is_empty() { "FEASIBLE" } else { "INFEASIBLE" };
+    let verdict = if violations.is_empty() {
+        "FEASIBLE"
+    } else {
+        "INFEASIBLE"
+    };
 
     // Digest covers the input *and* the verdict: it pins what was checked
     // and what was concluded, so two runs can be compared without trusting
@@ -441,9 +444,7 @@ fn print_human(report: &AuditReport, colour: bool) {
             "  {green}{bold}PASS{reset}  {} of {} routes feasible",
             report.routes_feasible, report.routes_checked
         );
-        println!(
-            "  {dim}every stop is reachable within its own time window{reset}"
-        );
+        println!("  {dim}every stop is reachable within its own time window{reset}");
     } else {
         println!(
             "  {red}{bold}FAIL{reset}  {} of {} routes feasible · {} violation(s)",
@@ -453,7 +454,10 @@ fn print_human(report: &AuditReport, colour: bool) {
         );
         println!();
         for v in &report.violations {
-            println!("  {red}▸{reset} {bold}{}{reset} — stop {bold}{}{reset}", v.vehicle, v.node_id);
+            println!(
+                "  {red}▸{reset} {bold}{}{reset} — stop {bold}{}{reset}",
+                v.vehicle, v.node_id
+            );
             println!(
                 "      arrives      {:>12.4} {unit}   {dim}(Q16.16 {}){reset}",
                 v.arrival_time, v.arrival_time_q16
@@ -470,7 +474,10 @@ fn print_human(report: &AuditReport, colour: bool) {
         }
     }
 
-    println!("  {dim}verdict digest  {}{reset}", report.verdict_digest_sha256);
+    println!(
+        "  {dim}verdict digest  {}{reset}",
+        report.verdict_digest_sha256
+    );
     println!(
         "  {dim}re-run this file and the digest is identical, or determinism is broken{reset}"
     );

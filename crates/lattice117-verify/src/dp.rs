@@ -56,9 +56,12 @@ pub unsafe fn process_topological_dp_step_neon(
     let optimized_dp_vector = vbslq_s32(
         improvement_mask, // already uint32x4_t: vcltq_s32 returns uint32x4_t directly
         proposed_dp_vector,
-        current_dp_vector
+        current_dp_vector,
     );
-    vst1q_s32(dp_table.states[current_state_idx].as_mut_ptr(), optimized_dp_vector);
+    vst1q_s32(
+        dp_table.states[current_state_idx].as_mut_ptr(),
+        optimized_dp_vector,
+    );
 }
 
 // ==============================================================================
@@ -130,7 +133,9 @@ pub fn solve_intra_cluster_branchless(
     dp_table: &mut VectorizedDpTable,
 ) -> Result<(i32, i32), TimeParadoxViolation> {
     let m = ordered_nodes.len();
-    if m == 0 { return Ok((start_time, 0)); }
+    if m == 0 {
+        return Ok((start_time, 0));
+    }
 
     let start_node = ordered_nodes[0] as usize;
     let (ready_0, due_0) = time_windows[start_node];
@@ -164,11 +169,11 @@ pub fn solve_intra_cluster_branchless(
         let travel_cost = distance_matrix[n1 * n_nodes + n2];
         let (ready, due) = time_windows[n2];
 
-        let t_from0 = dp_table.arrival_time[i-1][0].saturating_add(travel_cost);
-        let t_from1 = dp_table.arrival_time[i-1][1].saturating_add(travel_cost);
+        let t_from0 = dp_table.arrival_time[i - 1][0].saturating_add(travel_cost);
+        let t_from1 = dp_table.arrival_time[i - 1][1].saturating_add(travel_cost);
 
-        let cost_from0 = dp_table.cost[i-1][0];
-        let cost_from1 = dp_table.cost[i-1][1];
+        let cost_from0 = dp_table.cost[i - 1][0];
+        let cost_from1 = dp_table.cost[i - 1][1];
 
         let idle_0 = (ready.saturating_sub(t_from0)).max(0);
         let idle_1 = (ready.saturating_sub(t_from1)).max(0);
@@ -211,14 +216,18 @@ pub fn solve_intra_cluster_branchless(
         }
     }
 
-    let final_state = if dp_table.cost[m-1][0] <= dp_table.cost[m-1][1] { 0 } else { 1 };
+    let final_state = if dp_table.cost[m - 1][0] <= dp_table.cost[m - 1][1] {
+        0
+    } else {
+        1
+    };
 
     if let Some(violation) = first_violation {
         return Err(violation);
     }
 
     Ok((
-        dp_table.arrival_time[m-1][final_state],
-        dp_table.cost[m-1][final_state]
+        dp_table.arrival_time[m - 1][final_state],
+        dp_table.cost[m - 1][final_state],
     ))
 }

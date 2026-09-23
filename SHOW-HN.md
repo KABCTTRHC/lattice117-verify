@@ -69,10 +69,20 @@ posture from finding out in a meeting.
 
 On provenance: the verification core is extracted from a larger engine where it
 sits under 196 passing tests and is validated against the published SINTEF
-Solomon C101 instance and its published solution. Running a real published
-benchmark solution through it once surfaced a genuine defect in that published
-data, which is roughly when I decided the checker was more interesting than the
-solver.
+Solomon C101 instance and its published Rochat & Taillard solution.
+
+Running that published solution through the checker is what caught the most
+useful bug this code has had, and it was *in the checker*. An earlier version
+conflated legitimate accumulated waiting time with a due-date violation in the
+same cost field, so any route with more than ~152 time-units of honest waiting
+came back infeasible. C101's published solution is feasible; a checker that
+disagrees is broken. That is when I decided the checker was more interesting
+than the solver.
+
+A false "infeasible" is the failure this kind of tool is most likely to have
+and least likely to catch, because it doesn't look like a bug — it looks like
+being careful. The only thing that finds it is running real published data
+against a real published answer.
 
 Honest limitation: it verifies time windows and travel times. It does not yet
 check vehicle capacity as a hard constraint, and it has no opinion about
@@ -98,6 +108,11 @@ you can hand to someone else.
 *"Why fixed point?"*
 → Because two runs of a float pipeline on different machines can disagree, and
 the entire value here is being able to say the verdict is the same every time.
+
+*"Did you find a bug in the SINTEF benchmark?"*
+→ **No, and do not let this drift.** The bug was in my checker; the published
+C101 solution is correct and feasible. If anyone reads it the other way in the
+thread, correct it immediately and plainly.
 
 *"Is the digest cryptographically meaningful?"*
 → It is a SHA-256 over the canonical input plus the verdict. It proves the same

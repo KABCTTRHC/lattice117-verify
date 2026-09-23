@@ -118,14 +118,37 @@ match evaluate_order(&route, &distances_q16, node_count, &windows) {
 
 ## Provenance
 
-This verification core is extracted from the Lattice117 engine, where it is
-covered by 196 passing tests and has been validated against the **published
-SINTEF Solomon C101 benchmark instance and its published solution** — third-party
-data, independently checkable. Deterministic bit-identical output is confirmed
-to 13,509 nodes.
+This verification core is extracted from the Lattice117 engine. **This
+repository ships 4 tests** — what you get when you run `cargo test` here. The
+196-test figure quoted elsewhere belongs to the parent engine, which is not
+published, and you should read it as our claim rather than as something this
+repository lets you check. What this repository does let you check is the
+digest: CI pins the verdict digest for `examples/infeasible.json` and fails if
+Linux, macOS and Windows disagree.
 
-Running a real published benchmark solution through this checker once surfaced
-a genuine defect in that published data.
+In the parent engine the extracted core is covered by those 196 tests and has
+been validated against the **published
+SINTEF Solomon C101 benchmark instance and its published Rochat & Taillard
+solution** — third-party data, independently checkable.
+
+Running that real published solution through the checker is what caught the
+most useful bug this code has had — **in the checker, not in the benchmark.**
+An earlier version conflated legitimate accumulated waiting time with a
+due-date violation in the same cost field, so any route with more than about
+152 time-units of honest waiting was reported infeasible. The published C101
+solution is feasible, and a checker that says otherwise is wrong. That is now
+the bar the test enforces: not "the tests pass," but "the known-feasible real
+solution validates as feasible."
+
+A false *infeasible* is the failure mode a verification tool is most likely to
+have and least likely to notice, because nothing about it looks like a bug —
+it looks like diligence. Running real published data against a real published
+answer is the only thing that catches it.
+
+Scale figures to 13,509 nodes are recorded in the parent engine's
+`testing_results.md` with their verdict digests. Those datasets are not
+distributed, so treat them as our measurements rather than something you can
+re-run; the C101 fixtures, by contrast, ship with the parent repository.
 
 ## Licence
 

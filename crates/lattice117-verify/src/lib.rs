@@ -141,7 +141,10 @@ mod tests {
         let (distances, windows) = fixture();
         let first = evaluate_order(&[0, 1, 2, 0], &distances, 3, &windows);
         for _ in 0..64 {
-            assert_eq!(evaluate_order(&[0, 1, 2, 0], &distances, 3, &windows), first);
+            assert_eq!(
+                evaluate_order(&[0, 1, 2, 0], &distances, 3, &windows),
+                first
+            );
         }
     }
 }
