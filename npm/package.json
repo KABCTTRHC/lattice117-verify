@@ -1,5 +1,5 @@
 {
-  "name": "@lattice117/verify",
+  "name": "lattice117-verify",
   "version": "0.1.0",
   "description": "Deterministic schedule feasibility verification. Checks whether a planned route holds against its own time windows and names the exact violation when it does not. Runs entirely locally — no network, no server, no telemetry.",
   "keywords": ["scheduling", "vrptw", "verification", "logistics", "routing", "feasibility", "fixed-point", "deterministic", "wasm"],

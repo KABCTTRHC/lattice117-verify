@@ -1,4 +1,4 @@
-# @lattice117/verify
+# lattice117-verify
 
 **Does this schedule actually hold against its own time windows?**
 
@@ -8,7 +8,7 @@ and when the answer is no it names the stop, the arrival, the window close and
 the deficit.
 
 ```js
-import { verifyFleet } from '@lattice117/verify';
+import { verifyFleet } from 'lattice117-verify';
 
 const fleet = await verifyFleet([
   { id: 'VAN-01', stops: [
@@ -32,7 +32,7 @@ console.log(fleet.routes[0].violation);
 ## Install
 
 ```sh
-npm install @lattice117/verify
+npm install lattice117-verify
 ```
 
 Node 18+, or any bundler. No dependencies.

@@ -1,5 +1,5 @@
 /**
- * @lattice117/verify — deterministic schedule feasibility verification.
+ * lattice117-verify — deterministic schedule feasibility verification.
  *
  * Wraps the same Rust `evaluate_order` the command-line auditor calls,
  * compiled to WebAssembly. The browser, Node and the CLI therefore run
