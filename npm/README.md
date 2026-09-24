@@ -107,6 +107,12 @@ Extracted from the Lattice117 engine, where it sits under 196 passing tests and
 is validated against the published SINTEF Solomon C101 instance and its
 published Rochat & Taillard solution.
 
+That parent engine is not published, so read the 196 as our claim rather than
+as something you can check. The open repository ships 4 tests — that is what
+`cargo test` gives you there. What you *can* check is the digest: CI pins the
+verdict digest for a known input and fails if Linux, macOS and Windows
+disagree, which is the determinism claim this package rests on.
+
 Running that published solution is what caught the most useful bug this code
 has had — **in the checker, not in the benchmark.** An earlier version counted
 legitimate accumulated waiting time as lateness, so any route with more than

@@ -69,7 +69,11 @@ posture from finding out in a meeting.
 
 On provenance: the verification core is extracted from a larger engine where it
 sits under 196 passing tests and is validated against the published SINTEF
-Solomon C101 instance and its published Rochat & Taillard solution.
+Solomon C101 instance and its published Rochat & Taillard solution. That engine
+is not public, so treat the 196 as a claim, not as evidence — the open
+repository ships 4 tests and says so. The part you can actually check is the
+determinism: CI pins the verdict digest for a known input across Linux, macOS
+and Windows and fails if they disagree.
 
 Running that published solution through the checker is what caught the most
 useful bug this code has had, and it was *in the checker*. An earlier version
