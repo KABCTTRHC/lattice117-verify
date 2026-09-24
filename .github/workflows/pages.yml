@@ -1,0 +1,72 @@
+# Publishes the demo and the Excel add-in to GitHub Pages.
+#
+# The add-in needs this more than the demo does. Office refuses to load a task
+# pane from plain http for any origin but localhost, so an add-in with no HTTPS
+# origin cannot be sideloaded by anyone but its author, and cannot be submitted
+# to AppSource at all. Pages supplies that origin for nothing, which is the
+# whole reason this workflow exists.
+#
+# Published layout:
+#   /                    demo/index.html    — single round
+#   /audit.html          demo/audit.html    — fleet audit, CSV import, licence
+#   /excel-addin/        the task pane, its manifest and its own WASM copy
+#
+# Enable once, by hand: Settings -> Pages -> Source -> GitHub Actions.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy midway — a half-published site is worse than a stale
+# one. Queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          mkdir -p site/excel-addin
+          cp -r demo/. site/
+          cp -r excel-addin/. site/excel-addin/
+          # demo/README.md documents the folder for contributors; it is not a page.
+          rm -f site/README.md
+
+      # If the private signing key ever reaches the repository, this is the
+      # last place to stop it becoming a public URL.
+      - name: Refuse to publish a signing key
+        run: |
+          if find site -name 'keypair*.json' -o -name '*private*.json' | grep -q .; then
+            echo "A key-shaped file is in the publish set. Refusing."
+            find site -name 'keypair*.json' -o -name '*private*.json'
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -38,3 +38,20 @@ jobs:
           D=$(./target/release/lattice117-audit --input examples/infeasible.json --json | grep verdict_digest)
           echo "$D"
           echo "$D" | grep -q "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"
+
+  # The licence check is served from three paths — the demo, the add-in and the
+  # source of truth in licence/. They must be the same file. A copy that drifts
+  # means one surface honours a key the other rejects, which looks to a paying
+  # customer like the product is broken.
+  surfaces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Licence check is identical on every surface
+        run: |
+          cmp licence/licence.js demo/licence.js
+          cmp licence/licence.js excel-addin/licence.js
+      - name: WASM is identical on every surface
+        run: |
+          cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
+          cmp demo/lattice117_wasm.wasm excel-addin/lattice117_wasm.wasm

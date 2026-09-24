@@ -45,6 +45,16 @@
   .map span{color:var(--ink)}
   .note{font-size:11.5px;color:var(--ink-faint);margin-top:10px}
   .digest{font:10px var(--mono);color:var(--ink-faint);word-break:break-all;margin-top:8px}
+  .capped{color:#b8860b;font-size:12px;margin-top:8px}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .capped{color:#d29922}}
+  details{border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:4px;background:var(--panel)}
+  summary{cursor:pointer;font:600 12.5px var(--sans);color:var(--ink-dim)}
+  details[open] summary{margin-bottom:8px}
+  #licKey{width:100%;font:11px var(--mono);padding:7px;border-radius:5px;margin:6px 0;
+          border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+  #licState{font-size:12.5px}
+  .row{display:flex;gap:6px}
+  .row button{margin-bottom:0}
 </style>
 </head>
 <body>
@@ -53,6 +63,7 @@
 <p class="sub">Select your route rows, including the header, then check.</p>
 <div>
   <span class="badge live" id="engine">engine: loading…</span>
+  <span class="badge" id="tier">tier: …</span>
   <span class="badge">never uploaded</span>
 </div>
 
@@ -62,14 +73,50 @@
 <div id="out"></div>
 <div class="err" id="err"></div>
 
+<details id="licBox">
+  <summary>Licence</summary>
+  <div id="licState"></div>
+  <input id="licKey" placeholder="paste licence key" spellcheck="false">
+  <div class="row">
+    <button id="licApply">Apply</button>
+    <button id="licRemove" class="secondary">Remove</button>
+  </div>
+  <p class="note">Free checks one round and issues no verdict digest. A licence
+  checks every round in the selection. The key is verified here, inside the task
+  pane — it is not sent anywhere, and neither is your sheet.</p>
+</details>
+
 <p class="note">Columns are matched from your header row. Expected: the round or
 vehicle, the stop, when its window opens and closes, and the travel time from
 the previous stop. Names can be anything.</p>
 
-<script>
+<script type="module">
+import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
+
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastFailRows=[];
 const $=id=>document.getElementById(id);
+
+/* ---- licence -----------------------------------------------------------
+   The same public-key check the browser audit uses, against the same issued
+   keys, so one licence covers both surfaces. Verification is local: there is
+   no account, no server and no call home, which is the property that lets this
+   run on schedules an operator is not allowed to upload.
+------------------------------------------------------------------------- */
+let ent={tier:'free',maxRounds:1,certificate:false,label:'Free'};
+
+async function refreshTier(){
+  ent=await currentEntitlement();
+  const b=$('tier');
+  b.textContent='tier: '+ent.label.toLowerCase();
+  b.className='badge'+(ent.tier!=='free'?' live':'');
+  $('licState').innerHTML = ent.tier!=='free'
+    ? `<b style="color:var(--ok)">${ent.label}</b> — ${ent.email}`+
+      `<br><span style="color:var(--ink-dim)">expires ${ent.expires.toISOString().slice(0,10)}</span>`
+    : `<b>Free</b> — one round per check, no verdict digest.`+
+      (ent.reason && ent.reason!=='no licence key'
+        ? `<br><span style="color:var(--bad)">licence rejected: ${ent.reason}</span>` : '');
+}
 
 /* ---- engine ------------------------------------------------------------ */
 async function loadWasm(){
@@ -138,6 +185,7 @@ function mapColumns(headers){
 /* ---- Excel ------------------------------------------------------------- */
 Office.onReady(info=>{
   if(info.host===Office.HostType.Excel){
+    refreshTier();
     loadWasm().then(()=>{ $('run').disabled=false; })
       .catch(e=>{ $('engine').textContent='engine: failed'; $('err').textContent=e.message; });
   }
@@ -145,6 +193,19 @@ Office.onReady(info=>{
 
 $('run').addEventListener('click',run);
 $('clear').addEventListener('click',clearHighlight);
+
+$('licApply').addEventListener('click',async()=>{
+  const k=$('licKey').value.trim();
+  const probe=await verifyLicence(k);
+  if(probe.tier==='free'){
+    // Refuse to store a key that does not verify. Saving it would show the
+    // free tier with no explanation on every later open.
+    $('licState').innerHTML=`<span style="color:var(--bad)">Not applied: ${probe.reason}</span>`;
+    return;
+  }
+  saveLicence(k); $('licKey').value=''; await refreshTier();
+});
+$('licRemove').addEventListener('click',async()=>{ clearLicence(); await refreshTier(); });
 
 async function run(){
   $('err').textContent=''; $('out').innerHTML='';
@@ -181,8 +242,13 @@ async function run(){
       }
       if(!rounds.size) throw new Error('No rounds found — the round/vehicle column was empty on every row.');
 
-      let feasible=0; const fails=[]; lastFailRows=[];
+      let feasible=0, checked=0; const fails=[]; lastFailRows=[];
       for(const [veh,stops] of rounds){
+        // The free-tier cap is applied here, where rounds are actually
+        // evaluated, not by hiding rows afterwards. A limit that exists only
+        // in the presentation layer is not a limit.
+        if(checked>=ent.maxRounds) break;
+        checked++;
         stops.sort((a,b)=>a.seq-b.seq);
         stops[0].travel=0;                      // nothing precedes the first stop
         if(stops.length<2){ fails.push({veh,msg:'only one stop'}); continue; }
@@ -195,7 +261,7 @@ async function run(){
         } else fails.push({veh,msg:'rejected before evaluation'});
       }
 
-      render(rounds.size,feasible,fails,headers,map);
+      render(checked,feasible,fails,headers,map,rounds.size);
 
       // Colour the offending rows in the sheet itself.
       const ws=ctx.workbook.worksheets.getActiveWorksheet();
@@ -219,7 +285,7 @@ async function clearHighlight(){
   }catch(e){ $('err').textContent=e.message; }
 }
 
-function render(checked,feasible,fails,headers,map){
+function render(checked,feasible,fails,headers,map,total){
   const pct=checked?Math.round(100*feasible/checked):0;
   const bad=checked-feasible;
   const mapped=['vehicle','stop','open','close','travel']
@@ -229,8 +295,11 @@ function render(checked,feasible,fails,headers,map){
     <div class="rate ${bad?'bad':'ok'}">${pct}%<small>rounds achievable</small></div>
     <div style="margin-top:10px;font-size:13px">${
       bad ? `<b>${bad} of ${checked}</b> cannot be run as scheduled.`
+          : checked===1 ? `The round checked is <b>achievable</b>.`
           : `All <b>${checked}</b> rounds are achievable.`}</div>
-    <div class="map">${mapped}</div>
+    <div class="map">${mapped}</div>${
+    total>checked ? `<div class="capped">Free tier: checked ${checked} of ${total} rounds
+      in this selection. A licence checks all of them.</div>` : ''}
   </div>`;
 
   for(const f of fails){
@@ -243,6 +312,12 @@ function render(checked,feasible,fails,headers,map){
   }
   $('out').innerHTML=html;
 
+  if(!ent.certificate){
+    $('out').insertAdjacentHTML('beforeend',
+      '<div class="note">The verdict digest — the reproducible hash that lets '+
+      'someone else confirm this result from the same sheet — is part of a licence.</div>');
+    return;
+  }
   crypto.subtle.digest('SHA-256',new TextEncoder().encode(
     JSON.stringify({checked,feasible,fails})))
     .then(h=>{ $('out').insertAdjacentHTML('beforeend',

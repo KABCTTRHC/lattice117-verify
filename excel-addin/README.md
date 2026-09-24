@@ -30,25 +30,48 @@ actually drive, which is what a route sheet already contains.
 A sequence column is used if present; otherwise sheet order is taken as visit
 order.
 
-## Sideloading for development
+## Licence
 
-Office refuses plain HTTP for anything but localhost, so serve over HTTPS:
+The pane uses the same ECDSA P-256 keys the browser audit uses, so one licence
+covers both. Open **Licence** in the pane and paste the key.
 
-```sh
-cd excel-addin
-npx http-server -S -p 3000
-```
+| | Free | Licensed |
+|---|---|---|
+| Rounds checked per run | 1 | every round in the selection |
+| Failing rows coloured | yes | yes |
+| Verdict digest | — | yes |
 
-Then in Excel: **File → Options → Trust Center → Trust Center Settings →
-Trusted Add-in Catalogs**, add the folder containing `manifest.xml`, tick
-*Show in Menu*, restart Excel, and pick it from **Insert → My Add-ins →
-Shared Folder**.
+The cap is applied where rounds are evaluated, not by hiding rows afterwards.
+Verification is local: there is no account and no call home, which is the
+property that lets this run on schedules an operator is not allowed to upload.
+The check is open source, so it is a lock on an honest door — commercial use is
+actually governed by the AGPL and the commercial licence, not by that check.
+
+## Installing
+
+Office refuses plain HTTP for any origin but localhost, so the pane is served
+from GitHub Pages:
+
+    https://kabcttrhc.github.io/lattice117-verify/excel-addin/
+
+`.github/workflows/pages.yml` publishes it on every push to `main`. Enable it
+once under **Settings → Pages → Source → GitHub Actions**.
+
+To install, save `manifest.xml` to a folder, then in Excel: **File → Options →
+Trust Center → Trust Center Settings → Trusted Add-in Catalogs**, add that
+folder, tick *Show in Menu*, restart Excel, and pick it from **Insert → My
+Add-ins → Shared Folder**.
+
+To develop against a local server instead, swap the Pages origin in
+`manifest.xml` for `https://localhost:3000` and run `npx http-server -S -p 3000`
+in this folder. Office requires TLS even on localhost; `-S` generates a cert.
 
 ## Before an AppSource listing
 
-- Regenerate the `<Id>` GUID in `manifest.xml`. It is the add-in's identity.
-- Replace every `https://localhost:3000` with the public HTTPS origin.
+- The `<Id>` GUID is set and must not change again — changing it makes every
+  existing install look like a different add-in.
 - Validate: `npx office-addin-manifest validate manifest.xml`
+- AppSource requires a privacy policy URL and support URL that resolve.
 
 ## Verified behaviour
 
@@ -63,6 +86,16 @@ VAN-01 misses Clifton
   shuts   40.0000 (2621440)
   late by  5.0000 (327680)
 sheet row 4 highlighted
+```
+
+The licence gate is driven the same way, against the 8-round example sheet:
+
+```
+FREE   tier: free · checked 1 of 8 rounds · no digest · 0 rows coloured
+PRO    tier: pro  · 3 of 8 cannot be run · digest shown · 3 rows coloured
+BAD    "Not applied: signature does not verify"  (key is not stored)
+RELOAD tier: pro                                 (survives a pane reload)
+REMOVE tier: free
 ```
 
 Those figures are identical to the ones the native CLI, the browser audit and

@@ -2,19 +2,23 @@
 <!--
   Lattice117 Schedule Check — Excel task pane add-in.
 
-  Sideload for development:
-    Excel  ->  File  ->  Options  ->  Trust Center  ->  Trust Center Settings
-           ->  Trusted Add-in Catalogs  ->  add the folder holding this file
-           ->  tick "Show in Menu"  ->  restart Excel
-           ->  Insert  ->  My Add-ins  ->  Shared Folder  ->  Schedule Check
+  Office refuses to load a task pane over plain http from anything but
+  localhost, so the add-in is served from GitHub Pages. The Pages workflow
+  publishes this folder to https://kabcttrhc.github.io/lattice117-verify/excel-addin
+  on every push to main; enable it once under Settings -> Pages -> Source ->
+  GitHub Actions.
 
-  The SourceLocation below points at a local dev server. Serve the addin
-  directory over HTTPS (Office refuses plain http for anything but localhost):
+  Sideload:
+    Save this file somewhere, then in Excel
+      File -> Options -> Trust Center -> Trust Center Settings
+           -> Trusted Add-in Catalogs -> add the folder holding this file
+           -> tick "Show in Menu" -> restart Excel
+           -> Insert -> My Add-ins -> Shared Folder -> Schedule Check
 
-    cd excel-addin && npx http-server -S -p 3000
-
-  For AppSource submission, replace every https://localhost:3000 with the
-  public HTTPS origin and regenerate the Id GUID.
+  To develop against a local server instead, replace every
+  https://kabcttrhc.github.io/lattice117-verify/excel-addin below with
+  https://localhost:3000 and run:  cd excel-addin && npx http-server -S -p 3000
+  (Office requires TLS even locally; -S makes http-server generate a cert.)
 -->
 <OfficeApp
     xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
@@ -23,20 +27,21 @@
     xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="TaskPaneApp">
 
-  <!-- Regenerate this GUID before any public listing. It is the add-in's
-       identity; two listings sharing one Id collide. -->
-  <Id>7c1f0a9e-3d52-4b18-9a6c-2f8e4d1b7a30</Id>
+  <!-- The add-in's identity. Two listings sharing one Id collide, so this is
+       generated once per published add-in and then never changed — changing it
+       makes every existing install look like a different add-in. -->
+  <Id>c37d5590-205e-44a0-94dc-ee35ce9aae95</Id>
   <Version>0.1.0.0</Version>
   <ProviderName>Brierley Sovereign Group Ltd</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
   <DisplayName DefaultValue="Lattice117 Schedule Check"/>
   <Description DefaultValue="Checks whether the rounds in your sheet are actually achievable against their own time windows. Names the stop that breaks, when it arrives, when the window shuts and by how much it is missed. Runs entirely inside Excel — your schedule is never uploaded."/>
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+  <IconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-80.png"/>
   <SupportUrl DefaultValue="https://github.com/KABCTTRHC/lattice117-verify"/>
 
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://kabcttrhc.github.io</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -50,7 +55,7 @@
   </Requirements>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+    <SourceLocation DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/taskpane.html"/>
   </DefaultSettings>
 
   <!-- ReadWriteDocument, not ReadDocument: the add-in colours the failing
@@ -102,12 +107,12 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png"/>
-        <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+        <bt:Image id="Icon.16" DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/taskpane.html"/>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/KABCTTRHC/lattice117-verify"/>
       </bt:Urls>
       <bt:ShortStrings>
