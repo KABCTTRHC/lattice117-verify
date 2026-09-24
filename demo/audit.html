@@ -71,7 +71,20 @@
   code{font-family:var(--mono);font-size:.92em;background:var(--panel-2);padding:1px 5px;border-radius:4px}
   footer{margin-top:28px;font-size:12.5px;color:var(--ink-faint)}
   a{color:var(--accent)}
-  @media(max-width:620px){ .hero{grid-template-columns:1fr;gap:14px} }
+  .tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;
+       padding:8px 12px;color:var(--ink-faint);font:600 13px var(--sans);cursor:pointer}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+  .map{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:14px 0}
+  .map label{font:600 11px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:4px}
+  .map .req{color:var(--bad)}
+  select{width:100%;background:var(--panel-2);color:var(--ink);font:12.5px var(--mono);
+         border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+  select.unset{border-color:color-mix(in srgb,var(--bad) 50%,var(--line))}
+  .prev{overflow-x:auto;border:1px solid var(--line);border-radius:7px;margin-top:6px}
+  .prev table{font-size:11.5px} .prev td,.prev th{padding:5px 9px;white-space:nowrap}
+  .ok-note{color:var(--ok);font:12.5px var(--mono);margin-top:8px}
+  @media(max-width:620px){ .hero{grid-template-columns:1fr;gap:14px} .map{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -123,15 +136,47 @@
 
 <div class="panel">
   <h2>Your schedule</h2>
-  <div class="drop" id="drop">Drop a <code>lattice117.audit.v1</code> JSON file here, or paste below</div>
-  <textarea id="input" spellcheck="false" placeholder='{"schema":"lattice117.audit.v1", "nodes":[…], "distance_matrix":[…], "routes":[…]}'></textarea>
-  <div class="btnrow" style="margin-top:12px">
-    <button class="primary" id="run" disabled>Audit</button>
-    <button id="loadEx" disabled>Load example fleet</button>
+  <div class="tabs">
+    <button class="tab active" data-tab="csv">CSV route sheet</button>
+    <button class="tab" data-tab="json">JSON</button>
   </div>
+
+  <div id="tab-csv">
+    <div class="drop" id="dropCsv">Drop a CSV route sheet here — one row per stop</div>
+    <input type="file" id="fileCsv" accept=".csv,text/csv,text/plain" style="display:none">
+    <div class="btnrow">
+      <button id="pickCsv" disabled>Choose CSV…</button>
+      <button id="loadExCsv" disabled>Load example route sheet</button>
+    </div>
+
+    <div id="mapper" style="display:none">
+      <p class="note" style="margin-top:18px"><b>Check the columns.</b> We guessed these from your headers — change anything that is wrong.</p>
+      <div class="map" id="mapFields"></div>
+      <div class="prev" id="preview"></div>
+      <div class="ok-note" id="mapOk"></div>
+      <div class="btnrow" style="margin-top:14px">
+        <button class="primary" id="runCsv">Audit this sheet</button>
+      </div>
+    </div>
+
+    <p class="note">Export one row per stop, in visit order. You need the round it belongs to, the stop,
+    its delivery window, and the <b>travel time from the previous stop</b>. That last column is the whole
+    trick: checking a fixed round needs the legs you actually drive, not a full distance matrix, so a
+    normal route sheet is enough. Headers can be named anything.</p>
+  </div>
+
+  <div id="tab-json" style="display:none">
+    <div class="drop" id="drop">Drop a <code>lattice117.audit.v1</code> JSON file here, or paste below</div>
+    <textarea id="input" spellcheck="false" placeholder='{"schema":"lattice117.audit.v1", "nodes":[…], "distance_matrix":[…], "routes":[…]}'></textarea>
+    <div class="btnrow" style="margin-top:12px">
+      <button class="primary" id="run" disabled>Audit</button>
+      <button id="loadEx" disabled>Load example fleet</button>
+    </div>
+    <p class="note">The format the command-line auditor takes. Index 0 of <code>distance_matrix</code> is the depot.</p>
+  </div>
+
   <div class="err" id="err"></div>
-  <p class="note">The format is the same one the command-line auditor takes. Index 0 of <code>distance_matrix</code> is the depot.
-  Nothing here is transmitted: open devtools, watch the network tab, run an audit, and you will see no request.</p>
+  <p class="note">Nothing here is transmitted: open devtools, watch the network tab, run an audit, and you will see no request.</p>
 </div>
 
 <footer>
@@ -142,10 +187,15 @@
 
 <script>
 const Q=65536, QMAX=32767, QMIN=-32768;
-let wasm=null, lastReport=null;
+let wasm=null, lastReport=null, csvRows=null, csvHeaders=null;
 
 const $=id=>document.getElementById(id);
-const toQ=v=>{ if(!(v>=QMIN&&v<=QMAX)) throw new Error(`value ${v} is outside the Q16.16 representable range (${QMIN}..${QMAX})`); return Math.round(v*Q); };
+const toQ=(v,what)=>{
+  const n=Number(v);
+  if(!Number.isFinite(n)) throw new Error(`${what}: "${v}" is not a number`);
+  if(!(n>=QMIN&&n<=QMAX)) throw new Error(`${what}: ${n} is outside the Q16.16 representable range (${QMIN}..${QMAX})`);
+  return Math.round(n*Q);
+};
 const fromQ=v=>v/Q, fmt=v=>fromQ(v).toFixed(4);
 
 async function loadWasm(){
@@ -161,45 +211,196 @@ function put(arr){
   return {ptr,bytes};
 }
 
-function audit(doc){
+/* ---------------------------------------------------------------------------
+   One normalised shape for every input source:
+     {unit, routes:[{vehicle, stops:[{id, ready, due, travel}]}]}
+   `travel` is the time from the PREVIOUS stop (0 for the first).
+
+   Checking a fixed round only needs the legs actually driven, so each round is
+   evaluated against its own small matrix rather than a shared N x N one. That
+   is what lets a plain route sheet work, and it sidesteps the case where the
+   same stop appears on two rounds with different travel times into it.
+--------------------------------------------------------------------------- */
+function runRoutes(spec){
   if(!wasm) throw new Error('the verification engine is still loading — try again in a moment');
+  const results=[];
+  for(const r of spec.routes){
+    const k=r.stops.length;
+    if(k<2) throw new Error(`round "${r.vehicle}" has ${k} stop(s); at least 2 are needed`);
+    const dist=new Array(k*k).fill(0);
+    for(let i=1;i<k;i++) dist[(i-1)*k+i]=toQ(r.stops[i].travel, `${r.vehicle} → ${r.stops[i].id} travel time`);
+    const wins=[];
+    for(const st of r.stops) wins.push(toQ(st.ready,`${st.id} window open`), toQ(st.due,`${st.id} window close`));
+    const routeIdx=r.stops.map((_,i)=>i);
+
+    const db=put(dist), wb=put(wins), rb=put(routeIdx), ob=put([0,0,0,0,0,0]);
+    wasm.lattice_verify(rb.ptr, k, db.ptr, k, wb.ptr, ob.ptr);
+    const dv=mem(), o=[]; for(let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4,true));
+    [db,wb,rb,ob].forEach(x=>wasm.lattice_free(x.ptr,x.bytes));
+
+    results.push({vehicle:r.vehicle, stops:k-2>0?k-2:k,
+      status:o[0], node:o[1]>=0?(r.stops[o[1]]?.id??String(o[1])):null,
+      arrival:o[2], close:o[3], deficit:o[4], cost:o[5]});
+  }
+  return {unit:spec.unit, checked:results.length,
+          feasible:results.filter(r=>r.status===0).length, results, spec};
+}
+
+function fromJson(doc){
   if(doc.schema!=='lattice117.audit.v1') throw new Error(`unexpected schema "${doc.schema}" — expected "lattice117.audit.v1"`);
   const nodes=doc.nodes||[], n=nodes.length;
   if(!n) throw new Error('no nodes');
   const idx=new Map(nodes.map((nd,i)=>[nd.id,i]));
   const M=doc.distance_matrix||[];
-  if(M.length!==n) throw new Error(`distance_matrix is ${M.length}x? but there are ${n} nodes`);
-
-  const dist=[]; for(let r=0;r<n;r++){ if(M[r].length!==n) throw new Error(`distance_matrix row ${r} has ${M[r].length} entries, expected ${n}`);
-    for(let c=0;c<n;c++) dist.push(toQ(M[r][c])); }
-  const wins=[]; for(const nd of nodes){ wins.push(toQ(nd.ready??0), toQ(nd.due??0)); }
-  const db=put(dist), wb=put(wins);
-
-  const results=[];
-  for(const r of doc.routes||[]){
-    const route=r.stops.map(s=>{ if(!idx.has(s)) throw new Error(`route "${r.vehicle}" references unknown stop "${s}"`); return idx.get(s); });
-    const rb=put(route), ob=put([0,0,0,0,0,0]);
-    wasm.lattice_verify(rb.ptr,route.length,db.ptr,n,wb.ptr,ob.ptr);
-    const dv=mem(), o=[]; for(let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4,true));
-    wasm.lattice_free(rb.ptr,rb.bytes); wasm.lattice_free(ob.ptr,ob.bytes);
-    results.push({vehicle:r.vehicle, stops:r.stops.length-2, status:o[0],
-      node:o[1]>=0?(nodes[o[1]]?.id??String(o[1])):null,
-      arrival:o[2], close:o[3], deficit:o[4], cost:o[5]});
-  }
-  wasm.lattice_free(db.ptr,db.bytes); wasm.lattice_free(wb.ptr,wb.bytes);
-
-  const feasible=results.filter(r=>r.status===0).length;
-  return {unit:doc.time_unit||'units', checked:results.length, feasible, results};
+  if(M.length!==n) throw new Error(`distance_matrix has ${M.length} rows but there are ${n} nodes`);
+  M.forEach((row,i)=>{ if(row.length!==n) throw new Error(`distance_matrix row ${i} has ${row.length} entries, expected ${n}`); });
+  const routes=(doc.routes||[]).map(r=>{
+    const stops=r.stops.map((sid,i)=>{
+      if(!idx.has(sid)) throw new Error(`round "${r.vehicle}" references unknown stop "${sid}"`);
+      const nd=nodes[idx.get(sid)];
+      return {id:sid, ready:nd.ready??0, due:nd.due??0,
+              travel: i===0 ? 0 : M[idx.get(r.stops[i-1])][idx.get(sid)]};
+    });
+    return {vehicle:r.vehicle, stops};
+  });
+  return {unit:doc.time_unit||'units', routes};
 }
 
-async function digestOf(doc,rep){
-  const canon=JSON.stringify({nodes:doc.nodes,matrix:doc.distance_matrix,routes:doc.routes,
+/* ------------------------------ CSV ------------------------------------- */
+function parseCsv(text){
+  const rows=[]; let row=[], field='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=c;
+    } else if(c==='"') q=true;
+    else if(c===','){ row.push(field); field=''; }
+    else if(c==='\n'||c==='\r'){
+      if(field!==''||row.length){ row.push(field); rows.push(row); row=[]; field=''; }
+      if(c==='\r'&&text[i+1]==='\n') i++;
+    } else field+=c;
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+
+const FIELDS=[
+  {key:'vehicle', label:'Round / vehicle', req:true,
+   hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'], avoid:[]},
+  {key:'stop',    label:'Stop',            req:true,
+   hints:['stop','location','site','customer','drop','address','name','point','deliverypoint','premises'],
+   avoid:['no','num','seq','order','index','count']},
+  {key:'open',    label:'Window opens',    req:true,
+   hints:['open','ready','earliest','from','start','windowopen','twstart','earliestarrival'], avoid:[]},
+  {key:'close',   label:'Window closes',   req:true,
+   hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'], avoid:[]},
+  {key:'travel',  label:'Travel from previous', req:true,
+   hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'], avoid:[]},
+  {key:'seq',     label:'Sequence (optional)',  req:false,
+   hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'], avoid:[]},
+];
+
+const norm=h=>h.toLowerCase().replace(/[^a-z]/g,'');
+
+/* Score one (field, header) pair. Exact beats contained, and `avoid` terms
+   demote a header that merely looks right — "Stop No." contains "stop" but is
+   a sequence column, not the stop itself. */
+function score(field, header){
+  const n=norm(header);
+  let best=0;
+  for(const hint of field.hints){
+    const h=norm(hint);
+    if(!h) continue;
+    if(n===h) best=Math.max(best,4);
+    else if(n.startsWith(h)||n.endsWith(h)) best=Math.max(best,3);
+    else if(n.includes(h)) best=Math.max(best,2);
+  }
+  if(best>0) for(const bad of field.avoid){ if(n.includes(norm(bad))) best-=3; }
+  return best;
+}
+
+/* Assign globally rather than field-by-field. Taking each field's own best in
+   order lets an early field consume a header a later one needed - which is how
+   "Stop No." was landing on `stop` and starving `seq`. */
+function guessMapping(headers){
+  const pairs=[];
+  FIELDS.forEach((f,fi)=>headers.forEach((h,hi)=>{
+    const sc=score(f,h);
+    if(sc>0) pairs.push({fi,hi,sc});
+  }));
+  pairs.sort((a,b)=>b.sc-a.sc);
+  const map={}, usedF=new Set(), usedH=new Set();
+  for(const {fi,hi,sc} of pairs){
+    if(usedF.has(fi)||usedH.has(hi)) continue;
+    map[FIELDS[fi].key]=hi; usedF.add(fi); usedH.add(hi);
+  }
+  return map;
+}
+
+function renderMapper(){
+  const mf=$('mapFields'); mf.innerHTML='';
+  const guess=guessMapping(csvHeaders);
+  for(const f of FIELDS){
+    const wrap=document.createElement('div');
+    const sel=document.createElement('select');
+    sel.id='map_'+f.key;
+    sel.innerHTML='<option value="">— not mapped —</option>'+
+      csvHeaders.map((h,i)=>`<option value="${i}">${h}</option>`).join('');
+    if(guess[f.key]!==undefined) sel.value=String(guess[f.key]);
+    if(f.req && sel.value==='') sel.classList.add('unset');
+    sel.addEventListener('change',()=>{ sel.classList.toggle('unset', f.req && sel.value===''); checkReady(); });
+    wrap.innerHTML=`<label>${f.label}${f.req?' <span class="req">*</span>':''}</label>`;
+    wrap.appendChild(sel); mf.appendChild(wrap);
+  }
+  const prev=$('preview');
+  const head='<tr>'+csvHeaders.map(h=>`<th>${h}</th>`).join('')+'</tr>';
+  const body=csvRows.slice(0,4).map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('');
+  prev.innerHTML=`<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  $('mapper').style.display='';
+  checkReady();
+}
+
+function checkReady(){
+  const missing=FIELDS.filter(f=>f.req && !$('map_'+f.key).value).map(f=>f.label);
+  $('runCsv').disabled=missing.length>0;
+  $('mapOk').textContent = missing.length
+    ? '' : `✓ all required columns mapped · ${csvRows.length} rows ready`;
+}
+
+function csvToSpec(){
+  const g=k=>{ const v=$('map_'+k).value; return v===''?null:Number(v); };
+  const ci={vehicle:g('vehicle'), stop:g('stop'), open:g('open'), close:g('close'), travel:g('travel'), seq:g('seq')};
+  const byVehicle=new Map();
+  csvRows.forEach((r,i)=>{
+    const v=(r[ci.vehicle]??'').trim();
+    if(!v) throw new Error(`row ${i+2}: the round column is empty`);
+    if(!byVehicle.has(v)) byVehicle.set(v,[]);
+    byVehicle.get(v).push({
+      id:(r[ci.stop]??'').trim() || `row${i+2}`,
+      ready:r[ci.open], due:r[ci.close], travel:r[ci.travel],
+      seq: ci.seq!==null ? Number(r[ci.seq]) : i,
+    });
+  });
+  const routes=[...byVehicle.entries()].map(([vehicle,stops])=>{
+    stops.sort((a,b)=>a.seq-b.seq);
+    stops[0].travel=0;              // nothing precedes the first stop
+    return {vehicle, stops};
+  });
+  if(!routes.length) throw new Error('no rounds found in the sheet');
+  return {unit:'units', routes};
+}
+
+/* ---------------------------- output ------------------------------------ */
+async function digestOf(rep){
+  const canon=JSON.stringify({
+    routes:rep.spec.routes.map(r=>[r.vehicle, r.stops.map(s=>[s.id,s.ready,s.due,s.travel])]),
     verdict:rep.results.map(r=>[r.vehicle,r.status,r.node,r.arrival,r.close,r.deficit,r.cost])});
   const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canon));
   return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-async function render(doc,rep){
+async function render(rep){
   const pct=rep.checked?Math.round(100*rep.feasible/rep.checked):0;
   const failed=rep.checked-rep.feasible;
   $('resultPanel').style.display='';
@@ -233,17 +434,22 @@ async function render(doc,rep){
   });
   $('allPanel').style.display='';
 
-  const dg=await digestOf(doc,rep);
+  const dg=await digestOf(rep);
   $('digest').innerHTML=`<b>audit digest (SHA-256, computed in this browser):</b><br>${dg}`;
-  lastReport={doc,rep,pct,failed,dg,when:new Date().toISOString()};
+  lastReport={rep,pct,failed,dg,when:new Date().toISOString()};
 }
 
+function dl(content,name,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
 function certificate(){
   const {rep,pct,failed,dg,when}=lastReport;
   const rows=rep.results.map(r=>
     `  ${r.vehicle.padEnd(10)} ${(r.status===0?'ACHIEVABLE':'WILL FAIL').padEnd(12)}`+
     (r.status===1?` ${r.node} arrives ${fmt(r.arrival)}, shuts ${fmt(r.close)}, late by ${fmt(r.deficit)}`:'')).join('\n');
-  const txt =
+  dl(
 `LATTICE117 — SCHEDULE FEASIBILITY CERTIFICATE
 =============================================
 
@@ -258,73 +464,94 @@ PER-ROUND RESULT
 ${rows}
 
 METHOD
-  Every round was evaluated against its own time windows using
-  deterministic Q16.16 fixed-point arithmetic. No floating point is used
-  in the evaluation path, so the same input yields a bit-identical verdict
-  on any machine. The check was performed locally in the issuing browser;
-  no schedule data was transmitted.
+  Every round was evaluated against its own time windows using deterministic
+  Q16.16 fixed-point arithmetic. No floating point is used in the evaluation
+  path, so the same input yields a bit-identical verdict on any machine. The
+  check ran locally in the issuing browser; no schedule data was transmitted.
 
-  This certifies arithmetic feasibility against the travel times supplied.
-  It is not a prediction of traffic, and it is not a certification of any
-  kind by a third party.
+  This certifies arithmetic feasibility against the travel times supplied. It
+  is not a prediction of traffic, and it is not a third-party certification.
 
 AUDIT DIGEST (SHA-256 over inputs and verdict)
   ${dg}
 
-  Re-running the identical input must reproduce this digest. If it does
-  not, the input changed.
+  Re-running the identical input must reproduce this digest.
 
 Lattice117 · Brierley Sovereign Group Ltd · Nottingham
-`;
-  dl(txt,'lattice117-feasibility-certificate.txt','text/plain');
-}
-function dl(content,name,type){
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type}));
-  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+`, 'lattice117-feasibility-certificate.txt','text/plain');
 }
 
-async function go(text){
+async function go(fn){
   $('err').textContent='';
-  try{
-    const doc=JSON.parse(text);
-    const rep=audit(doc);
-    await render(doc,rep);
-    $('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
-  }catch(e){ $('err').textContent='Audit rejected: '+e.message; }
+  try{ await render(runRoutes(fn())); $('resultPanel').scrollIntoView({behavior:'smooth',block:'start'}); }
+  catch(e){ $('err').textContent='Audit rejected: '+e.message; }
 }
 
-$('run').addEventListener('click',()=>go($('input').value));
+/* ---------------------------- wiring ------------------------------------ */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  $('tab-csv').style.display = t.dataset.tab==='csv' ? '' : 'none';
+  $('tab-json').style.display= t.dataset.tab==='json'? '' : 'none';
+}));
+
+function ingestCsv(text){
+  const rows=parseCsv(text);
+  if(rows.length<2) throw new Error('the sheet needs a header row and at least one stop');
+  csvHeaders=rows[0].map(h=>h.trim()); csvRows=rows.slice(1);
+  renderMapper();
+}
+$('pickCsv').addEventListener('click',()=>$('fileCsv').click());
+$('fileCsv').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('err').textContent='';
+  try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
+});
+$('loadExCsv').addEventListener('click',async()=>{
+  $('err').textContent='';
+  try{ ingestCsv(await (await fetch('example-route-sheet.csv')).text()); }
+  catch(err){ $('err').textContent='Could not load the example: '+err.message; }
+});
+$('runCsv').addEventListener('click',()=>go(csvToSpec));
+
+const dropCsv=$('dropCsv');
+['dragenter','dragover'].forEach(ev=>dropCsv.addEventListener(ev,e=>{e.preventDefault();dropCsv.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>dropCsv.addEventListener(ev,e=>{e.preventDefault();dropCsv.classList.remove('over')}));
+dropCsv.addEventListener('drop',async e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  $('err').textContent='';
+  try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
+});
+
+$('run').addEventListener('click',()=>go(()=>fromJson(JSON.parse($('input').value))));
 $('loadEx').addEventListener('click',async()=>{
   const t=await (await fetch('example-fleet.json')).text();
-  $('input').value=t; go(t);
+  $('input').value=t; go(()=>fromJson(JSON.parse(t)));
 });
+const drop=$('drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',async e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const t=await f.text(); $('input').value=t; go(()=>fromJson(JSON.parse(t)));
+});
+
 $('cert').addEventListener('click',()=>lastReport&&certificate());
 $('json').addEventListener('click',()=>{
   if(!lastReport) return;
   const {rep,pct,dg,when}=lastReport;
   dl(JSON.stringify({schema:'lattice117.audit-report.v1',issued:when,time_unit:rep.unit,
     rounds_checked:rep.checked,rounds_achievable:rep.feasible,feasibility_rate_pct:pct,
-    rounds:rep.results,audit_digest_sha256:dg},null,2),'lattice117-audit-report.json','application/json');
-});
-
-const drop=$('drop');
-['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
-['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
-drop.addEventListener('drop',async e=>{
-  const f=e.dataTransfer.files[0]; if(!f) return;
-  const t=await f.text(); $('input').value=t; go(t);
+    rounds:rep.results.map(({spec,...r})=>r),audit_digest_sha256:dg},null,2),
+    'lattice117-audit-report.json','application/json');
 });
 
 loadWasm().then(()=>{
-  // Only now is it safe to call into the module. Guarding with disabled
-  // buttons rather than a timeout: a slow connection must not produce a
-  // "cannot read lattice_alloc" error in front of a customer.
-  $('run').disabled=false; $('loadEx').disabled=false;
+  ['run','loadEx','pickCsv','loadExCsv'].forEach(id=>$(id).disabled=false);
 }).catch(e=>{
   $('engineBadge').textContent='engine: failed to load';
   $('err').textContent='Could not load the WebAssembly module: '+e.message+
-  '\nThis page must be served over http (try: python3 -m http.server).';
+    '\nThis page must be served over http (try: python3 -m http.server).';
 });
 </script>
 </body>
