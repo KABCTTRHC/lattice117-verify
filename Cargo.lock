@@ -186,6 +186,13 @@ name = "lattice117-verify"
 version = "0.1.0"
 
 [[package]]
+name = "lattice117-wasm"
+version = "0.1.0"
+dependencies = [
+ "lattice117-verify",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"

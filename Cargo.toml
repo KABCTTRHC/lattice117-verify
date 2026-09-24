@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lattice117-verify", "crates/lattice117-audit"]
+members = ["crates/lattice117-verify", "crates/lattice117-audit", "crates/lattice117-wasm"]
 
 [workspace.package]
 version = "0.1.0"

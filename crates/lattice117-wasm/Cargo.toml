@@ -1,0 +1,15 @@
+[package]
+name = "lattice117-wasm"
+description = "WebAssembly bridge for the deterministic feasibility verifier. Runs the same evaluation code in a browser, with no server."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+lattice117-verify = { path = "../lattice117-verify" }
