@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet Schedule Audit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230e1116'/%3E%3Cpath d='M3.5 8.5l2.8 2.8 6.2-6.2' stroke='%233fb950' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-2:#1c232c; --line:#2b3440;
+    --ink:#e6edf3; --ink-dim:#9aa7b4; --ink-faint:#6b7885;
+    --ok:#3fb950; --bad:#f85149; --accent:#58a6ff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#fff; --panel-2:#f0f3f6; --line:#d8dee4;
+      --ink:#1f2328; --ink-dim:#57606a; --ink-faint:#8c959f;
+      --ok:#1a7f37; --bad:#cf222e; --accent:#0969da;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1116; --panel:#161b22; --panel-2:#1c232c; --line:#2b3440;
+    --ink:#e6edf3; --ink-dim:#9aa7b4; --ink-faint:#6b7885;
+    --ok:#3fb950; --bad:#f85149; --accent:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 16px 72px}
+  h1{font-size:clamp(20px,3.4vw,27px);margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--ink-dim);font-size:14.5px;margin:0 0 14px}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:26px}
+  .badge{font:600 11.5px/1 var(--mono);padding:6px 9px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink-dim)}
+  .badge.live{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-faint);margin:0 0 14px;font-weight:700}
+
+  .hero{display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center}
+  .rate{font:800 clamp(44px,9vw,68px)/1 var(--mono);letter-spacing:-.03em}
+  .rate.bad{color:var(--bad)} .rate.ok{color:var(--ok)}
+  .rate small{display:block;font:600 11px/1.4 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-top:8px}
+  .heroTxt{font-size:15px}
+  .heroTxt b{font-size:17px}
+  .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:14px;background:var(--panel-2)}
+  .bar i{display:block;height:100%}
+  .bar i.ok{background:var(--ok)} .bar i.bad{background:var(--bad)}
+
+  table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+  th{text-align:left;font-weight:600;color:var(--ink-faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:0 10px 8px 0}
+  td{padding:7px 10px 7px 0;border-top:1px solid var(--line);vertical-align:top}
+  tr.bad td{background:color-mix(in srgb,var(--bad) 8%,transparent)}
+  .pill{display:inline-block;font:700 10.5px/1 var(--mono);padding:5px 8px;border-radius:5px;border:1px solid}
+  .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+  .pill.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+  .q{color:var(--ink-faint);font-size:11px}
+
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+  button{font:600 13px var(--sans);padding:9px 15px;border-radius:7px;cursor:pointer;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+  button:hover{border-color:var(--ink-faint)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  textarea{width:100%;min-height:120px;background:var(--panel-2);color:var(--ink);font:12px var(--mono);border:1px solid var(--line);border-radius:7px;padding:10px;resize:vertical}
+  .drop{border:1.5px dashed var(--line);border-radius:9px;padding:22px;text-align:center;color:var(--ink-dim);font-size:13.5px;margin-bottom:12px}
+  .drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .digest{font:11.5px var(--mono);color:var(--ink-faint);word-break:break-all;margin-top:12px}
+  .digest b{color:var(--ink-dim)}
+  .err{color:var(--bad);font:12.5px var(--mono);margin-top:10px;white-space:pre-wrap}
+  .note{font-size:13px;color:var(--ink-dim);margin:12px 0 0}
+  code{font-family:var(--mono);font-size:.92em;background:var(--panel-2);padding:1px 5px;border-radius:4px}
+  footer{margin-top:28px;font-size:12.5px;color:var(--ink-faint)}
+  a{color:var(--accent)}
+  @media(max-width:620px){ .hero{grid-template-columns:1fr;gap:14px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Fleet schedule audit</h1>
+<p class="sub">How many of today's planned rounds are actually achievable? Every check runs in this browser — your schedule is never uploaded.</p>
+<div class="badges">
+  <span class="badge live" id="engineBadge">engine: loading…</span>
+  <span class="badge">Q16.16 fixed point</span>
+  <span class="badge">no server · no upload · works offline</span>
+  <span class="badge"><a href="index.html" style="text-decoration:none;color:inherit">single-round view →</a></span>
+</div>
+
+<div class="panel" id="resultPanel" style="display:none">
+  <h2>Result</h2>
+  <div class="hero">
+    <div class="rate" id="rate">—<small>rounds achievable</small></div>
+    <div class="heroTxt">
+      <div id="heroLine"><b>—</b></div>
+      <div class="bar" id="bar"></div>
+      <div class="btnrow" style="margin-top:16px">
+        <button class="primary" id="cert">Download certificate</button>
+        <button id="json">Download JSON report</button>
+      </div>
+    </div>
+  </div>
+  <div class="digest" id="digest"></div>
+</div>
+
+<div class="panel" id="violPanel" style="display:none">
+  <h2>Rounds that will fail</h2>
+  <table>
+    <thead><tr><th>Vehicle</th><th>Stop</th><th>Arrives</th><th>Window shuts</th><th>Late by</th></tr></thead>
+    <tbody id="violRows"></tbody>
+  </table>
+  <p class="note">Each figure is shown in your schedule's own time unit, with the underlying Q16.16 integer beneath it.
+  The check verifies your plan against the travel times <em>you supplied</em> — it does not predict traffic. A round
+  that fails here is one that cannot work even under your own assumptions.</p>
+</div>
+
+<div class="panel" id="allPanel" style="display:none">
+  <h2>All rounds</h2>
+  <table>
+    <thead><tr><th>Vehicle</th><th>Stops</th><th>Status</th><th>Route cost</th></tr></thead>
+    <tbody id="allRows"></tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Your schedule</h2>
+  <div class="drop" id="drop">Drop a <code>lattice117.audit.v1</code> JSON file here, or paste below</div>
+  <textarea id="input" spellcheck="false" placeholder='{"schema":"lattice117.audit.v1", "nodes":[…], "distance_matrix":[…], "routes":[…]}'></textarea>
+  <div class="btnrow" style="margin-top:12px">
+    <button class="primary" id="run" disabled>Audit</button>
+    <button id="loadEx" disabled>Load example fleet</button>
+  </div>
+  <div class="err" id="err"></div>
+  <p class="note">The format is the same one the command-line auditor takes. Index 0 of <code>distance_matrix</code> is the depot.
+  Nothing here is transmitted: open devtools, watch the network tab, run an audit, and you will see no request.</p>
+</div>
+
+<footer>
+  Runs <code>lattice117-verify</code> compiled to WebAssembly. Identical evaluation code to the CLI.
+  <br>Lattice117 · Brierley Sovereign Group Ltd, Nottingham · AGPL-3.0-or-later or commercial.
+</footer>
+</div>
+
+<script>
+const Q=65536, QMAX=32767, QMIN=-32768;
+let wasm=null, lastReport=null;
+
+const $=id=>document.getElementById(id);
+const toQ=v=>{ if(!(v>=QMIN&&v<=QMAX)) throw new Error(`value ${v} is outside the Q16.16 representable range (${QMIN}..${QMAX})`); return Math.round(v*Q); };
+const fromQ=v=>v/Q, fmt=v=>fromQ(v).toFixed(4);
+
+async function loadWasm(){
+  const r=await fetch('lattice117_wasm.wasm');
+  const b=await r.arrayBuffer();
+  wasm=(await WebAssembly.instantiate(b,{})).instance.exports;
+  $('engineBadge').textContent='engine: WebAssembly, '+(b.byteLength/1024).toFixed(1)+' KB';
+}
+const mem=()=>new DataView(wasm.memory.buffer);
+function put(arr){
+  const bytes=arr.length*4, ptr=wasm.lattice_alloc(bytes), dv=mem();
+  for(let i=0;i<arr.length;i++) dv.setInt32(ptr+i*4,arr[i],true);
+  return {ptr,bytes};
+}
+
+function audit(doc){
+  if(!wasm) throw new Error('the verification engine is still loading — try again in a moment');
+  if(doc.schema!=='lattice117.audit.v1') throw new Error(`unexpected schema "${doc.schema}" — expected "lattice117.audit.v1"`);
+  const nodes=doc.nodes||[], n=nodes.length;
+  if(!n) throw new Error('no nodes');
+  const idx=new Map(nodes.map((nd,i)=>[nd.id,i]));
+  const M=doc.distance_matrix||[];
+  if(M.length!==n) throw new Error(`distance_matrix is ${M.length}x? but there are ${n} nodes`);
+
+  const dist=[]; for(let r=0;r<n;r++){ if(M[r].length!==n) throw new Error(`distance_matrix row ${r} has ${M[r].length} entries, expected ${n}`);
+    for(let c=0;c<n;c++) dist.push(toQ(M[r][c])); }
+  const wins=[]; for(const nd of nodes){ wins.push(toQ(nd.ready??0), toQ(nd.due??0)); }
+  const db=put(dist), wb=put(wins);
+
+  const results=[];
+  for(const r of doc.routes||[]){
+    const route=r.stops.map(s=>{ if(!idx.has(s)) throw new Error(`route "${r.vehicle}" references unknown stop "${s}"`); return idx.get(s); });
+    const rb=put(route), ob=put([0,0,0,0,0,0]);
+    wasm.lattice_verify(rb.ptr,route.length,db.ptr,n,wb.ptr,ob.ptr);
+    const dv=mem(), o=[]; for(let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4,true));
+    wasm.lattice_free(rb.ptr,rb.bytes); wasm.lattice_free(ob.ptr,ob.bytes);
+    results.push({vehicle:r.vehicle, stops:r.stops.length-2, status:o[0],
+      node:o[1]>=0?(nodes[o[1]]?.id??String(o[1])):null,
+      arrival:o[2], close:o[3], deficit:o[4], cost:o[5]});
+  }
+  wasm.lattice_free(db.ptr,db.bytes); wasm.lattice_free(wb.ptr,wb.bytes);
+
+  const feasible=results.filter(r=>r.status===0).length;
+  return {unit:doc.time_unit||'units', checked:results.length, feasible, results};
+}
+
+async function digestOf(doc,rep){
+  const canon=JSON.stringify({nodes:doc.nodes,matrix:doc.distance_matrix,routes:doc.routes,
+    verdict:rep.results.map(r=>[r.vehicle,r.status,r.node,r.arrival,r.close,r.deficit,r.cost])});
+  const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canon));
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function render(doc,rep){
+  const pct=rep.checked?Math.round(100*rep.feasible/rep.checked):0;
+  const failed=rep.checked-rep.feasible;
+  $('resultPanel').style.display='';
+  const rate=$('rate');
+  rate.className='rate '+(failed?'bad':'ok');
+  rate.innerHTML=pct+'%<small>rounds achievable</small>';
+  $('heroLine').innerHTML= failed
+    ? `<b>${failed} of ${rep.checked} planned rounds cannot be run as scheduled.</b><br><span style="color:var(--ink-dim)">${rep.feasible} verified achievable against their own time windows.</span>`
+    : `<b>All ${rep.checked} rounds are achievable.</b><br><span style="color:var(--ink-dim)">Every stop is reached inside its window.</span>`;
+  $('bar').innerHTML=`<i class="ok" style="width:${pct}%"></i><i class="bad" style="width:${100-pct}%"></i>`;
+
+  const vr=$('violRows'); vr.innerHTML='';
+  const fails=rep.results.filter(r=>r.status===1);
+  fails.forEach(r=>{
+    const tr=document.createElement('tr'); tr.className='bad';
+    tr.innerHTML=`<td><b>${r.vehicle}</b></td><td>${r.node}</td>`+
+      `<td>${fmt(r.arrival)} <span class="q">(${r.arrival})</span></td>`+
+      `<td>${fmt(r.close)} <span class="q">(${r.close})</span></td>`+
+      `<td style="color:var(--bad);font-weight:700">${fmt(r.deficit)} <span class="q">(${r.deficit})</span></td>`;
+    vr.appendChild(tr);
+  });
+  $('violPanel').style.display=fails.length?'':'none';
+
+  const ar=$('allRows'); ar.innerHTML='';
+  rep.results.forEach(r=>{
+    const tr=document.createElement('tr'); if(r.status===1) tr.className='bad';
+    tr.innerHTML=`<td>${r.vehicle}</td><td>${r.stops}</td>`+
+      `<td><span class="pill ${r.status===0?'ok':'bad'}">${r.status===0?'ACHIEVABLE':'WILL FAIL'}</span></td>`+
+      `<td>${r.status===0?fmt(r.cost):'—'}</td>`;
+    ar.appendChild(tr);
+  });
+  $('allPanel').style.display='';
+
+  const dg=await digestOf(doc,rep);
+  $('digest').innerHTML=`<b>audit digest (SHA-256, computed in this browser):</b><br>${dg}`;
+  lastReport={doc,rep,pct,failed,dg,when:new Date().toISOString()};
+}
+
+function certificate(){
+  const {rep,pct,failed,dg,when}=lastReport;
+  const rows=rep.results.map(r=>
+    `  ${r.vehicle.padEnd(10)} ${(r.status===0?'ACHIEVABLE':'WILL FAIL').padEnd(12)}`+
+    (r.status===1?` ${r.node} arrives ${fmt(r.arrival)}, shuts ${fmt(r.close)}, late by ${fmt(r.deficit)}`:'')).join('\n');
+  const txt =
+`LATTICE117 — SCHEDULE FEASIBILITY CERTIFICATE
+=============================================
+
+Issued           ${when}
+Rounds checked   ${rep.checked}
+Achievable       ${rep.feasible}
+Will fail        ${failed}
+Feasibility rate ${pct}%
+Time unit        ${rep.unit}
+
+PER-ROUND RESULT
+${rows}
+
+METHOD
+  Every round was evaluated against its own time windows using
+  deterministic Q16.16 fixed-point arithmetic. No floating point is used
+  in the evaluation path, so the same input yields a bit-identical verdict
+  on any machine. The check was performed locally in the issuing browser;
+  no schedule data was transmitted.
+
+  This certifies arithmetic feasibility against the travel times supplied.
+  It is not a prediction of traffic, and it is not a certification of any
+  kind by a third party.
+
+AUDIT DIGEST (SHA-256 over inputs and verdict)
+  ${dg}
+
+  Re-running the identical input must reproduce this digest. If it does
+  not, the input changed.
+
+Lattice117 · Brierley Sovereign Group Ltd · Nottingham
+`;
+  dl(txt,'lattice117-feasibility-certificate.txt','text/plain');
+}
+function dl(content,name,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+async function go(text){
+  $('err').textContent='';
+  try{
+    const doc=JSON.parse(text);
+    const rep=audit(doc);
+    await render(doc,rep);
+    $('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){ $('err').textContent='Audit rejected: '+e.message; }
+}
+
+$('run').addEventListener('click',()=>go($('input').value));
+$('loadEx').addEventListener('click',async()=>{
+  const t=await (await fetch('example-fleet.json')).text();
+  $('input').value=t; go(t);
+});
+$('cert').addEventListener('click',()=>lastReport&&certificate());
+$('json').addEventListener('click',()=>{
+  if(!lastReport) return;
+  const {rep,pct,dg,when}=lastReport;
+  dl(JSON.stringify({schema:'lattice117.audit-report.v1',issued:when,time_unit:rep.unit,
+    rounds_checked:rep.checked,rounds_achievable:rep.feasible,feasibility_rate_pct:pct,
+    rounds:rep.results,audit_digest_sha256:dg},null,2),'lattice117-audit-report.json','application/json');
+});
+
+const drop=$('drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',async e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  const t=await f.text(); $('input').value=t; go(t);
+});
+
+loadWasm().then(()=>{
+  // Only now is it safe to call into the module. Guarding with disabled
+  // buttons rather than a timeout: a slow connection must not produce a
+  // "cannot read lattice_alloc" error in front of a customer.
+  $('run').disabled=false; $('loadEx').disabled=false;
+}).catch(e=>{
+  $('engineBadge').textContent='engine: failed to load';
+  $('err').textContent='Could not load the WebAssembly module: '+e.message+
+  '\nThis page must be served over http (try: python3 -m http.server).';
+});
+</script>
+</body>
+</html>
