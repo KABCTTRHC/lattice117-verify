@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lattice117 Schedule Check — Excel task pane add-in.
+
+  Sideload for development:
+    Excel  ->  File  ->  Options  ->  Trust Center  ->  Trust Center Settings
+           ->  Trusted Add-in Catalogs  ->  add the folder holding this file
+           ->  tick "Show in Menu"  ->  restart Excel
+           ->  Insert  ->  My Add-ins  ->  Shared Folder  ->  Schedule Check
+
+  The SourceLocation below points at a local dev server. Serve the addin
+  directory over HTTPS (Office refuses plain http for anything but localhost):
+
+    cd excel-addin && npx http-server -S -p 3000
+
+  For AppSource submission, replace every https://localhost:3000 with the
+  public HTTPS origin and regenerate the Id GUID.
+-->
+<OfficeApp
+    xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+    xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+    xsi:type="TaskPaneApp">
+
+  <!-- Regenerate this GUID before any public listing. It is the add-in's
+       identity; two listings sharing one Id collide. -->
+  <Id>7c1f0a9e-3d52-4b18-9a6c-2f8e4d1b7a30</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>Brierley Sovereign Group Ltd</ProviderName>
+  <DefaultLocale>en-GB</DefaultLocale>
+  <DisplayName DefaultValue="Lattice117 Schedule Check"/>
+  <Description DefaultValue="Checks whether the rounds in your sheet are actually achievable against their own time windows. Names the stop that breaks, when it arrives, when the window shuts and by how much it is missed. Runs entirely inside Excel — your schedule is never uploaded."/>
+  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+  <SupportUrl DefaultValue="https://github.com/KABCTTRHC/lattice117-verify"/>
+
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="ExcelApi" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+  </DefaultSettings>
+
+  <!-- ReadWriteDocument, not ReadDocument: the add-in colours the failing
+       rows in the sheet so the result is visible where the planner is
+       already looking, not only in the pane. -->
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="L117.Group">
+                <Label resid="L117.Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="L117.OpenPane">
+                  <Label resid="L117.OpenPane.Label"/>
+                  <Supertip>
+                    <Title resid="L117.OpenPane.Label"/>
+                    <Description resid="L117.OpenPane.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>L117.Taskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/KABCTTRHC/lattice117-verify"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="L117.Group.Label" DefaultValue="Lattice117"/>
+        <bt:String id="L117.OpenPane.Label" DefaultValue="Schedule Check"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Lattice117 Schedule Check is ready."/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="L117.OpenPane.Tip" DefaultValue="Check whether the rounds in this sheet can actually be run against their own time windows."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Select your route rows and choose Schedule Check on the Home tab. Nothing leaves this workbook."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
