@@ -43,25 +43,46 @@ pub struct VectorizedDpTable {
 
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
+// Unreachable from this crate: `mod dp` is private and lib.rs re-exports only
+// the three types, not this. The call sites live in the parent engine
+// (ffi/extraction.rs, ffi/secure_extraction.rs), which is not published here,
+// so it is extracted-but-unwired rather than abandoned. Kept compiling because
+// the CI aarch64 job is what would have caught the E0133 breakage that sat
+// here unnoticed until an Apple Silicon runner tried to build it.
+#[allow(dead_code)]
 pub unsafe fn process_topological_dp_step_neon(
     dp_table: &mut VectorizedDpTable,
     current_state_idx: usize,
     previous_state_idx: usize,
     manifold_gradient_vector: int32x4_t,
 ) {
-    let prev_dp_vector = vld1q_s32(dp_table.states[previous_state_idx].as_ptr());
-    let current_dp_vector = vld1q_s32(dp_table.states[current_state_idx].as_ptr());
-    let proposed_dp_vector = vaddq_s32(prev_dp_vector, manifold_gradient_vector);
-    let improvement_mask = vcltq_s32(proposed_dp_vector, current_dp_vector);
-    let optimized_dp_vector = vbslq_s32(
-        improvement_mask, // already uint32x4_t: vcltq_s32 returns uint32x4_t directly
-        proposed_dp_vector,
-        current_dp_vector,
-    );
-    vst1q_s32(
-        dp_table.states[current_state_idx].as_mut_ptr(),
-        optimized_dp_vector,
-    );
+    // Every intrinsic below is either an unsafe fn (the loads and the store,
+    // which dereference raw pointers) or carries #[target_feature(enable =
+    // "neon")] (the arithmetic). Since Rust 1.82 neither is implicitly unsafe
+    // just because the enclosing fn is `unsafe fn` — the body needs its own
+    // block, so an `unsafe fn` no longer silently blesses whatever it
+    // contains. The two obligations the caller must uphold:
+    //
+    //   * NEON is present. Guaranteed: it is mandatory in the AArch64 base
+    //     ABI, and this whole item is cfg'd to target_arch = "aarch64".
+    //   * Both indices are in bounds for dp_table.states. Enforced by the
+    //     [i32; 4] element type — each element is exactly one 4-lane vector,
+    //     so an in-bounds index cannot produce a short read or write.
+    unsafe {
+        let prev_dp_vector = vld1q_s32(dp_table.states[previous_state_idx].as_ptr());
+        let current_dp_vector = vld1q_s32(dp_table.states[current_state_idx].as_ptr());
+        let proposed_dp_vector = vaddq_s32(prev_dp_vector, manifold_gradient_vector);
+        let improvement_mask = vcltq_s32(proposed_dp_vector, current_dp_vector);
+        let optimized_dp_vector = vbslq_s32(
+            improvement_mask, // already uint32x4_t: vcltq_s32 returns uint32x4_t directly
+            proposed_dp_vector,
+            current_dp_vector,
+        );
+        vst1q_s32(
+            dp_table.states[current_state_idx].as_mut_ptr(),
+            optimized_dp_vector,
+        );
+    }
 }
 
 // ==============================================================================

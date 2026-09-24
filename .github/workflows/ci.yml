@@ -23,6 +23,10 @@ jobs:
   determinism:
     runs-on: ${{ matrix.os }}
     strategy:
+      # One platform failing must not cancel the others. On a determinism
+      # matrix the interesting information is precisely which platforms agree,
+      # and fail-fast throws that away at the moment it matters most.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
@@ -35,9 +39,45 @@ jobs:
       - name: Verdict digest is platform-independent
         shell: bash
         run: |
-          D=$(./target/release/lattice117-audit --input examples/infeasible.json --json | grep verdict_digest)
-          echo "$D"
-          echo "$D" | grep -q "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"
+          # The auditor exits 1 on INFEASIBLE by design - 0/1/2 is
+          # feasible/infeasible/bad input, which is what makes it usable as a
+          # CI gate - and this fixture is infeasible. Under GitHub's default
+          # `bash -e -o pipefail` that documented exit code killed the step
+          # inside the command substitution, before any digest was compared.
+          # So this check could only ever fail: it went red on a correct
+          # result and had never once verified anything.
+          BIN=./target/release/lattice117-audit
+          set +e
+          OUT=$("$BIN" --input examples/infeasible.json --json)
+          CODE=$?
+          set -e
+          echo "$OUT"
+          # Assert the exit code too. "Exits 1 on infeasible" is part of the
+          # published contract, so a build that started returning 0 here would
+          # break every consumer using it as a gate while still printing the
+          # right digest.
+          if [ "$CODE" -ne 1 ]; then
+            echo "::error::expected exit 1 (INFEASIBLE), got $CODE"
+            exit 1
+          fi
+          echo "$OUT" | grep -q "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"
+
+  # The NEON path is cfg'd to target_arch = "aarch64" and every other job here
+  # runs on x86_64, so nothing compiled it. It had been broken since Rust
+  # started requiring an explicit unsafe block inside `unsafe fn` - which this
+  # crate opts into hard via #![forbid(unsafe_op_in_unsafe_fn)] - and the only
+  # runner that noticed was macOS, once GitHub moved it to Apple Silicon.
+  # cargo check does not link, so no cross-linker is needed.
+  aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+          components: clippy
+      - run: cargo check --target aarch64-unknown-linux-gnu --all
+      - run: cargo clippy --target aarch64-unknown-linux-gnu --all -- -D warnings
 
   # The licence check is served from three paths — the demo, the add-in and the
   # source of truth in licence/. They must be the same file. A copy that drifts
