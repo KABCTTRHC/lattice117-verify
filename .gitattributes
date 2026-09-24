@@ -1,0 +1,9 @@
+# The auditor's digest is taken over the input text. The tool normalises line
+# endings before hashing, but keeping the repository's own files LF everywhere
+# means a Windows checkout and a Linux one hold identical bytes in the first
+# place, rather than relying on that normalisation to paper over a difference.
+* text=auto eol=lf
+
+*.wasm binary
+*.png binary
+*.ico binary

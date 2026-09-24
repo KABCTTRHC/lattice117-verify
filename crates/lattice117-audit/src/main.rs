@@ -274,8 +274,21 @@ fn run(cli: &Cli) -> Result<i32, String> {
     // Digest covers the input *and* the verdict: it pins what was checked
     // and what was concluded, so two runs can be compared without trusting
     // either run's narrator.
+    //
+    // Line endings are normalised first, and that is not cosmetic. The digest
+    // is taken over the input text, so hashing raw bytes made the same
+    // schedule hash differently on Windows: git rewrites LF to CRLF on
+    // checkout, as does every Windows editor, and CI caught exactly this —
+    // Linux and macOS agreed on 611eef21…, Windows returned 5467faa0… while
+    // reporting byte-identical Q16.16 integers. A digest whose whole purpose
+    // is letting two parties confirm they reached the same verdict on the
+    // same schedule cannot report a difference that does not exist.
+    //
+    // Normalising CRLF to LF is a no-op on an already-LF file, so every
+    // digest published before this change still holds.
+    let canonical = raw.replace("\r\n", "\n");
     let mut hasher = Sha256::new();
-    hasher.update(raw.as_bytes());
+    hasher.update(canonical.as_bytes());
     hasher.update(b"\x00verdict:");
     hasher.update(verdict.as_bytes());
     for v in &violations {

@@ -62,6 +62,32 @@ jobs:
           fi
           echo "$OUT" | grep -q "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"
 
+      # The regression this matrix actually caught. The digest is taken over
+      # the input text, so before normalisation the same schedule hashed
+      # differently on Windows - git rewrites LF to CRLF on checkout - and the
+      # matrix reported 611eef21 on Linux and macOS against 5467faa0 on
+      # Windows, with byte-identical Q16.16 integers underneath. Both endings
+      # are built here from the same source so this holds on every platform,
+      # whatever the checkout did.
+      - name: Digest is independent of line endings
+        shell: bash
+        run: |
+          BIN=./target/release/lattice117-audit
+          tr -d '\r' < examples/infeasible.json > lf.json
+          sed 's/$/\r/' lf.json > crlf.json
+          get() { set +e; O=$("$BIN" --input "$1" --json); set -e
+                  echo "$O" | grep -o '"verdict_digest_sha256": "[a-f0-9]*"' | cut -d'"' -f4; }
+          LF=$(get lf.json)
+          CRLF=$(get crlf.json)
+          echo "LF   $LF"
+          echo "CRLF $CRLF"
+          if [ "$LF" != "$CRLF" ]; then
+            echo "::error::line endings changed the verdict digest"
+            exit 1
+          fi
+          [ "$LF" = "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085" ]
+          rm -f lf.json crlf.json
+
   # The NEON path is cfg'd to target_arch = "aarch64" and every other job here
   # runs on x86_64, so nothing compiled it. It had been broken since Rust
   # started requiring an explicit unsafe block inside `unsafe fn` - which this
