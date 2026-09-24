@@ -183,8 +183,16 @@ export async function verifyFleet(routes) {
 /**
  * Canonical SHA-256 over the inputs and the verdict.
  *
- * Re-running the identical input must reproduce this digest. If it does not,
- * the input changed — that is the entire claim, and it is not a signature.
+ * Two parties checking the same schedule must reach the same digest, which is
+ * why it is taken over the Q16.16 integers the engine actually evaluated
+ * rather than over the values as supplied. Hashing the raw input made
+ * `close: 600` and `close: '600'` disagree — the same schedule, the same
+ * verdict, two different digests — and a spreadsheet or CSV round-trip
+ * produces strings as a matter of course. The engine itself never cared:
+ * verifyRoute normalises through toQ() before anything is computed.
+ *
+ * Re-running the same schedule must reproduce this digest. If it does not, the
+ * schedule changed — that is the entire claim, and it is not a signature.
  *
  * @param {import('./index.d.ts').Route[]} routes
  * @param {import('./index.d.ts').FleetResult} result
@@ -194,7 +202,15 @@ export async function verdictDigest(routes, result) {
   const canon = JSON.stringify({
     routes: routes.map((r) => [
       r.id,
-      r.stops.map((s) => [s.id, s.open ?? 0, s.close ?? 0, s.travel]),
+      r.stops.map((s, i) => [
+        s.id,
+        toQ(s.open ?? 0, `${s.id} window open`),
+        toQ(s.close ?? 0, `${s.id} window close`),
+        // Nothing precedes the first stop, so its travel time is not part of
+        // what was evaluated. Hashing it would move the digest for an input
+        // that produced an identical verdict — the same defect one line up.
+        i === 0 ? 0 : toQ(s.travel, `${s.id} travel`),
+      ]),
     ]),
     verdict: result.routes.map((r) => [
       r.id, r.feasible, r.violation?.stop ?? null,

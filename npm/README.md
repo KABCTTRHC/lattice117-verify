@@ -78,9 +78,17 @@ One route. `{ id, feasible, cost, violation }`.
 
 ### `verdictDigest(routes, result)` → `string`
 
-Canonical SHA-256 over inputs and verdict, lowercase hex. Re-running the
-identical input must reproduce it. It proves the same input produced the same
-conclusion. **It is not a signature and does not claim to be.**
+Canonical SHA-256 over inputs and verdict, lowercase hex. Re-running the same
+schedule must reproduce it, so two parties can confirm they reached the same
+conclusion without trusting each other's account of it. **It is not a signature
+and does not claim to be.**
+
+It is taken over the Q16.16 integers the engine actually evaluated, not the
+values as you supplied them, so `close: 600` and `close: '600'` agree — which
+matters, because a CSV or spreadsheet round-trip hands you strings. In 0.1.0
+it was taken over the raw input and those two disagreed: same schedule, same
+verdict, two digests. Verdicts are unaffected either way; `verifyRoute`
+normalises before it computes anything. Digests from 0.1.0 do not carry over.
 
 ### `init()` → `Promise`
 
