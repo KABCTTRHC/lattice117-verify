@@ -1,0 +1,17 @@
+{
+  "name": "@lattice117/verify",
+  "version": "0.1.0",
+  "description": "Deterministic schedule feasibility verification. Checks whether a planned route holds against its own time windows and names the exact violation when it does not. Runs entirely locally — no network, no server, no telemetry.",
+  "keywords": ["scheduling", "vrptw", "verification", "logistics", "routing", "feasibility", "fixed-point", "deterministic", "wasm"],
+  "license": "AGPL-3.0-or-later",
+  "author": "Brierley Sovereign Group Ltd",
+  "repository": { "type": "git", "url": "git+https://github.com/KABCTTRHC/lattice117-verify.git" },
+  "homepage": "https://github.com/KABCTTRHC/lattice117-verify",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" } },
+  "files": ["index.js", "index.d.ts", "lattice117_wasm.wasm", "README.md"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false
+}
