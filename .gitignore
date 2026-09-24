@@ -2,3 +2,9 @@
 **/*.rs.bk
 Cargo.lock.bak
 .DS_Store
+
+# Licence signing key. The private half signs every licence ever issued; if it
+# leaks, every key in circulation has to be reissued under a new public key.
+# issue.mjs writes it here by default — it must never reach the repository.
+licence/keypair.json
+**/keypair.json

@@ -97,6 +97,22 @@
   <span class="badge">Q16.16 fixed point</span>
   <span class="badge">no server · no upload · works offline</span>
   <span class="badge"><a href="index.html" style="text-decoration:none;color:inherit">single-round view →</a></span>
+  <span class="badge" id="tierBadge">tier: …</span>
+</div>
+
+<div class="panel" id="licencePanel">
+  <h2>Licence</h2>
+  <div id="licenceState" style="font-size:13.5px"></div>
+  <div class="btnrow" style="margin-top:12px">
+    <input id="licenceKey" placeholder="paste licence key" spellcheck="false"
+           style="flex:1;min-width:220px;background:var(--panel-2);color:var(--ink);
+                  font:12px var(--mono);border:1px solid var(--line);border-radius:7px;padding:9px">
+    <button class="primary" id="applyLicence">Apply</button>
+    <button id="removeLicence">Remove</button>
+  </div>
+  <p class="note">Free checks one round and does not issue certificates. A licence
+  unlocks the whole fleet and the certificate. The key is verified in this browser —
+  it is never sent anywhere, and neither is your schedule.</p>
 </div>
 
 <div class="panel" id="resultPanel" style="display:none">
@@ -185,7 +201,27 @@
 </footer>
 </div>
 
-<script>
+<script type="module">
+import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
+let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
+
+async function refreshTier(){
+  entitlement = await currentEntitlement();
+  const b=$('tierBadge');
+  b.textContent = 'tier: '+entitlement.label.toLowerCase();
+  b.className = 'badge' + (entitlement.tier!=='free' ? ' live' : '');
+  const st=$('licenceState');
+  if(entitlement.tier!=='free'){
+    st.innerHTML = `<b style="color:var(--ok)">${entitlement.label}</b> — ${entitlement.email}`+
+      `<br><span style="color:var(--ink-dim)">expires ${entitlement.expires.toISOString().slice(0,10)}</span>`;
+  } else {
+    st.innerHTML = `<b>Free</b> — one round per audit, no certificate.`+
+      (entitlement.reason && entitlement.reason!=='no licence key'
+        ? `<br><span style="color:var(--bad)">licence rejected: ${entitlement.reason}</span>` : '');
+  }
+  $('cert').disabled = !entitlement.certificate;
+}
+
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastReport=null, csvRows=null, csvHeaders=null;
 
@@ -224,7 +260,12 @@ function put(arr){
 function runRoutes(spec){
   if(!wasm) throw new Error('the verification engine is still loading — try again in a moment');
   const results=[];
+  let capped=false;
   for(const r of spec.routes){
+    // Free tier checks one round. The cap is applied here, at the point of
+    // evaluation, rather than by hiding rows in the UI - a limit that only
+    // exists in the presentation layer is not a limit.
+    if(results.length >= entitlement.maxRounds){ capped=true; break; }
     const k=r.stops.length;
     if(k<2) throw new Error(`round "${r.vehicle}" has ${k} stop(s); at least 2 are needed`);
     const dist=new Array(k*k).fill(0);
@@ -242,7 +283,8 @@ function runRoutes(spec){
       status:o[0], node:o[1]>=0?(r.stops[o[1]]?.id??String(o[1])):null,
       arrival:o[2], close:o[3], deficit:o[4], cost:o[5]});
   }
-  return {unit:spec.unit, checked:results.length,
+  return {unit:spec.unit, checked:results.length, capped,
+          totalSubmitted:spec.routes.length,
           feasible:results.filter(r=>r.status===0).length, results, spec};
 }
 
@@ -409,8 +451,12 @@ async function render(rep){
   rate.innerHTML=pct+'%<small>rounds achievable</small>';
   $('heroLine').innerHTML= failed
     ? `<b>${failed} of ${rep.checked} planned rounds cannot be run as scheduled.</b><br><span style="color:var(--ink-dim)">${rep.feasible} verified achievable against their own time windows.</span>`
-    : `<b>All ${rep.checked} rounds are achievable.</b><br><span style="color:var(--ink-dim)">Every stop is reached inside its window.</span>`;
+    : `<b>${rep.checked === 1 ? 'The round checked is achievable.' : `All ${rep.checked} rounds are achievable.`}</b><br><span style="color:var(--ink-dim)">Every stop is reached inside its window.</span>`;
   $('bar').innerHTML=`<i class="ok" style="width:${pct}%"></i><i class="bad" style="width:${100-pct}%"></i>`;
+  if(rep.capped){
+    $('heroLine').innerHTML += `<br><span style="color:var(--warn,#d29922)">Free tier: checked 1 of `+
+      `${rep.totalSubmitted} rounds. A licence checks the whole fleet.</span>`;
+  }
 
   const vr=$('violRows'); vr.innerHTML='';
   const fails=rep.results.filter(r=>r.status===1);
@@ -545,6 +591,17 @@ $('json').addEventListener('click',()=>{
     rounds:rep.results.map(({spec,...r})=>r),audit_digest_sha256:dg},null,2),
     'lattice117-audit-report.json','application/json');
 });
+
+$('applyLicence').addEventListener('click', async()=>{
+  const k=$('licenceKey').value.trim();
+  const ent=await verifyLicence(k);
+  if(ent.tier==='free'){ $('licenceState').innerHTML=
+    `<span style="color:var(--bad)">Not applied: ${ent.reason}</span>`; return; }
+  saveLicence(k); $('licenceKey').value=''; await refreshTier();
+});
+$('removeLicence').addEventListener('click', async()=>{ clearLicence(); await refreshTier(); });
+
+refreshTier();
 
 loadWasm().then(()=>{
   ['run','loadEx','pickCsv','loadExCsv'].forEach(id=>$(id).disabled=false);
