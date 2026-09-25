@@ -389,5 +389,13 @@ loadWasm().then(run).catch(e=>{
     '  —  this page must be served over http (try: python3 -m http.server).';
 });
 </script>
+<script>
+/* Registering the worker is what lets a disconnected *reload* work; the
+   computation was already local. Failure here is not worth surfacing — the
+   page works without it, just not across a refresh with the network down. */
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+</script>
 </body>
 </html>
