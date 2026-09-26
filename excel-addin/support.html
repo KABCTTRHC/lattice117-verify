@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Support — Lattice117 Schedule Check</title><link rel="stylesheet" href="_shared.css"></head><body>
+
+<h1>Support</h1>
+<p class="sub">Lattice117 Schedule Check · Brierley Sovereign Group Ltd</p>
+
+<div class="card">
+<p style="margin:0"><b>Email <a href="mailto:kurtisbrierley@gmail.com">kurtisbrierley@gmail.com</a></b><br>
+We aim to reply within one working day. Please include what you were checking
+and what you expected — <b>do not attach your workbook</b>, we do not need it
+and would rather not have it.</p>
+</div>
+
+<h2>What the add-in does</h2>
+<p>Select your route or rota rows, including the header, and choose
+<b>Schedule Check</b>. It reports what proportion of your rounds can actually be
+run against their own time windows, names the stop that breaks, when it arrives,
+when the window shuts and by how much it is missed, and colours the failing rows
+in the sheet.</p>
+
+<h2>Your sheet</h2>
+<p>One row per stop, in visit order. Column names can be anything — they are
+matched from your header row. Five are required: the round, the stop, when its
+window opens, when it closes, and the travel time from the previous stop.</p>
+<p>A sequence column is used if present; otherwise sheet order is taken as visit
+order.</p>
+
+<h2>Common questions</h2>
+
+<h3>"Could not find these columns in your header row"</h3>
+<p>The matcher could not identify one of the five required columns. Check the
+header row is included in your selection and that each required column has a
+heading. Headings can be worded however you like.</p>
+
+<h3>"…is outside the Q16.16 representable range"</h3>
+<p>Values are held as fixed-point numbers representing −32,768 to +32,767. In
+minutes that caps a schedule at about 22 days; in seconds, about 9 hours. If you
+are working in seconds, switch the sheet to minutes. The add-in refuses
+out-of-range values by name rather than wrapping them, because a wrapped value
+produces a confident verdict about a schedule that was never actually checked.</p>
+
+<h3>My licence key is not accepted</h3>
+<p>Keys are checked by signature, so a truncated copy-paste is the usual cause —
+make sure you have the whole string including the part after the full stop. Keys
+also expire; the pane shows the expiry date once a key is applied. If it still
+fails, email us with the key and we will reissue.</p>
+
+<h3>Does it work offline?</h3>
+<p>Yes. Once the pane has opened, it makes no network requests at all. You can
+disconnect entirely and keep working.</p>
+
+<h3>Is my data uploaded?</h3>
+<p>No, and it cannot be — there is no server to upload it to. See the
+<a href="privacy.html">privacy policy</a>.</p>
+
+<h2>What it deliberately does not do</h2>
+<p>It verifies time windows and travel times. It does not build routes, predict
+traffic, or judge whether a schedule is <i>good</i> — only whether it is
+possible. Vehicle capacity is not yet checked as a hard constraint.</p>
+<p>The rota rest check is an <b>indicative mathematical check against the rest
+windows you configure. It is not legal advice</b> and is not a determination of
+compliance with the Working Time Regulations or any other law.</p>
+
+<h2>Reporting a problem</h2>
+<p>Bugs and feature requests can also be raised at
+<a href="https://github.com/KABCTTRHC/lattice117-verify/issues">github.com/KABCTTRHC/lattice117-verify/issues</a>.</p>
+
+<footer>Brierley Sovereign Group Ltd · Nottingham · Company No. 16833179 ·
+<a href="privacy.html">Privacy</a></footer>
+</body></html>

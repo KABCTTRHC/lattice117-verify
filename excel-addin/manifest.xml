@@ -35,10 +35,10 @@
   <ProviderName>Brierley Sovereign Group Ltd</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
   <DisplayName DefaultValue="Lattice117 Schedule Check"/>
-  <Description DefaultValue="Checks whether the rounds in your sheet are actually achievable against their own time windows. Names the stop that breaks, when it arrives, when the window shuts and by how much it is missed. Runs entirely inside Excel — your schedule is never uploaded."/>
+  <Description DefaultValue="Checks whether the rounds in your sheet can actually be run against their own time windows. Names the stop that breaks, when it arrives, when the window shuts and by how much. Runs entirely inside Excel - your schedule is never uploaded."/>
   <IconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-80.png"/>
-  <SupportUrl DefaultValue="https://github.com/KABCTTRHC/lattice117-verify"/>
+  <SupportUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/support.html"/>
 
   <AppDomains>
     <AppDomain>https://kabcttrhc.github.io</AppDomain>

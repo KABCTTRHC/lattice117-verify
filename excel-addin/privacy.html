@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy — Lattice117 Schedule Check</title><link rel="stylesheet" href="_shared.css"></head><body>
+
+<h1>Privacy policy</h1>
+<p class="sub">Lattice117 Schedule Check · Brierley Sovereign Group Ltd · Last updated 26 September 2026</p>
+
+<div class="card key">
+<p style="margin:0"><b>No data leaves your machine. No telemetry is collected.</b>
+This add-in makes no network requests of any kind while it runs. Your workbook,
+your schedules, the names in them and the results of any check are read, computed
+and displayed entirely inside Excel on your own device.</p>
+</div>
+
+<h2>What we collect</h2>
+<p><b>Nothing.</b> We operate no server, no database and no analytics for this
+add-in. There is no account to create and nothing to log into. We could not
+identify a user of this add-in if we were asked to.</p>
+
+<table>
+  <tr><th>Category</th><th>Collected?</th></tr>
+  <tr><td>Workbook contents, schedules, staff or customer names</td><td>No — never transmitted</td></tr>
+  <tr><td>Usage analytics, telemetry, crash reports</td><td>No</td></tr>
+  <tr><td>Cookies or advertising identifiers</td><td>No</td></tr>
+  <tr><td>IP addresses or device identifiers</td><td>No</td></tr>
+  <tr><td>Email address, if you buy a licence</td><td>Yes — see below</td></tr>
+</table>
+
+<h2>How it works, and why that matters</h2>
+<p>The verification engine is a 21 KB WebAssembly module that runs inside
+Excel's own task-pane process. It opens no sockets. This is a structural
+property of the software rather than a policy we are asking you to trust:
+disconnect from the network entirely and the add-in still works, which is the
+simplest way to confirm it.</p>
+<p>The one-off files the add-in needs — the page, the engine — are served from
+GitHub Pages when the pane first opens, exactly as any web page is. Those
+requests carry no information about your workbook.</p>
+
+<h2>Licence keys</h2>
+<p>If you buy a Standard or Pro licence, payment is handled by <b>Stripe</b>,
+who process your payment details under their own privacy policy. We receive
+your email address so we can send you a licence key, and we keep it only to
+issue and renew that key.</p>
+<p>The key itself is a short signed token. It is verified <i>inside the add-in</i>
+by public-key signature and stored in your browser's local storage on your own
+device. Checking it involves no network request, so we do not know when, where
+or how often you use the product.</p>
+
+<h2>Your rights</h2>
+<p>Under UK GDPR you may ask what personal data we hold about you, ask for it to
+be corrected, or ask for it to be erased. For licence holders that is an email
+address and the keys issued to it. Erasure invalidates future renewals of your
+key. Write to the address below and we will respond within 30 days.</p>
+
+<h2>Data controller</h2>
+<p>Brierley Sovereign Group Ltd, a company registered in England and Wales,
+company number 16833179. Contact:
+<a href="mailto:kurtisbrierley@gmail.com">kurtisbrierley@gmail.com</a>.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes we will update the date at the top of this page. We
+will not begin collecting data we do not collect today without saying so here
+first.</p>
+
+<footer>Brierley Sovereign Group Ltd · Nottingham ·
+<a href="support.html">Support</a> ·
+<a href="https://github.com/KABCTTRHC/lattice117-verify">Source</a></footer>
+</body></html>
