@@ -67,14 +67,34 @@ console.log('\nSidebar.html is genuinely self-contained');
   ok('no module import statement survived bundling', !/^\s*import\s/m.test(html));
 
   // Each shared module must be present verbatim, minus the export keyword.
+  //
+  // Markers are STRUCTURAL constants, not values that legitimately change.
+  // licence.js used to be marked by the literal public key, which meant a key
+  // rotation — a routine, correct operation — failed this test and read as a
+  // stale bundle. The marker is now the storage key, which identifies the
+  // module without pinning a value that is supposed to move.
   for (const [file, marker] of [
     ['demo/digest.js',   'lattice117.rota.v1'],
     ['demo/rota.js',     'restMinutes: 660'],
-    ['demo/licence.js',  'bMDjl_8U9_4dqVifNUhDPSKGdOo1bZyA4_e_wevdyXI'],
+    ['demo/licence.js',  'lattice117.licence'],
     ['demo/freetier.js', 'routeStops: 6'],
   ]) {
     ok(`${file.split('/')[1]} is inlined`, html.includes(marker) && read(file).includes(marker));
   }
+
+  // The invariant the old marker was reaching for, stated properly: whatever
+  // public key demo/licence.js carries, the bundle must carry the same one.
+  // Derived from the source at run time, so a rotation updates it for free and
+  // a bundle left un-rebuilt after one still fails.
+  const keyOf = (src) => {
+    const m = src.match(/\bx:\s*'([A-Za-z0-9_-]{20,})'/);
+    return m && m[1];
+  };
+  const srcKey = keyOf(read('demo/licence.js'));
+  ok('demo/licence.js carries a public key', Boolean(srcKey));
+  ok('bundle carries the same public key as demo/licence.js',
+     Boolean(srcKey) && html.includes(srcKey),
+     srcKey ? `source key ${srcKey.slice(0, 12)}… absent from Sidebar.html` : 'no key found');
   const kb = (html.length / 1024).toFixed(0);
   ok(`bundle is a single file under 200 KB (${kb} KB)`, html.length < 200 * 1024);
 }
