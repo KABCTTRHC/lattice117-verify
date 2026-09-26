@@ -456,6 +456,23 @@
   <div id="repairOut"></div>
 </div>
 
+<div class="panel" id="matrixPanel" style="display:none">
+  <div class="meta">Matrix optimiser · Enterprise</div>
+  <p class="note" id="matrixIntro"></p>
+  <div class="btnrow">
+    <input type="file" id="matrixFile" accept=".txt,.csv,.tsv,text/plain" style="display:none">
+    <button id="matrixPick">Choose a matrix file…</button>
+    <button id="matrixDemo">Load the Nottingham benchmark</button>
+  </div>
+  <textarea id="matrixText" rows="7" spellcheck="false"
+    placeholder="Paste a distance matrix. One row per stop, whitespace- or comma-separated, in the same time unit as your windows.&#10;&#10;Optionally name the rows so they can be matched to your sheet:&#10;# nodes: 0=DEPOT, 1=Arnold, 2=Beeston&#10;0.0 11.9 9.6&#10;11.9 0.0 20.8&#10;9.6 20.8 0.0"></textarea>
+  <p class="note" id="matrixState"></p>
+  <div class="btnrow">
+    <button class="primary" id="runResequence">Re-sequence (Enterprise Matrix)</button>
+  </div>
+  <div id="resequenceOut"></div>
+</div>
+
 <div class="panel" id="violPanel" style="display:none">
   <h2>Rounds that will fail</h2>
   <table>
@@ -552,6 +569,9 @@
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
 import { repairFixedSequence, roundsFromRows, fromQ as qToUnits } from './repair.js';
+import {
+  parseMatrix, resequenceFleet, roundsFromRows as matrixRounds, fromQ as mToUnits,
+} from './resequence.js';
 import { evaluateRota, humanMinutes, RULES, DISCLAIMER,
          RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from './rota.js';
 import { capRoutes, capRotaRows, splitBreaches, importsLeft, recordImport,
@@ -640,6 +660,7 @@ let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 async function refreshTier(){
   entitlement = await currentEntitlement();
   if (typeof paintRepairGate === 'function') paintRepairGate();
+  if (typeof paintMatrixGate === 'function') paintMatrixGate();
   const b=$('tierBadge');
   b.textContent = 'tier: '+entitlement.label.toLowerCase();
   b.className = 'badge' + (entitlement.tier!=='free' ? ' live' : '');
@@ -704,6 +725,25 @@ function runRoutes(spec){
     if(k<2) throw new Error(`round "${r.vehicle}" has ${k} stop(s); at least 2 are needed`);
     const dist=new Array(k*k).fill(0);
     for(let i=1;i<k;i++) dist[(i-1)*k+i]=toQ(r.stops[i].travel, `${r.vehicle} → ${r.stops[i].id} travel time`);
+
+    /* The departure time, folded into the leg out of the first stop.
+       The engine starts its clock at zero and takes no departure argument, so
+       this is how a departure is expressed to it. It is folded HERE, in the
+       verification path, and deliberately NOT in the canonical form, where it
+       stays a separate `depart` field — the digest records the schedule a planner
+       would run, not the encoding used to ask the question.
+
+       This was missing until Tier 5 landed, and it was a real defect rather than
+       an omission: the `depart` column entered the canonical form when the A4
+       repair shipped, so a sheet carrying `depart: 540` hashed as a 09:00 start
+       while being VERIFIED as though it left at midnight. The repair path folded
+       the departure only when proposing a change, so the headline verdict and the
+       repair's own count could disagree about the same sheet.
+
+       Folding zero is a no-op, which is why every digest published before this —
+       the fleet fixture's e249d90e…, the nine device captures, the white paper —
+       is unaffected. No bundled fixture carried a departure column. */
+    dist[1]+=toQ(r.depart ?? 0, `${r.vehicle} departure`);
     const wins=[];
     for(const st of r.stops) wins.push(toQ(st.ready,`${st.id} window open`), toQ(st.due,`${st.id} window close`));
     const routeIdx=r.stops.map((_,i)=>i);
@@ -941,9 +981,10 @@ async function digestOf(rep){
    by the untouched referee rather than by the thing that changed the schedule.
 
    A departure is expressed to the verifier by folding it into the first leg,
-   because the engine starts its clock at zero. It is NOT folded into the
-   canonical form: there it stays a separate `depart` field, so the digest
-   describes the schedule a planner would actually run. */
+   because the engine starts its clock at zero. runRoutes does that fold itself,
+   so nothing here needs to. It is NOT folded into the canonical form: there it
+   stays a separate `depart` field, so the digest describes the schedule a
+   planner would actually run. */
 let lastRep=null;
 
 function paintRepairGate(){
@@ -976,19 +1017,14 @@ async function runRepair(){
     let after=before, verified=null;
     if(fix.changes.length){
       // Re-evaluate through the untouched engine with the new departures.
-      const repairedSpec={...spec, routes: spec.routes.map(r=>{
-        if(!shift.has(r.vehicle)) return r;
-        const d=shift.get(r.vehicle);
-        const stops=r.stops.map((st,i)=> i===1
-          ? {...st, travel: Number(st.travel)+d}   // departure folded into leg 1
-          : {...st});
-        return {...r, depart:d, stops};
-      })};
+      // Only the departure changes. runRoutes folds it into leg 1 itself, so
+      // the stops are untouched and the spec that gets digested is the spec
+      // that got verified — no add-then-subtract dance, which is where the
+      // encoding trick used to leak into the canonical form.
+      const repairedSpec={...spec, routes: spec.routes.map(r=>
+        shift.has(r.vehicle) ? {...r, depart:shift.get(r.vehicle)} : r)};
       verified=runRoutes(repairedSpec);
-      after=await digestOf({...verified, spec:{...repairedSpec,
-        routes: repairedSpec.routes.map(r=>({...r,
-          stops:r.stops.map((st,i)=> i===1 && shift.has(r.vehicle)
-            ? {...st, travel: Number(st.travel)-shift.get(r.vehicle)} : st)}))}});
+      after=await digestOf({...verified, spec:repairedSpec});
     }
 
     const rows=fix.changes.map(c=>
@@ -1013,11 +1049,145 @@ async function runRepair(){
   }
 }
 
+/* ------------------- Tier 5 Enterprise Matrix optimiser ------------------ */
+/* Same discipline as Tier 4 above: the solver proposes an order, the UNTOUCHED
+   WebAssembly engine grades it, and digest_after comes from that engine rather
+   than from the thing that changed the schedule.
+
+   What Tier 5 adds is the one piece the route-sheet schema cannot carry. A
+   sheet gives the travel time into each stop IN THE ORDER GIVEN, which is
+   enough to verify that order and enough to re-time it, but says nothing about
+   what any other order would cost. Re-sequencing needs a stop-to-stop matrix,
+   and that has to be supplied.
+
+   The vehicle assignment is NOT searched. A sheet that names VAN-21 carries a
+   planner's decision that usually encodes things no matrix knows, and only the
+   order within each round is opened up. Up to 8 interior stops every
+   permutation is evaluated, so the answer is the optimum and there is no
+   iteration budget, temperature or seed anywhere in it. Past 8 the round is
+   returned untouched and reported as unsearched, because a heuristic answer
+   labelled "optimal" is worth less than an honest refusal. */
+let loadedMatrix = null;   // {matrix, n, names}
+
+function paintMatrixGate(){
+  const can = !!entitlement.matrixSolver;
+  $('matrixPanel').style.display = lastRep ? '' : 'none';
+  for (const id of ['matrixPick','matrixDemo','matrixText','runResequence']) $(id).disabled = !can;
+  $('runResequence').disabled = !can || !loadedMatrix;
+  $('matrixIntro').innerHTML = can
+    ? 'Searches every order of each round’s interior stops against a distance '
+    + 'matrix you supply, keeps the vehicle assignment you planned, then '
+    + 're-verifies with the same engine and shows both digests. Rounds with more '
+    + 'than 8 interior stops are reported as unsearched rather than guessed at.'
+    : '<b>Enterprise Matrix Optimizer (£499/month).</b> Re-orders the stops '
+    + 'within a round against a distance matrix you supply — the one thing a '
+    + 'route sheet cannot express — and proves the improvement with the same '
+    + 'verifier that graded the original.';
+  if (!can) { $('matrixState').textContent = ''; return; }
+  $('matrixState').innerHTML = loadedMatrix
+    ? `Matrix loaded: <b>${loadedMatrix.n}×${loadedMatrix.n}</b>, naming `
+      + `${[...loadedMatrix.names.keys()].slice(0,8).join(', ')}`
+      + (loadedMatrix.names.size > 8 ? ', …' : '')
+    : 'No matrix loaded yet.';
+}
+
+/* Reads whatever is in the textarea. A bad matrix reports what is wrong with it
+   and loads nothing — a partially-parsed matrix would re-sequence against
+   distances nobody supplied. */
+function loadMatrixFromText(){
+  const text = $('matrixText').value.trim();
+  if (!text) { loadedMatrix = null; paintMatrixGate(); return; }
+  try {
+    loadedMatrix = parseMatrix(text);
+    $('resequenceOut').innerHTML = '';
+  } catch (e) {
+    loadedMatrix = null;
+    $('resequenceOut').innerHTML = `<p class="note bad">${e.message}</p>`;
+  }
+  paintMatrixGate();
+}
+
+async function runResequence(){
+  if(!lastRep || !entitlement.matrixSolver || !loadedMatrix) return;
+  const out = $('resequenceOut');
+  try{
+    const {matrix, n, names} = loadedMatrix;
+    const spec = lastRep.spec;
+    const before = await digestOf(lastRep);
+
+    /* A stop the matrix does not name is a hard error, not a default. Routing an
+       unknown stop to node 0 would produce a confident verdict about a schedule
+       nobody checked, which is the worst failure this kind of tool can have. */
+    const rounds = matrixRounds(
+      spec.routes.map(r=>({
+        id:r.vehicle, depart:r.depart ?? 0,
+        stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
+      })),
+      (id)=> names.has(id) ? names.get(id) : -1
+    );
+    const fleet = resequenceFleet(rounds, matrix, n);
+    const byRound = new Map(fleet.outcomes.map(o=>[o.roundId, o]));
+
+    /* Apply: reorder the stops and rewrite every leg FROM THE MATRIX, so the
+       sheet a customer exports costs exactly what was searched. */
+    const resequencedSpec = {...spec, routes: spec.routes.map((r,ri)=>{
+      const o = byRound.get(r.vehicle);
+      if(!o || !o.changed) return r;
+      const src = rounds[ri];
+      const stops = o.best.map((pos,k)=>({
+        ...r.stops[pos],
+        travel: k===0 ? 0
+          : mToUnits(matrix[src.stops[o.best[k-1]].node * n + src.stops[pos].node]),
+      }));
+      return {...r, stops};
+    })};
+
+    /* runRoutes folds each round's departure into its first leg for the engine,
+       which starts its clock at zero, and the canonical form keeps `depart` as
+       its own field. So the spec that gets graded and the spec that gets
+       digested are the same object: the digest records the schedule. */
+    const graded = runRoutes(resequencedSpec);
+    const after = await digestOf({...graded, spec:resequencedSpec});
+
+    const rows = fleet.outcomes.map(o=>{
+      const saving = mToUnits(o.savingQ);
+      const state = !o.searched
+        ? `<td colspan="2">more than 8 interior stops — <b>not searched</b></td>`
+        : !o.changed
+          ? `<td colspan="2">already the best order found</td>`
+          : `<td class="q">${mToUnits(o.bestCostQ).toFixed(1)}</td>`
+            + `<td class="ok">−${saving.toFixed(1)} (${Math.round(1000*o.savingQ/o.originalCostQ)/10}%)</td>`;
+      return `<tr><td><b>${o.roundId}</b></td>`
+        + `<td>${mToUnits(o.originalCostQ).toFixed(1)}</td>${state}</tr>`
+        + (o.changed ? `<tr><td></td><td colspan="3" class="note">`
+            + `${o.bestIds.join(' → ')}</td></tr>` : '');
+    }).join('');
+
+    out.innerHTML =
+      `<p class="note"><b>${fleet.feasibleBefore} of ${fleet.roundsTotal}</b> rounds held before, `
+      +`<b>${fleet.feasibleAfter} of ${fleet.roundsTotal}</b> after. Travel `
+      +`<b>${mToUnits(fleet.totalCostBeforeQ).toFixed(1)}</b> → `
+      +`<b>${mToUnits(fleet.totalCostAfterQ).toFixed(1)}</b> ${spec.unit||''}`
+      +(fleet.savingQ>0 ? ` (−${mToUnits(fleet.savingQ).toFixed(1)}).` : '.')
+      +(fleet.unsearched ? ` ${fleet.unsearched} round(s) were too long to search exhaustively and were left alone.` : '')
+      +`</p>`
+      +`<table><thead><tr><th>Round</th><th>Travel before</th><th>After</th><th>Saved</th></tr></thead>`
+      +`<tbody>${rows}</tbody></table>`
+      +(fleet.isNoOp ? '<p class="note">Nothing to re-sequence — every round is already in its best order under this matrix.</p>' : '')
+      +`<div class="digest"><b>digest before</b><br>${before}<br><br>`
+      +`<b>digest after</b><br>${after}`
+      +(fleet.isNoOp ? ' <i>(unchanged — no order moved)</i>' : '')+`</div>`;
+  }catch(e){
+    out.innerHTML = `<p class="note bad">Re-sequencing failed: ${e.message}</p>`;
+  }
+}
+
 async function render(rep){
   const pct=rep.checked?Math.round(100*rep.feasible/rep.checked):0;
   const failed=rep.checked-rep.feasible;
   lastRep=rep;
   paintRepairGate();
+  paintMatrixGate();
   $('resultPanel').style.display='';
   const rate=$('rate');
   rate.className='rate '+(failed?'bad':'ok');
@@ -1205,12 +1375,39 @@ $('pillRota') .addEventListener('click',()=>selectTab('rota'));
 /* ---- rota mode ---------------------------------------------------------- */
 $('pickRota').addEventListener('click',()=>$('fileRota').click());
 $('runRepair').addEventListener('click',runRepair);
+$('runResequence').addEventListener('click',runResequence);
+$('matrixText').addEventListener('input',loadMatrixFromText);
+$('matrixPick').addEventListener('click',()=>$('matrixFile').click());
+$('matrixFile').addEventListener('change',async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  $('matrixText').value=await f.text(); loadMatrixFromText();
+});
+/* The benchmark is bundled so the claim can be checked without the customer
+   having to build a matrix first. docs/FIXTURE-NOTTINGHAM.md documents the
+   coordinates it was derived from and the two digests it must produce. */
+$('matrixDemo').addEventListener('click',async ()=>{
+  try{
+    $('matrixText').value=await (await fetch('example-fleet-nottingham-matrix.txt')).text();
+    loadMatrixFromText();
+  }catch(err){
+    $('resequenceOut').innerHTML=`<p class="note bad">Could not load the benchmark matrix: ${err.message}</p>`;
+  }
+});
 /* Test hook. Grants the repair capability in-page so the end-to-end repair and
    referee pipeline can be driven without a signed licence — the signing key is
    not in CI, and tier resolution is covered by tests/tiers.test.mjs. It only
    ever relaxes the UI gate; it cannot mint or alter a licence, and the digests
    it produces come from the same engine as every other run. */
-window.__grant=()=>{ entitlement={...entitlement, tier:"tier4", maxRounds:Infinity, certificate:true, repair:true, matrixSolver:true, label:"Enterprise Repair"}; paintRepairGate(); };
+/* Test hook, used by the browser harness only. Defaults to tier5 so a harness
+   that grants nothing specific gets the full surface; pass "tier4" to check the
+   matrix panel is genuinely gated. */
+window.__grant=(tier="tier5")=>{
+  const matrixSolver = tier==="tier5";
+  entitlement={...entitlement, tier, maxRounds:Infinity, certificate:true,
+    repair:true, matrixSolver,
+    label: matrixSolver ? "Enterprise Matrix" : "Enterprise Repair"};
+  paintRepairGate(); paintMatrixGate();
+};
 $('fileRota').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
   $('err').textContent='';

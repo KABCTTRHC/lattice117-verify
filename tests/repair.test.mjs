@@ -125,5 +125,36 @@ console.log('\nThe published digest is unchanged by the depart column');
   eq('a non-zero depart changes the digest', a !== c, true);
 }
 
+/* ── the regression this suite did not catch the first time ──────────────── */
+console.log('\nThe engine actually applies the departure it is given');
+{
+  /* The `depart` column entered the CANONICAL FORM when the A4 repair shipped,
+     but no verification path applied it. So a sheet carrying `depart: 540`
+     hashed as a 09:00 start while being verified as though it left at midnight,
+     and the repair's own "2 of 4 held" count could disagree with the headline
+     verdict on the same sheet. Nothing failed, which is exactly why it survived.
+
+     verifyRoute now folds the departure into the leg out of the first stop. The
+     two assertions below are the ones that would have caught it: a departure
+     that pushes a round past its window must change the verdict, and a zero
+     departure must change nothing at all. */
+  const { verifyFleet } = await import('../npm/index.js');
+  const stops = [
+    { id: 'D', open: 0, close: 600, travel: 0 },
+    { id: 'A', open: 0, close: 100, travel: 20 },
+  ];
+  const atZero = await verifyFleet([{ id: 'R', depart: 0, stops }]);
+  const absent = await verifyFleet([{ id: 'R', stops }]);
+  const late = await verifyFleet([{ id: 'R', depart: 90, stops }]);
+
+  eq('a zero departure verifies as feasible', atZero.routes[0].feasible, true);
+  eq('and an absent one is identical to a zero one',
+     JSON.stringify(absent.routes[0]), JSON.stringify(atZero.routes[0]));
+  eq('leaving 90 late breaches the window', late.routes[0].feasible, false);
+  eq('by exactly 10 units, not a rounded guess',
+     late.routes[0].violation.raw.deficit, 10 * 65536);
+  eq('and the engine names the stop that broke', late.routes[0].violation.stop, 'A');
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

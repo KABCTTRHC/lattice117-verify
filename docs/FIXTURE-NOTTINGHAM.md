@@ -180,6 +180,29 @@ re-sequencer searched all 5! = 120 interior orders exhaustively and returned the
 optimum, so there is no iteration budget, temperature or seed anywhere in the
 result.
 
+### 5.2.1 The digests
+
+Graded by the published 21,525-byte WASM engine and canonicalised by the shared
+`demo/digest.js`. These are the benchmark's record: a customer who runs the
+fixture on any machine, on any of the four surfaces, gets these two strings.
+
+```
+digest_before  da1650fc0e63e26eba33913f25f24fb9fbdc78ce4c55549279cb9582d3119993
+digest_after   2b9d863c5ab89a90a2416a9a708ce09fa8876b6d8d91e58199696181e7da7b15
+```
+
+They are **not signatures**. They prove that the same schedule was checked and
+the same verdict reached; they say nothing about who ran the check.
+
+The departure time is handled the way `demo/audit.html` has always handled it,
+and the distinction matters: the engine starts its clock at zero and takes no
+departure, so 540 is expressed to it by **folding it into the first leg**. It is
+*not* folded into the canonical form, where it stays a separate `depart` field.
+The digest therefore records the schedule a planner would run, not the encoding
+trick used to ask the question.
+
+### 5.2.2 Arrival profile
+
 The arrival profile after re-sequencing, which is what the verifier checks:
 
 ```

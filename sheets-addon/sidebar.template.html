@@ -189,9 +189,10 @@ async function runRepair(){
     if (shift.size){
       const routes = lastRun.canonRoutes.map(r => shift.has(r.id) ? { ...r, depart: shift.get(r.id) } : r);
       const verdict = routes.map(r => {
-        const d = shift.get(r.id) ?? 0;
-        const stops = r.stops.map((st, i) => i === 1 ? { ...st, travel: Number(st.travel) + d } : st);
-        const o = verifyRoute(stops);
+        // verifyRoute folds the departure itself now, so the stops go in
+        // unmodified — folding here too would count the shift twice.
+        const stops = r.stops;
+        const o = verifyRoute(stops, r.depart ?? 0);
         if (o[0] === 0) return { id: r.id, feasible: true, violation: null };
         const s = stops[o[1]];
         return { id: r.id, feasible: false, violation: { stop: s?.id ?? String(o[1]),
@@ -208,10 +209,29 @@ async function runRepair(){
   } catch (e) { out.innerHTML = `<div class="viol">Repair failed: ${e.message}</div>`; }
 }
 
-function verifyRoute(stops){
+function verifyRoute(stops, depart){
   const k = stops.length;
   const dist = new Array(k*k).fill(0);
   for (let i=1;i<k;i++) dist[(i-1)*k+i] = toQ(stops[i].travel, `${stops[i].id} travel`);
+
+  /* The departure time, folded into the leg out of the first stop.
+     The engine starts its clock at zero and takes no departure argument, so
+     this is how a departure is expressed to it. It is folded HERE, in the
+     verification path, and deliberately NOT in the canonical form, where it
+     stays a separate `depart` field — the digest records the schedule a planner
+     would run, not the encoding used to ask the question.
+
+     This was missing until Tier 5 landed, and it was a real defect rather than
+     an omission: the `depart` column entered the canonical form when the A4
+     repair shipped, so a sheet carrying `depart: 540` hashed as a 09:00 start
+     while being VERIFIED as though it left at midnight. The repair path folded
+     the departure only when proposing a change, so the headline verdict and the
+     repair's own count could disagree about the same sheet.
+
+     Folding zero is a no-op, which is why every digest published before this —
+     the fleet fixture's e249d90e…, the nine device captures, the white paper —
+     is unaffected. No bundled fixture carried a departure column. */
+  dist[1] += toQ(depart ?? 0, 'departure');
   const wins = [];
   for (const s of stops) wins.push(toQ(s.open,`${s.id} opens`), toQ(s.close,`${s.id} closes`));
   const db=put(dist), wb=put(wins), rb=put(stops.map((_,i)=>i)), ob=put([0,0,0,0,0,0]);
@@ -362,8 +382,8 @@ async function runRoutes(grid, headers, map){
   let feasible = 0; const fails = [], canonRoutes = [], canonVerdict = [];
   for (const r of routes){
     if (r.stops.length < 2){ fails.push({ veh: r.vehicle, msg: 'only one stop' }); continue; }
-    const o = verifyRoute(r.stops);
     const depart = r.stops.find(x => x.depart !== undefined && x.depart !== '')?.depart ?? 0;
+    const o = verifyRoute(r.stops, depart);
     canonRoutes.push({ id: r.vehicle, depart, stops: r.stops.map(s => ({ id: s.id, open: s.open, close: s.close, travel: s.travel })) });
     if (o[0] === 0){ feasible++; canonVerdict.push({ id: r.vehicle, feasible: true, violation: null }); }
     else if (o[0] === 1){

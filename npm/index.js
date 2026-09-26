@@ -102,6 +102,25 @@ export async function verifyRoute(route) {
     dist[(i - 1) * k + i] = toQ(stops[i].travel, `${label} → ${stops[i].id} travel`);
   }
 
+  /* The departure time, folded into the leg out of the first stop.
+     The engine starts its clock at zero and takes no departure argument, so
+     this is how a departure is expressed to it. It is folded HERE, in the
+     verification path, and deliberately NOT in the canonical form, where it
+     stays a separate `depart` field — the digest records the schedule a planner
+     would run, not the encoding used to ask the question.
+
+     This was missing until Tier 5 landed, and it was a real defect rather than
+     an omission: the `depart` column entered the canonical form when the A4
+     repair shipped, so a sheet carrying `depart: 540` hashed as a 09:00 start
+     while being VERIFIED as though it left at midnight. The repair path folded
+     the departure only when proposing a change, so the headline verdict and the
+     repair's own count could disagree about the same sheet.
+
+     Folding zero is a no-op, which is why every digest published before this —
+     the fleet fixture's e249d90e…, the nine device captures, the white paper —
+     is unaffected. No bundled fixture carried a departure column. */
+  dist[1] += toQ(route.depart ?? 0, `${label} departure`);
+
   const wins = [];
   for (const s of stops) {
     wins.push(toQ(s.open ?? 0, `${s.id} window open`),

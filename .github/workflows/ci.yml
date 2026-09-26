@@ -198,6 +198,11 @@ jobs:
         run: node tools/fixture/nottingham.mjs --check
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
+      # Two implementations of one algorithm, so the JS port and the Rust
+      # reference are asserted against the same integers. Also pins the
+      # Nottingham benchmark's digest_before and digest_after.
+      - name: Tier 5 re-sequencing and the Nottingham digests
+        run: node tests/resequence.test.mjs
       - name: Free-tier depth caps
         run: node tests/freetier.test.mjs
       # A mis-issued tier is a signed, verifying licence that silently grants
