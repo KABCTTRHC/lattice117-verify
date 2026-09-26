@@ -17,6 +17,7 @@
  */
 import { webcrypto as crypto } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { ISSUABLE_TIERS } from './licence.js';
 
 const ALG = { name: 'ECDSA', namedCurve: 'P-256' };
 const SIG = { name: 'ECDSA', hash: 'SHA-256' };
@@ -34,6 +35,18 @@ async function keygen() {
 }
 
 async function issue(email, tier, months) {
+  /* Refuse an unknown tier rather than signing it.
+     licence.js degrades an unrecognised tier to Standard, which is the right
+     failure for a forged or corrupted key — but the wrong one here: a typo at
+     issue time (`tier_5`, `Tier5`, `enterprise499`) would mint a signed,
+     verifying licence that silently grants Standard to a customer who paid for
+     Enterprise, and nothing downstream would ever report it. The names are
+     read from licence.js so this list cannot drift from the one that enforces. */
+  if (!ISSUABLE_TIERS.includes(tier)) {
+    console.error(`Refusing to issue unknown tier "${tier}".`);
+    console.error(`Known tiers: ${ISSUABLE_TIERS.join(', ')}`);
+    process.exit(1);
+  }
   const { privateJwk } = JSON.parse(readFileSync('keypair.json', 'utf8'));
   const key = await crypto.subtle.importKey('jwk', privateJwk, ALG, false, ['sign']);
   const now = Math.floor(Date.now() / 1000);

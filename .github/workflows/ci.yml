@@ -146,15 +146,48 @@ jobs:
       # where the verdict is decided.
       - name: No floating point in the evaluation path
         run: |
-          if grep -nE '\bf(32|64)\b' \
-               crates/lattice117-verify/src/*.rs crates/lattice117-wasm/src/*.rs; then
-            echo "::error::f32/f64 found in the evaluation path"; exit 1
-          fi
+          CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
+          # crates/lattice117-solve joins this list when it lands.
+          [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
+          FOUND=0
+          for d in $CRATES; do
+            if grep -rnE '\bf(32|64)\b' "$d" --include='*.rs'; then FOUND=1; fi
+          done
+          [ "$FOUND" = 1 ] && { echo "::error::f32/f64 found in the evaluation path"; exit 1; }
           echo "evaluation path is integer-only"
+
+      # A declaration guard alone would not have caught the real defect.
+      # kondo_router's annealer called .exp() on an already-f64 value: no new
+      # f32/f64 token, and a libm transcendental in the acceptance test, which
+      # is not required to be correctly rounded and differs between platforms.
+      # Ban the calls, not just the types. Test code may use them for fixtures.
+      - name: No libm transcendentals in the evaluation path
+        run: |
+          CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
+          [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
+          FOUND=0
+          for d in $CRATES; do
+            [ -d "$d" ] || continue
+            # Strip #[cfg(test)] blocks crudely: drop from the first cfg(test)
+            # to end of file, which is where every one of ours sits.
+            for f in $(find "$d" -name '*.rs'); do
+              if sed '/#\[cfg(test)\]/,$d' "$f" \
+                 | grep -nE '\.(exp|exp2|ln|log|log2|log10|powf|powi|sin|cos|tan|asin|acos|atan|atan2|sqrt|cbrt|hypot)\(' ; then
+                echo "  ^ in $f"; FOUND=1
+              fi
+            done
+          done
+          [ "$FOUND" = 1 ] && { echo "::error::libm transcendental in the evaluation path"; exit 1; }
+          echo "no libm transcendentals outside test code"
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
       - name: Free-tier depth caps
         run: node tests/freetier.test.mjs
+      # A mis-issued tier is a signed, verifying licence that silently grants
+      # Standard to someone who paid for Enterprise. Nothing downstream reports
+      # it, so it is caught here instead.
+      - name: Tier entitlements and issue-time validation
+        run: node tests/tiers.test.mjs
       # The rota parser refuses to construct a Date so that a laptop's clock
       # settings cannot change a compliance verdict. This re-derives the fixture
       # digest in nine host zones and asserts the source never reaches for the

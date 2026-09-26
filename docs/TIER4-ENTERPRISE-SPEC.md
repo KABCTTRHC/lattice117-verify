@@ -329,12 +329,55 @@ way round for a pitch. On UK domestic card rates the per-transaction cost on £2
 is well under the 4% implied by "~96%". Do not revise them upward — quoting a
 lower margin that turns out better is a good problem.
 
-State plainly to Mr F that Tier 4 is **specification, not code**. The determinism
-work that makes it credible is done and published; the solver is not written. On
-the evidence of this repository the engineering is achievable by January. The
-honest framing is that his £20,000 funds the October distribution push and the
-November–December solver build, and that fleet repair is the January deliverable
-with rota repair gated behind a legal fix that is already specified.
+State plainly to Mr F where this actually stands, because the honest position
+is now stronger than the old one and survives scrutiny better.
+
+**Done and pushed, today:** the last libm transcendental is out of the route
+path — `kondo_router`'s Metropolis acceptance ran on `f64::exp()`, which is not
+required to be correctly rounded and differs between platforms, and it is now
+integer Q16.16 against the engine's own `fast_exp_negative`, with the kernel
+pinned by test so the three copies cannot drift. The tie-break audit found
+nothing to fix and the invariants are documented in place. Two comments that
+claimed properties the code did not have are corrected. CI now bans
+transcendental *calls*, not just `f32`/`f64` declarations — a guard that would
+not have caught the real defect. Tiers 4 and 5 exist in the entitlement model,
+are enforced on every surface, and `issue.mjs` now refuses an unrecognised tier
+rather than minting a signed licence that silently grants Standard to someone
+who paid £499.
+
+**Not done:** `crates/lattice117-solve` is not extracted, so neither Enterprise
+tier can do anything a Pro licence cannot. Both pricing cards are live in the UI
+with their Stripe constants set to `null`, which renders "Not yet available"
+rather than a Subscribe button. **Leave them that way until the engine runs.**
+Taking £249/month for a repair that does not execute is not a marketing
+decision; it is a misrepresentation, and for a company mid-raise it is the kind
+that surfaces in diligence.
+
+### The two tiers, and why the line falls where it does
+
+| | Tier 4 — Enterprise Repair | Tier 5 — Enterprise Matrix |
+|---|---|---|
+| Price | £249/month | £499/month |
+| Licence | `tier4`, alias `enterprise_249` | `tier5`, alias `enterprise_499` |
+| Grants | `repair: true` | `repair: true`, `matrixSolver: true` |
+| Capability | Departure shifts, slack and wait insertion on the existing single-sheet schema, built on `explain_violation`; before/after digests and a changed-stop diff | Full VRPTW re-sequencing — `build_insertion_heuristic_fleet`, `try_cross_exchange`, `try_recombine_pair`, `solve_logistics_kondo` — plus binary/text/JSON matrix ingestion |
+| Needs a distance matrix | **No** | **Yes** |
+
+The split is not a packaging exercise. It is Gate A drawn as a price line: Tier 4
+is everything the engine can do with what a route sheet already carries, and
+Tier 5 begins exactly where a distance matrix becomes necessary. That is why
+Tier 4 can ship to spreadsheet customers and Tier 5 initially cannot.
+
+Rota repair appears in neither tier and remains gated on `lattice117.rota.v2`
+(Gate C), for the reason in §1: in repair mode the clock-change defect stops
+being a missed flag and becomes a generator of ten-real-hour rests, certified
+clear.
+
+### Revenue-share arithmetic
+
+£29 × 12.5% = £3.62/mo; £249 × 12.5% = £31.12/mo; £499 × 12.5% = £62.37/mo,
+£748.50/yr — 17.2 Pro customers in one transaction. Usable as written. The
+margin figures are conservative in the safe direction; do not revise them up.
 
 ---
 

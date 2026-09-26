@@ -586,6 +586,8 @@ const FREE_TIER = Object.freeze({
   tier: 'free',
   maxRounds: 1,
   certificate: false,
+  repair: false,
+  matrixSolver: false,
   label: 'Free',
 });
 
@@ -602,10 +604,42 @@ const FREE_TIER = Object.freeze({
  * paid feature.
  */
 const TIERS = Object.freeze({
-  standard: { maxRounds: Infinity, certificate: false, label: 'Standard' },
-  pro:      { maxRounds: Infinity, certificate: true,  label: 'Pro' },
-  team:     { maxRounds: Infinity, certificate: true,  label: 'Team' },
+  standard: { maxRounds: Infinity, certificate: false, repair: false, matrixSolver: false, label: 'Standard' },
+  pro:      { maxRounds: Infinity, certificate: true,  repair: false, matrixSolver: false, label: 'Pro' },
+  team:     { maxRounds: Infinity, certificate: true,  repair: false, matrixSolver: false, label: 'Team' },
+
+  /* Enterprise. The split follows what the data allows, not what sounds
+     tidy: tier4 repairs a schedule using only what a single sheet already
+     carries — departure times, slack, waits — while tier5 adds re-sequencing,
+     which is impossible without a distance matrix the sheet does not have.
+     See docs/TIER4-ENTERPRISE-SPEC.md §1 Gate A. Pricing the two apart is
+     therefore an honest reflection of a real capability boundary, not a
+     invented one. */
+  tier4:    { maxRounds: Infinity, certificate: true, repair: true, matrixSolver: false, label: 'Enterprise Repair' },
+  tier5:    { maxRounds: Infinity, certificate: true, repair: true, matrixSolver: true,  label: 'Enterprise Matrix' },
 });
+
+/* Aliases accepted on an issued key, so a licence minted as `enterprise_249`
+   grants exactly what `tier4` grants. Kept explicit rather than pattern-matched:
+   an unrecognised tier degrades to Standard by design, and a silent degrade is
+   the correct failure for a typo but the wrong one for a name we chose. */
+const TIER_ALIASES = Object.freeze({
+  enterprise_249: 'tier4',
+  enterprise_499: 'tier5',
+});
+
+/** Canonical tier name for an issued string, or null if it is not one of ours. */
+function canonicalTier(name) {
+  const t = String(name ?? '').trim();
+  if (Object.prototype.hasOwnProperty.call(TIERS, t)) return t;
+  if (Object.prototype.hasOwnProperty.call(TIER_ALIASES, t)) return TIER_ALIASES[t];
+  return null;
+}
+
+/** Every tier name that may legitimately be issued, aliases included. */
+const ISSUABLE_TIERS = Object.freeze(
+  [...Object.keys(TIERS), ...Object.keys(TIER_ALIASES)].filter((t) => t !== 'free'),
+);
 
 const unb64u = (s) => {
   const pad = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -643,7 +677,8 @@ async function verifyLicence(licence) {
     if (p.exp * 1000 < Date.now()) {
       return { ...FREE_TIER, reason: `expired ${new Date(p.exp * 1000).toISOString().slice(0, 10)}` };
     }
-    const grant = TIERS[p.tier] ?? TIERS.standard;
+    const canonical = canonicalTier(p.tier);
+    const grant = canonical ? TIERS[canonical] : TIERS.standard;
     return {
       tier: p.tier,
       maxRounds: grant.maxRounds,
@@ -677,7 +712,7 @@ function clearLicence(storageKey = 'lattice117.licence') {
   try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
 }
 
-return { FREE_TIER, verifyLicence, currentEntitlement, saveLicence, clearLicence };
+return { FREE_TIER, canonicalTier, ISSUABLE_TIERS, verifyLicence, currentEntitlement, saveLicence, clearLicence };
 })();
 
 /* ---- L117_FREETIER ---- */

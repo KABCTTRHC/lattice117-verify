@@ -361,6 +361,35 @@
       </ul>
       <a class="buy" id="buyPro" rel="noopener">Subscribe</a>
     </div>
+
+    <div class="tier">
+      <span class="ribbon">Enterprise</span>
+      <h3>Enterprise Repair</h3>
+      <div class="price">£249</div>
+      <div class="per">per month</div>
+      <ul id="planTier4">
+        <li class="yes">Everything in Pro</li>
+        <li class="yes"><b>Repairs a failing round, not just flags it</b></li>
+        <li class="yes">Departure shifts, slack and waits — on your existing sheet</li>
+        <li class="yes">Before and after digests, with the changed stops listed</li>
+        <li class="no">Re-sequencing stops (needs a distance matrix)</li>
+      </ul>
+      <a class="buy ghost" id="buyTier4" rel="noopener">Subscribe</a>
+    </div>
+
+    <div class="tier">
+      <span class="ribbon">Enterprise</span>
+      <h3>Enterprise Matrix</h3>
+      <div class="price">£499</div>
+      <div class="per">per month</div>
+      <ul id="planTier5">
+        <li class="yes">Everything in Enterprise Repair</li>
+        <li class="yes"><b>Full re-sequencing — VRPTW and QUBO clustering</b></li>
+        <li class="yes">Binary, text and JSON distance-matrix import</li>
+        <li class="yes">Browser, Excel, Google Sheets and CLI</li>
+      </ul>
+      <a class="buy ghost" id="buyTier5" rel="noopener">Subscribe</a>
+    </div>
   </div>
   <p class="note"><b>How it works.</b> Pay through Stripe and your licence key is
   issued to the email address you pay with. Paste it below to unlock immediately —
@@ -567,6 +596,22 @@ const lockBanner = (text) =>
    Left as-is, the buttons say so rather than 404ing in front of a buyer.  */
 const STANDARD_STRIPE_URL = 'https://buy.stripe.com/9B6dR8eSf5ZF2sn5LfgEg0g';
 const PRO_STRIPE_URL      = 'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h';
+
+/* Enterprise. Paste the Stripe Payment Link for each here when — and only
+   when — the capability behind it actually ships.
+
+   Both are deliberately null today. crates/lattice117-solve is specified
+   (docs/TIER4-ENTERPRISE-SPEC.md) and its engine exists in sovereign_api, but
+   it is not wired into this page yet, so neither tier can do anything a Pro
+   licence cannot. `paintPlans` renders a null URL as "Not yet available"
+   rather than a dead Subscribe button, so a card cannot quietly start taking
+   £249/month for a feature that does not run.
+
+   Tier 5 additionally needs a distance matrix the single-sheet CSV schema does
+   not carry (Gate A in the spec) — do not make it purchasable to spreadsheet
+   customers until matrix ingestion is live for them. */
+const TIER4_STRIPE_URL    = null;   // Enterprise Repair, £249/month
+const TIER5_STRIPE_URL    = null;   // Enterprise Matrix Optimizer, £499/month
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
@@ -1248,13 +1293,24 @@ function paintPlans(){
   const tier = entitlement.tier;
   $('freeMark').style.display = tier === 'free' ? '' : 'none';
   for(const [id,url,name] of [['buyStandard',STANDARD_STRIPE_URL,'standard'],
-                              ['buyPro',PRO_STRIPE_URL,'pro']]){
+                              ['buyPro',PRO_STRIPE_URL,'pro'],
+                              ['buyTier4',TIER4_STRIPE_URL,'tier4'],
+                              ['buyTier5',TIER5_STRIPE_URL,'tier5']]){
     const a=$(id);
-    const superseded = name==='standard' && entitlement.certificate;
+    if(!a) continue;
+    // A tier whose Stripe link is not set yet is not for sale. Say that,
+    // rather than showing a Subscribe button that goes nowhere.
+    if(url===null){
+      a.replaceWith(Object.assign(document.createElement('div'),
+        {className:'current', id, textContent:'Not yet available'}));
+      continue;
+    }
+    const superseded = (name==='standard' && entitlement.certificate)
+                    || (name==='tier4' && entitlement.matrixSolver);
     if(tier===name || superseded){
       a.replaceWith(Object.assign(document.createElement('div'),
         {className:'current', id,
-         textContent: superseded ? 'Included in Pro' : 'Your current plan'}));
+         textContent: superseded ? (name==='tier4' ? 'Included in Enterprise Matrix' : 'Included in Pro') : 'Your current plan'}));
       continue;
     }
     if(live(url)){ a.href=url; a.target='_blank'; a.removeAttribute('aria-disabled'); }
