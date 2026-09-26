@@ -15,6 +15,12 @@ import { evaluateRota, RULES } from '../demo/rota.js';
 import { rotaDigest } from '../demo/digest.js';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+// Child processes import by path, and `new URL(...).pathname` yields "/C:/..."
+// on Windows, which is not an importable specifier. This job runs on Ubuntu
+// today; fileURLToPath keeps it correct if it ever does not.
+const path = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -54,10 +60,10 @@ const ZONES = [
   'Asia/Kolkata', 'Pacific/Chatham',
 ];
 const child = `
-  import { evaluateRota } from '${new URL('../demo/rota.js', import.meta.url).pathname}';
-  import { rotaDigest } from '${new URL('../demo/digest.js', import.meta.url).pathname}';
+  import { evaluateRota } from ${JSON.stringify(pathToFileURL(path('../demo/rota.js')).href)};
+  import { rotaDigest } from ${JSON.stringify(pathToFileURL(path('../demo/digest.js')).href)};
   import { readFileSync } from 'node:fs';
-  const rows = readFileSync('${new URL('../demo/example-rota.csv', import.meta.url).pathname}', 'utf8')
+  const rows = readFileSync(${JSON.stringify(path('../demo/example-rota.csv'))}, 'utf8')
     .trim().split(/\\r?\\n/).slice(1).map((l, i) => {
       const c = l.split(','); return { staff:c[0], date:c[1], start:c[2], end:c[3], break:c[4], row:i+2 };
     });
