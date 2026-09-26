@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v11';
+const CACHE = 'lattice117-v12';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -30,6 +30,8 @@ const SHELL = [
   './licence.js',
   './digest.js',
   './rota.js',
+  './repair.js',
+  './example-route-sheet-timed.csv',
   './freetier.js',
   './lattice117_wasm.wasm',
   './example-fleet.json',

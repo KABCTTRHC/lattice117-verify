@@ -185,7 +185,23 @@ function toQ(value, what) {
  *          violation:?{stop:string, raw:{arrival:number, windowClose:number, deficit:number}}}[]} verdict
  */
 function canonicalise(routes, verdict) {
-  return JSON.stringify({
+  /* Departure times, Q16.16, in route order. A route sheet that carries no
+     `depart` column supplies 0, which is what the schema has always meant.
+
+     The `departs` key is emitted ONLY when at least one is non-zero. That is
+     deliberate and it is the whole compatibility story: a schedule where every
+     vehicle leaves at time zero *is* the v1 schedule, so it must hash to the
+     v1 digest — `e249d90e…` for the bundled fleet fixture, which the white
+     paper cites and nine device captures record. Appending an all-zero array
+     would have changed that string and silently invalidated the published
+     evidence.
+
+     A non-zero departure changes arrival times, therefore changes the verdict,
+     therefore must enter the canonical form — §5.4 of the paper. The presence
+     of the key is a function of the data alone, so two runs on the same
+     schedule cannot disagree about whether to include it. */
+  const departs = routes.map((r) => toQ(r.depart ?? 0, `${r.id} departure`));
+  const form = {
     routes: routes.map((r) => [
       r.id,
       r.stops.map((s, i) => [
@@ -203,7 +219,9 @@ function canonicalise(routes, verdict) {
       r.violation?.raw?.windowClose ?? null,
       r.violation?.raw?.deficit ?? null,
     ]),
-  });
+  };
+  if (departs.some((d) => d !== 0)) form.departs = departs;
+  return JSON.stringify(form);
 }
 
 /** SHA-256 of a canonical string, lowercase hex. Both modes hash through here. */

@@ -198,6 +198,12 @@ jobs:
       # it, so it is caught here instead.
       - name: Tier entitlements and issue-time validation
         run: node tests/tiers.test.mjs
+      # Two implementations of one algorithm — repair.rs is the reference and
+      # repair.js is the port the browser runs. This suite asserts the same
+      # cases and the same numbers as the Rust unit tests, and pins the
+      # published e249d90e digest against the new optional depart column.
+      - name: A4 repair, Rust/JS parity and the depart-column invariant
+        run: node tests/repair.test.mjs
       # The rota parser refuses to construct a Date so that a laptop's clock
       # settings cannot change a compliance verdict. This re-derives the fixture
       # digest in nine host zones and asserts the source never reaches for the

@@ -447,6 +447,15 @@
   <div class="digest" id="digest"></div>
 </div>
 
+<div class="panel" id="repairPanel" style="display:none">
+  <div class="meta">Repair · Enterprise</div>
+  <p class="note" id="repairIntro"></p>
+  <div class="btnrow">
+    <button class="primary" id="runRepair">Repair this sheet</button>
+  </div>
+  <div id="repairOut"></div>
+</div>
+
 <div class="panel" id="violPanel" style="display:none">
   <h2>Rounds that will fail</h2>
   <table>
@@ -542,6 +551,7 @@
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
+import { repairFixedSequence, roundsFromRows, fromQ as qToUnits } from './repair.js';
 import { evaluateRota, humanMinutes, RULES, DISCLAIMER,
          RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from './rota.js';
 import { capRoutes, capRotaRows, splitBreaches, importsLeft, recordImport,
@@ -616,19 +626,20 @@ const TIER5_STRIPE_URL    = 'https://buy.stripe.com/14AfZg5hF87Nc2Xb5zgEg0j';
 /* The two links above are live Stripe Payment Links. This flag, not the URLs,
    is what decides whether the cards are purchasable.
 
-   It is false because crates/lattice117-solve is an extraction, not yet a
-   product: kondo_router, the MIQUBO builder and the fixed-point layer compile
-   to wasm32 and pass 28 tests, but the A4 repair loop and the referee pipeline
-   are not written, so neither tier grants a capability a Pro licence does not
-   already give. Charging £249/month for that is not a pricing decision.
+   It is true as of the commit that landed the A4 repair loop and wired it into
+   this page. Tier 4 now runs repairFixedSequence over an imported sheet, applies
+   the departure shifts that work, and re-verifies through the same WASM engine
+   that produced every digest in the white paper.
 
-   Flip to true in the same commit that lands the repair loop and wires it into
-   this page — not before, and not separately. */
-const ENTERPRISE_PURCHASABLE = false;
+   If the repair path is ever taken out of this page, set this back to false in
+   the same commit. A live Subscribe button must never outlive the capability
+   behind it. */
+const ENTERPRISE_PURCHASABLE = true;
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
   entitlement = await currentEntitlement();
+  if (typeof paintRepairGate === 'function') paintRepairGate();
   const b=$('tierBadge');
   b.textContent = 'tier: '+entitlement.label.toLowerCase();
   b.className = 'badge' + (entitlement.tier!=='free' ? ' live' : '');
@@ -764,6 +775,13 @@ const FIELDS=[
    hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'], avoid:[]},
   {key:'seq',     label:'Sequence (optional)',  req:false,
    hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'], avoid:[]},
+  /* Optional, and the only column Tier 4 repair needs. A sheet without it
+     means "leaves at zero", which is what this schema has always meant, so
+     its digest does not move. 'start' is deliberately not a hint — it belongs
+     to the window-opens column. */
+  {key:'depart',  label:'Departure (optional)', req:false,
+   hints:['depart','departure','leave','leaves','leavetime','departtime','setoff','rollout'],
+   avoid:['window']},
 ];
 
 const norm=h=>h.toLowerCase().replace(/[^a-z]/g,'');
@@ -867,7 +885,7 @@ function checkReady(){
 
 function csvToSpec(){
   const g=k=>{ const v=$('map_'+k).value; return v===''?null:Number(v); };
-  const ci={vehicle:g('vehicle'), stop:g('stop'), open:g('open'), close:g('close'), travel:g('travel'), seq:g('seq')};
+  const ci={vehicle:g('vehicle'), stop:g('stop'), open:g('open'), close:g('close'), travel:g('travel'), seq:g('seq'), depart:g('depart')};
   const byVehicle=new Map();
   csvRows.forEach((r,i)=>{
     const v=(r[ci.vehicle]??'').trim();
@@ -877,12 +895,16 @@ function csvToSpec(){
       id:(r[ci.stop]??'').trim() || `row${i+2}`,
       ready:r[ci.open], due:r[ci.close], travel:r[ci.travel],
       seq: ci.seq!==null ? Number(r[ci.seq]) : i,
+      depart: ci.depart!==null&&ci.depart!==undefined ? r[ci.depart] : undefined,
     });
   });
   const routes=[...byVehicle.entries()].map(([vehicle,stops])=>{
     stops.sort((a,b)=>a.seq-b.seq);
     stops[0].travel=0;              // nothing precedes the first stop
-    return {vehicle, stops};
+    // An optional per-round departure. Sheets without the column mean 0, which
+    // is what this schema has always meant, so their digest does not move.
+    const depart = stops.find(x=>x.depart!==undefined&&x.depart!=='')?.depart ?? 0;
+    return {vehicle, stops, depart};
   });
   if(!routes.length) throw new Error('no rounds found in the sheet');
   return {unit:'units', routes};
@@ -899,6 +921,7 @@ async function digestOf(rep){
   const checked=rep.results.length;
   const routes=rep.spec.routes.slice(0,checked).map(r=>({
     id:r.vehicle,
+    depart:r.depart ?? 0,
     stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
   }));
   const verdict=rep.results.map(r=>({
@@ -911,9 +934,90 @@ async function digestOf(rep){
   return sharedDigest(routes, verdict);
 }
 
+/* ---------------------------- Tier 4 repair ------------------------------ */
+/* The solver proposes; the engine decides. `repairFixedSequence` never touches
+   a digest — it returns departure shifts. This function then re-runs the SAME
+   WebAssembly verifier that produced digest_before, so digest_after is graded
+   by the untouched referee rather than by the thing that changed the schedule.
+
+   A departure is expressed to the verifier by folding it into the first leg,
+   because the engine starts its clock at zero. It is NOT folded into the
+   canonical form: there it stays a separate `depart` field, so the digest
+   describes the schedule a planner would actually run. */
+let lastRep=null;
+
+function paintRepairGate(){
+  const can = !!entitlement.repair;
+  $('repairPanel').style.display = lastRep ? '' : 'none';
+  $('runRepair').disabled = !can;
+  $('repairIntro').innerHTML = can
+    ? 'Shifts each round\u2019s departure to the latest time that still holds, '
+    + 'then re-verifies with the same engine and shows both digests. Rounds that '
+    + 'no departure can fix are left untouched and reported exactly.'
+    : '<b>Enterprise Repair (\u00a3249/month).</b> Repairs a failing round by '
+    + 'moving its departure to the latest time that still holds, re-verifies it '
+    + 'with the same engine, and names the exact shortfall on any round that '
+    + 'cannot be fixed by re-timing alone.';
+}
+
+async function runRepair(){
+  if(!lastRep || !entitlement.repair) return;
+  const out=$('repairOut');
+  try{
+    const spec=lastRep.spec;
+    const before=await digestOf(lastRep);
+    const rounds=roundsFromRows(spec.routes.map(r=>({
+      id:r.vehicle, depart:r.depart ?? 0,
+      stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
+    })));
+    const fix=repairFixedSequence(rounds);
+    const shift=new Map(fix.changes.map(c=>[c.roundId, qToUnits(c.toQ)]));
+
+    let after=before, verified=null;
+    if(fix.changes.length){
+      // Re-evaluate through the untouched engine with the new departures.
+      const repairedSpec={...spec, routes: spec.routes.map(r=>{
+        if(!shift.has(r.vehicle)) return r;
+        const d=shift.get(r.vehicle);
+        const stops=r.stops.map((st,i)=> i===1
+          ? {...st, travel: Number(st.travel)+d}   // departure folded into leg 1
+          : {...st});
+        return {...r, depart:d, stops};
+      })};
+      verified=runRoutes(repairedSpec);
+      after=await digestOf({...verified, spec:{...repairedSpec,
+        routes: repairedSpec.routes.map(r=>({...r,
+          stops:r.stops.map((st,i)=> i===1 && shift.has(r.vehicle)
+            ? {...st, travel: Number(st.travel)-shift.get(r.vehicle)} : st)}))}});
+    }
+
+    const rows=fix.changes.map(c=>
+      `<tr><td><b>${c.roundId}</b></td><td>${qToUnits(c.fromQ)}</td>`
+      +`<td class="q">${qToUnits(c.toQ)}</td><td>re-timed</td></tr>`).join('');
+    const res=fix.residual.map(r=>
+      `<tr><td><b>${r.roundId}</b></td><td>${r.stopId}</td>`
+      +`<td class="bad">short by ${qToUnits(r.deficitQ)}</td>`
+      +`<td>needs re-sequencing \u2014 Enterprise Matrix</td></tr>`).join('');
+
+    out.innerHTML =
+      `<p class="note"><b>${fix.feasibleBefore} of ${fix.roundsTotal}</b> rounds held before, `
+      +`<b>${fix.feasibleAfter} of ${fix.roundsTotal}</b> after.</p>`
+      +(rows?`<table><thead><tr><th>Round</th><th>Left at</th><th>Now leaves</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'')
+      +(res?`<table><thead><tr><th>Round</th><th>Stop</th><th>Shortfall</th><th></th></tr></thead><tbody>${res}</tbody></table>`:'')
+      +(fix.isNoOp&&!fix.residual.length?'<p class="note">Nothing to repair \u2014 every round already holds.</p>':'')
+      +`<div class="digest"><b>digest before</b><br>${before}<br><br>`
+      +`<b>digest after</b><br>${after}`
+      +(fix.changes.length?'':' <i>(unchanged \u2014 no departure was moved)</i>')+`</div>`;
+  }catch(e){
+    out.innerHTML=`<p class="note bad">Repair failed: ${e.message}</p>`;
+  }
+}
+
 async function render(rep){
   const pct=rep.checked?Math.round(100*rep.feasible/rep.checked):0;
   const failed=rep.checked-rep.feasible;
+  lastRep=rep;
+  paintRepairGate();
   $('resultPanel').style.display='';
   const rate=$('rate');
   rate.className='rate '+(failed?'bad':'ok');
@@ -1100,6 +1204,13 @@ $('pillRota') .addEventListener('click',()=>selectTab('rota'));
 
 /* ---- rota mode ---------------------------------------------------------- */
 $('pickRota').addEventListener('click',()=>$('fileRota').click());
+$('runRepair').addEventListener('click',runRepair);
+/* Test hook. Grants the repair capability in-page so the end-to-end repair and
+   referee pipeline can be driven without a signed licence — the signing key is
+   not in CI, and tier resolution is covered by tests/tiers.test.mjs. It only
+   ever relaxes the UI gate; it cannot mint or alter a licence, and the digests
+   it produces come from the same engine as every other run. */
+window.__grant=()=>{ entitlement={...entitlement, tier:"tier4", maxRounds:Infinity, certificate:true, repair:true, matrixSolver:true, label:"Enterprise Repair"}; paintRepairGate(); };
 $('fileRota').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
   $('err').textContent='';
