@@ -1,0 +1,8 @@
+vehicle,seq,stop,window_open,window_close,travel_mins_from_previous,depart
+VAN-21,0,DEPOT,0,1440,0.0,540
+VAN-21,1,Arnold,480,615,11.9,540
+VAN-21,2,Beeston,480,615,20.8,540
+VAN-21,3,Bulwell,480,615,16.1,540
+VAN-21,4,Carlton,480,615,15.6,540
+VAN-21,5,Chilwell,480,615,22.0,540
+VAN-21,6,DEPOT,0,1440,13.2,540

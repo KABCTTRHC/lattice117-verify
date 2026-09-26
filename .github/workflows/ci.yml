@@ -189,6 +189,13 @@ jobs:
           done
           [ "$FOUND" = 1 ] && { echo "::error::libm transcendental in the evaluation path"; exit 1; }
           echo "no libm transcendentals outside test code"
+      # The Nottingham matrix and CSV are derived artifacts. The first draft of
+      # the matrix was hand-calculated and turned out not to be reproducible
+      # from any single set of coordinates — two cells were 0.1 min out. A
+      # benchmark nobody can regenerate is not a benchmark, so the generator is
+      # in the repository and this fails if either file drifts from it.
+      - name: Nottingham fixture is reproducible from its coordinates
+        run: node tools/fixture/nottingham.mjs --check
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
       - name: Free-tier depth caps

@@ -40,11 +40,18 @@
 //! Search is step-bounded, never wall-clock bounded. The PRNG is a fixed-seed
 //! LCG. Ties resolve by lowest index, never by iteration order.
 //!
-//! # Status
+//! # What is here
 //!
-//! This is the extraction, not the product. The A4 single-sheet repair loop
-//! and the referee pipeline described in `docs/TIER4-ENTERPRISE-SPEC.md` are
-//! not built yet, and no licence tier grants anything until they are.
+//! | Module | Tier | Guarantee |
+//! |---|---|---|
+//! | `repair` | 4 | Closed form. The latest feasible departure on a fixed sequence, exactly, or an exact per-stop counterfactual saying why none exists. |
+//! | `resequence` | 5 | Exhaustive up to `EXACT_LIMIT` interior stops: *the* optimal order, no tuning parameters. Above it, the round is returned untouched and says so. |
+//! | `global` | 5 | Heuristic. A whole instance with no vehicle assignment, via `kondo`. Never claims optimality. |
+//!
+//! Nothing here grades its own work. Each module returns a proposal; the caller
+//! runs `lattice117-verify` before and after and publishes `digest_before` and
+//! `digest_after`. `tests/referee.rs` is that pipeline, proved end to end
+//! against the Nottingham fixture in `docs/FIXTURE-NOTTINGHAM.md`.
 
 #![forbid(unsafe_code)]
 #![cfg_attr(not(test), no_std)]
@@ -54,9 +61,11 @@
 extern crate alloc;
 
 pub mod fixed;
+pub mod global;
 pub mod kondo;
 pub mod miqubo;
 pub mod repair;
+pub mod resequence;
 
 /// Q16.16 fixed point on `i32`: one integer scaled by 65,536.
 pub type Q16 = i32;
