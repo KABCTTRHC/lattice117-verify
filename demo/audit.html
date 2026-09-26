@@ -669,32 +669,29 @@ const STANDARD_STRIPE_URL = 'https://buy.stripe.com/9B6dR8eSf5ZF2sn5LfgEg0g';
 const PRO_STRIPE_URL      = 'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h';
 
 /* Enterprise. Paste the Stripe Payment Link for each here when — and only
-   when — the capability behind it actually ships.
+   when — the capability behind it actually ships. `paintPlans` renders a null
+   URL as "Not yet available" rather than a dead Subscribe button, so a card
+   cannot quietly start taking £249/month for a feature that does not run.
 
-   Both are deliberately null today. crates/lattice117-solve is specified
-   (docs/TIER4-ENTERPRISE-SPEC.md) and its engine exists in sovereign_api, but
-   it is not wired into this page yet, so neither tier can do anything a Pro
-   licence cannot. `paintPlans` renders a null URL as "Not yet available"
-   rather than a dead Subscribe button, so a card cannot quietly start taking
-   £249/month for a feature that does not run.
+   Both capabilities now run in this page:
 
-   Tier 5 additionally needs a distance matrix the single-sheet CSV schema does
-   not carry (Gate A in the spec) — do not make it purchasable to spreadsheet
-   customers until matrix ingestion is live for them. */
+     Tier 4  runRepair -> repairFixedSequence over an imported sheet, applying
+             the departure shifts that work and re-verifying through the same
+             WASM engine that produced digest_before.
+     Tier 5  runResequence -> resequenceFleet against a matrix the customer
+             supplies, which closes Gate A in docs/TIER4-ENTERPRISE-SPEC.md.
+             The matrix is the one thing the single-sheet CSV schema cannot
+             carry, so it is uploaded, pasted or loaded from the bundled
+             Nottingham benchmark (docs/FIXTURE-NOTTINGHAM.md). */
 const TIER4_STRIPE_URL    = 'https://buy.stripe.com/eVq00i6lJ3Rx6ID5LfgEg0i';
 const TIER5_STRIPE_URL    = 'https://buy.stripe.com/14AfZg5hF87Nc2Xb5zgEg0j';
 
 /* The two links above are live Stripe Payment Links. This flag, not the URLs,
-   is what decides whether the cards are purchasable.
+   is what decides whether the cards are purchasable. It is true because both
+   capabilities above run here, today, on this page.
 
-   It is true as of the commit that landed the A4 repair loop and wired it into
-   this page. Tier 4 now runs repairFixedSequence over an imported sheet, applies
-   the departure shifts that work, and re-verifies through the same WASM engine
-   that produced every digest in the white paper.
-
-   If the repair path is ever taken out of this page, set this back to false in
-   the same commit. A live Subscribe button must never outlive the capability
-   behind it. */
+   If either path is ever taken out, set this back to false in the same commit.
+   A live Subscribe button must never outlive the capability behind it. */
 const ENTERPRISE_PURCHASABLE = true;
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 

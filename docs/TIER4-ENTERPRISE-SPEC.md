@@ -1,6 +1,30 @@
 # Tier 4 — Enterprise Optimizer: specification and gating
 
-**Status: specification under review. Not committed to a ship date.**
+> **Status: SHIPPED. This document is kept as the record of why, not as a plan.**
+>
+> Both tiers now run in all four surfaces and both are purchasable.
+>
+> * **Tier 4 (£249)** — `crates/lattice117-solve/src/repair.rs`, ported to
+>   `demo/repair.js`, wired into the browser page, the Excel pane and the Sheets
+>   sidebar. Closed-form latest-feasible-departure, with an exact per-stop
+>   counterfactual where re-timing cannot help.
+> * **Tier 5 (£499)** — `crates/lattice117-solve/src/resequence.rs`, ported to
+>   `demo/resequence.js`, same four surfaces. **Gate A below is resolved**: the
+>   matrix the CSV schema cannot carry is supplied by the customer, by upload or
+>   paste, and validated before anything is searched. The published benchmark is
+>   `docs/FIXTURE-NOTTINGHAM.md` — 99.6 → 60.2 minutes on a real Nottingham
+>   round, graded by the untouched verifier, with both digests pinned in
+>   `tests/resequence.test.mjs`.
+> * The claim **"re-sequences infeasible routes (VRPTW)"**, flagged below as
+>   unclaimable until Gate A was resolved, is now claimable for Tier 5 — with the
+>   bound stated: exhaustive and therefore optimal up to
+>   `resequence::EXACT_LIMIT` = 8 interior stops, and reported as *not searched*
+>   above it. `global.rs` handles an unassigned instance and never claims
+>   optimality at all.
+>
+> Everything below this line is the original specification, unedited.
+
+**Original status: specification under review. Not committed to a ship date.**
 Written against the repository as it stands at `daa7878`. Everything below is
 either checked against the code, or marked as a judgement.
 
