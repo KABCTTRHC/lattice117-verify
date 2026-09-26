@@ -55,6 +55,14 @@
   #licState{font-size:12.5px}
   .row{display:flex;gap:6px}
   .row button{margin-bottom:0}
+  .modes{display:flex;gap:6px;margin-bottom:10px}
+  .modes button{flex:1;margin-bottom:0;font-size:12.5px;padding:8px 6px;
+                background:var(--panel);color:var(--ink-dim);border-color:var(--line)}
+  .modes button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .flag{border-left:3px solid var(--bad);padding:8px 10px;margin-top:8px;background:var(--bg);
+        border-radius:0 4px 4px 0;font:12px var(--mono)}
+  .flag b{color:var(--bad)}
+  .flag .who{color:var(--ink);font-weight:700}
 </style>
 </head>
 <body>
@@ -65,6 +73,11 @@
   <span class="badge live" id="engine">engine: loading…</span>
   <span class="badge" id="tier">tier: …</span>
   <span class="badge">never uploaded</span>
+</div>
+
+<div class="modes">
+  <button id="modeRoute" class="on">Routes</button>
+  <button id="modeRota">UK rota rest</button>
 </div>
 
 <button id="run" disabled>Check selected rows</button>
@@ -86,13 +99,20 @@
   pane — it is not sent anywhere, and neither is your sheet.</p>
 </details>
 
-<p class="note">Columns are matched from your header row. Expected: the round or
+<p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
+check against configured rest and break rules (11h inter-shift rest, 20m break
+over 6h) — not legal advice.</b> It knows nothing of opt-outs, young workers,
+compensatory rest or any collective agreement. Select one row per shift: who is
+working, when it starts and ends, and the break in minutes.</p>
+
+<p class="note" id="routeNote">Columns are matched from your header row. Expected: the round or
 vehicle, the stop, when its window opens and closes, and the travel time from
 the previous stop. Names can be anything.</p>
 
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
-import { verdictDigest as sharedDigest } from './digest.js';
+import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
+import { evaluateRota, humanMinutes, DISCLAIMER } from './rota.js';
 
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastFailRows=[];
@@ -161,6 +181,35 @@ const FIELDS=[
   {key:'travel', hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'],avoid:[]},
   {key:'seq',    hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'],avoid:[]},
 ];
+const ROTA_FIELDS=[
+  {key:'staff',hints:['staff','name','employee','worker','person','operative','carer','colleague','id','payroll'],avoid:['shift','site','ward','team','role']},
+  {key:'date', hints:['date','day','rotadate','shiftdate','when'],avoid:['time','start','end']},
+  {key:'start',hints:['start','shiftstart','on','from','begin','starttime','timein','in'],avoid:['end','break']},
+  {key:'end',  hints:['end','shiftend','off','to','finish','endtime','timeout','out'],avoid:['start','break']},
+  {key:'break',hints:['break','rest','unpaidbreak','breakmins','breakminutes','lunch','meal'],avoid:['between']},
+];
+let MODE='route';
+const activeFields=()=>MODE==='rota'?ROTA_FIELDS:FIELDS;
+
+/* Excel hands back times as serial numbers, not text: a cell formatted 06:00
+   arrives as 0.25, and a full date-time as 46292.25. rota.js parses strings
+   only - deliberately, so the browser and the pane share one parser - so the
+   host quirk is resolved here, in the host adapter, and the shared module
+   stays untouched.
+
+   Serial 25569 is 1970-01-01, so days-since-epoch = floor(v) - 25569. The
+   fractional part is multiplied out and rounded: 0.25 * 1440 can land on
+   359.99999, and a schedule is not specified to sub-minute precision. */
+function fromExcel(v){
+  if(typeof v!=='number'||!isFinite(v)) return v;
+  const days=Math.floor(v), mins=Math.round((v-days)*1440);
+  const hh=String(Math.floor(mins/60)).padStart(2,'0'), mm=String(mins%60).padStart(2,'0');
+  if(days===0) return `${hh}:${mm}`;                    // time-of-day only
+  const d=new Date(Date.UTC(1970,0,1) + (days-25569)*86400000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-`+
+         `${String(d.getUTCDate()).padStart(2,'0')} ${hh}:${mm}`;
+}
+
 const norm=h=>String(h).toLowerCase().replace(/[^a-z]/g,'');
 function score(f,h){
   const n=norm(h); let best=0;
@@ -174,6 +223,7 @@ function score(f,h){
 /* Global assignment, not field-by-field: taking each field's own best in
    order lets "Stop No." land on the stop column and starve the sequence. */
 function mapColumns(headers){
+  const FIELDS=activeFields();
   const pairs=[];
   FIELDS.forEach((f,fi)=>headers.forEach((h,hi)=>{ const s=score(f,h); if(s>0) pairs.push({fi,hi,s}); }));
   pairs.sort((a,b)=>b.s-a.s);
@@ -192,6 +242,18 @@ Office.onReady(info=>{
   }
 });
 
+function setMode(m){
+  MODE=m;
+  $('modeRoute').classList.toggle('on', m==='route');
+  $('modeRota').classList.toggle('on', m==='rota');
+  $('routeNote').style.display = m==='rota' ? 'none' : '';
+  $('rotaNote').style.display  = m==='rota' ? '' : 'none';
+  $('run').textContent = m==='rota' ? 'Check selected shifts' : 'Check selected rows';
+  $('out').innerHTML=''; $('err').textContent='';
+}
+$('modeRoute').addEventListener('click',()=>setMode('route'));
+$('modeRota').addEventListener('click',()=>setMode('rota'));
+
 $('run').addEventListener('click',run);
 $('clear').addEventListener('click',clearHighlight);
 
@@ -209,6 +271,7 @@ $('licApply').addEventListener('click',async()=>{
 $('licRemove').addEventListener('click',async()=>{ clearLicence(); await refreshTier(); });
 
 async function run(){
+  if(MODE==='rota') return runRota();
   $('err').textContent=''; $('out').innerHTML='';
   try{
     await Excel.run(async ctx=>{
@@ -285,6 +348,91 @@ async function run(){
       await ctx.sync();
     });
   }catch(e){ $('err').textContent=e.message; }
+}
+
+/* ---- rota mode ---------------------------------------------------------- */
+async function runRota(){
+  $('err').textContent=''; $('out').innerHTML=''; lastFailRows=[];
+  try{
+    await Excel.run(async ctx=>{
+      const rng=ctx.workbook.getSelectedRange();
+      rng.load(['values','rowCount','columnCount','rowIndex','columnIndex']);
+      await ctx.sync();
+
+      const v=rng.values;
+      if(rng.rowCount<2) throw new Error('Select the header row and at least one shift row.');
+      const headers=v[0].map(String);
+      const map=mapColumns(headers);
+      const missing=['staff','start','end'].filter(k=>map[k]===undefined);
+      if(missing.length) throw new Error(
+        'Could not find these columns in your header row: '+missing.join(', ')+
+        '\nHeaders seen: '+headers.filter(h=>h!=='').join(', '));
+
+      const rows=[];
+      for(let r=1;r<v.length;r++){
+        const row=v[r];
+        rows.push({
+          staff:String(row[map.staff]??'').trim(),
+          date : map.date !==undefined ? fromExcel(row[map.date])  : null,
+          start: fromExcel(row[map.start]),
+          end  : fromExcel(row[map.end]),
+          break: map.break!==undefined ? row[map.break] : 0,
+          row  : rng.rowIndex + r + 1,          // 1-based, as the sheet shows it
+          sheetRow: rng.rowIndex + r,
+        });
+      }
+      const rep=evaluateRota(rows,{maxPeople: ent.maxRounds});
+      if(!rep.checked) throw new Error('No staff found — the staff column was empty on every row.');
+
+      // Colour the offending rows where the planner is already looking.
+      const byRow=new Map(rows.map(r=>[r.row,r.sheetRow]));
+      for(const b of rep.breaches){ const sr=byRow.get(b.row); if(sr!==undefined) lastFailRows.push(sr); }
+
+      await renderRota(rep);
+
+      const ws=ctx.workbook.worksheets.getActiveWorksheet();
+      for(const r of lastFailRows){
+        ws.getRangeByIndexes(r, rng.columnIndex, 1, rng.columnCount).format.fill.color='#FFD7D5';
+      }
+      await ctx.sync();
+    });
+  }catch(e){ $('err').textContent=e.message; }
+}
+
+const KIND={rest:'rest between shifts', break:'break on a long shift', overlap:'overlapping shifts'};
+
+async function renderRota(rep){
+  const pct=rep.checked?Math.round(100*rep.clear/rep.checked):0;
+  const bad=rep.breaches.length;
+  let html=`<div class="card">
+    <div class="rate ${bad?'bad':'ok'}">${pct}%<small>staff with no flags</small></div>
+    <div style="margin-top:10px;font-size:13px">${
+      bad ? `<b>${bad} issue${bad>1?'s':''}</b> across ${rep.checked} ${rep.checked>1?'people':'person'}.`
+          : `<b>No flags</b> against the configured rules.`}</div>${
+    rep.totalPeople>rep.checked ? `<div class="capped">Free tier: checked ${rep.checked} of
+      ${rep.totalPeople} people. A licence checks the whole rota.</div>` : ''}
+  </div>`;
+
+  for(const b of rep.breaches){
+    html+=`<div class="flag"><span class="who">${b.staff}</span> — ${KIND[b.kind]}`+
+      `${b.label?` (${b.label})`:''}, row ${b.row}<br>`+
+      `achieved ${humanMinutes(b.actual)}<br>`+
+      `expected ${humanMinutes(b.expected)}<br>`+
+      `<b>short by ${humanMinutes(b.shortfall)}</b></div>`;
+  }
+  if(rep.rejected.length)
+    html+=`<div class="note">${rep.rejected.length} row(s) skipped — times could not be read.</div>`;
+  $('out').innerHTML=html;
+
+  if(!ent.certificate){
+    $('out').insertAdjacentHTML('beforeend',
+      '<div class="note">The rota digest — the reproducible hash that lets someone '+
+      'else confirm this result from the same sheet — is part of a licence.</div>');
+  } else {
+    const dg=await rotaDigest(rep.people, rep.verdict, rep.rules);
+    $('out').insertAdjacentHTML('beforeend','<div class="digest"><b>rota digest</b><br>'+dg+'</div>');
+  }
+  $('out').insertAdjacentHTML('beforeend','<div class="note"><b>'+DISCLAIMER+'</b></div>');
 }
 
 async function clearHighlight(){
