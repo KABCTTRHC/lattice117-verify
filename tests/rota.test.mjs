@@ -9,7 +9,7 @@
  * Run: node tests/rota.test.mjs
  */
 import { evaluateRota, RULES, breakToMinutes, toMinutes,
-         DISCLAIMER, RULES_NOTE, CLOCK_NOTE } from '../demo/rota.js';
+         DISCLAIMER, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from '../demo/rota.js';
 import { rotaDigest, canonicaliseRota } from '../demo/digest.js';
 import { readFileSync } from 'node:fs';
 
@@ -115,8 +115,8 @@ eq('canonical form contains no floating point',
    is treated as a product requirement, not copy. A surface that emphasised the
    legal line and dropped the caveat would be the worst of both. */
 console.log('\nDisclosure of the clock-time convention');
-eq('DISCLAIMER carries both parts',
-   DISCLAIMER === RULES_NOTE + ' ' + CLOCK_NOTE, true);
+eq('DISCLAIMER carries all three parts',
+   DISCLAIMER === [RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE].join(' '), true);
 eq('the caveat names the direction of the error',
    /clocks go forward/.test(CLOCK_NOTE) && /10 real hours/.test(CLOCK_NOTE), true);
 for (const [surface, file] of [
@@ -126,16 +126,41 @@ for (const [surface, file] of [
   ['Sheets bundle',    'sheets-addon/Sidebar.html'],
 ]) {
   const src = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-  eq(`${surface} renders the clock-time caveat`, src.includes('CLOCK_NOTE'), true);
+  eq(`${surface} renders both caveats with the result`,
+     src.includes('SCOPE_NOTE') && src.includes('CLOCK_NOTE'), true);
 }
-// audit.html states the same caveat statically, before any CSV is chosen — a
-// legal notice should not depend on a module having loaded. Static text drifts,
-// so it is pinned to the module's wording here rather than trusted.
+// Every surface states the legal sentence STATICALLY as well, before any CSV is
+// chosen — a legal notice should not depend on a module having loaded. The first
+// version of this guard only checked audit.html and missed two static copies
+// that line-wrapping hid, so it now finds the copies itself: any file carrying
+// the legal sentence must carry the caveats too. A new surface is covered the
+// day it is written, not the day someone remembers to add it here.
 {
   const flat = (t) => t.replace(/\s+/g, ' ');
-  const page = flat(readFileSync(new URL('../demo/audit.html', import.meta.url), 'utf8'));
-  const firstSentence = CLOCK_NOTE.slice(0, CLOCK_NOTE.indexOf('. ') + 1);
-  eq('audit.html states the caveat before upload too', page.includes(flat(firstSentence)), true);
+  const clockSentence = flat(CLOCK_NOTE.slice(0, CLOCK_NOTE.indexOf('. ') + 1));
+  const legalSentence = flat(RULES_NOTE);
+  // Reg. 22(a) disapplies reg. 10(1) on a shift change, and reg. 23(a) lets an
+  // agreement modify it outright — see docs/WTR-EXCEPTIONS-REG21-24.md. A user
+  // reading a flagged breach needs to know the check has not considered either.
+  const scopeTerms = ['opt-outs', 'young workers', 'shift-change exceptions',
+                      'compensatory rest', 'collective agreement'];
+  // Keep the static wording and the module's wording from diverging in substance.
+  eq('SCOPE_NOTE names the same exceptions the static notices do',
+     scopeTerms.every((t) => SCOPE_NOTE.includes(t)), true);
+  const surfaces = ['demo/audit.html', 'excel-addin/taskpane.html',
+                    'sheets-addon/sidebar.template.html', 'sheets-addon/Sidebar.html'];
+  let statics = 0;
+  for (const f of surfaces) {
+    const src = flat(readFileSync(new URL('../' + f, import.meta.url), 'utf8'));
+    if (!src.includes(legalSentence)) continue;   // no static copy in this file
+    statics++;
+    eq(`${f} static notice carries the clock caveat`, src.includes(clockSentence), true);
+    eq(`${f} static notice lists what it does not know`,
+       scopeTerms.every((t) => src.includes(t)), true);
+  }
+  // If a refactor removes every static copy, the two assertions above would
+  // vacuously pass. Fail instead.
+  eq('static notices were actually found', statics >= 3, true);
 }
 
 // Every copy of the module must agree, or one surface disclaims differently.

@@ -75,17 +75,26 @@ export const RULES_NOTE =
   'Indicative mathematical check against configured rest and break rules ' +
   '(11h inter-shift rest, 20m break over 6h) — not legal advice.';
 
+/* Reg. 22(a) disapplies the 11-hour entitlement outright when a shift worker
+   changes shift, and reg. 23(a) lets an agreement modify it — see
+   docs/WTR-EXCEPTIONS-REG21-24.md. A flagged breach may therefore be lawful,
+   and the moment a user reads one flagged is exactly when they need to know
+   what the check has not considered. */
+export const SCOPE_NOTE =
+  'It knows nothing of opt-outs, young workers, shift-change exceptions, ' +
+  'compensatory rest or any collective agreement.';
+
 export const CLOCK_NOTE =
   'Rest and shift lengths are measured in clock time: on the night the clocks ' +
   'go forward, an 11-hour gap is only 10 real hours and is still reported as ' +
   'clear. Check clock-change nights by hand.';
 
 /* Composed, not duplicated, so a surface that prints only DISCLAIMER — the
-   exported evidence block does — still carries the clock-time caveat. Surfaces
-   that want the legal line emphasised and the caveat plain render the two
-   parts; they cannot render one and silently drop the other, because
-   tests/rota.test.mjs asserts every surface references both. */
-export const DISCLAIMER = RULES_NOTE + ' ' + CLOCK_NOTE;
+   exported evidence block does — still carries every caveat. Surfaces that want
+   the legal line emphasised and the caveats plain render the parts; they cannot
+   render one and silently drop another, because tests/rota.test.mjs asserts
+   every surface references all three. */
+export const DISCLAIMER = [RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE].join(' ');
 
 /* ---- time parsing, without Date ------------------------------------------
 

@@ -102,8 +102,10 @@
 <p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
 check against configured rest and break rules (11h inter-shift rest, 20m break
 over 6h) — not legal advice.</b> It knows nothing of opt-outs, young workers,
-compensatory rest or any collective agreement. Select one row per shift: who is
-working, when it starts and ends, and the break in minutes.</p>
+shift-change exceptions, compensatory rest or any collective agreement. Rest and
+shift lengths are measured in clock time: on the night the clocks go forward, an
+11-hour gap is only 10 real hours and is still reported as clear. Select one row
+per shift: who is working, when it starts and ends, and the break in minutes.</p>
 
 <p class="note" id="routeNote">Columns are matched from your header row. Expected: the round or
 vehicle, the stop, when its window opens and closes, and the travel time from
@@ -112,7 +114,7 @@ the previous stop. Names can be anything.</p>
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
-import { evaluateRota, humanMinutes, RULES_NOTE, CLOCK_NOTE } from './rota.js';
+import { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from './rota.js';
 
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastFailRows=[];
@@ -433,7 +435,7 @@ async function renderRota(rep){
     $('out').insertAdjacentHTML('beforeend','<div class="digest"><b>rota digest</b><br>'+dg+'</div>');
   }
   $('out').insertAdjacentHTML('beforeend',
-    '<div class="note"><b>'+RULES_NOTE+'</b> '+CLOCK_NOTE+'</div>');
+    '<div class="note"><b>'+RULES_NOTE+'</b> '+SCOPE_NOTE+' '+CLOCK_NOTE+'</div>');
 }
 
 async function clearHighlight(){

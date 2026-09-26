@@ -95,7 +95,9 @@ previous stop. Names can be anything.</p>
 <p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
 check against configured rest and break rules (11h inter-shift rest, 20m break
 over 6h) — not legal advice.</b> It knows nothing of opt-outs, young workers,
-compensatory rest or any collective agreement.</p>
+shift-change exceptions, compensatory rest or any collective agreement. Rest and
+shift lengths are measured in clock time: on the night the clocks go forward, an
+11-hour gap is only 10 real hours and is still reported as clear.</p>
 
 <details id="licBox" style="margin-top:10px">
   <summary>Licence</summary>
@@ -120,7 +122,7 @@ const WASM_B64 = "__WASM_B64__";
 
 const $ = (id) => document.getElementById(id);
 const { verdictDigest, rotaDigest } = L117_DIGEST;
-const { evaluateRota, humanMinutes, RULES_NOTE, CLOCK_NOTE } = L117_ROTA;
+const { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } = L117_ROTA;
 const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
 const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
 
@@ -388,7 +390,7 @@ async function runRota(grid, headers, map){
   $('out').innerHTML = html;
   await emitDigest(() => rotaDigest(rep.people, rep.verdict, rep.rules), 'rota digest');
   $('out').insertAdjacentHTML('beforeend',
-    `<div class="note"><b>${RULES_NOTE}</b> ${CLOCK_NOTE}</div>`);
+    `<div class="note"><b>${RULES_NOTE}</b> ${SCOPE_NOTE} ${CLOCK_NOTE}</div>`);
 }
 
 async function emitDigest(compute, label){

@@ -222,6 +222,16 @@ form. **[EVIDENCE — `canonicaliseRota`]**
 verdict, including configuration. This is the failure mode that survives all
 three above.
 
+Worth one further paragraph, because it turns a defect into a feature. WTR reg.
+23(a) lets a collective or workforce agreement **modify or exclude reg. 10(1)
+outright**, so a rota lawfully measured against a 9-hour rest rule is not an
+edge case — derogation is ordinary. A digest that did not pin its thresholds
+would let a derogated verdict and a statutory one collide; one that does pin
+them makes a derogated rota *auditable* rather than merely differently wrong.
+The general form: where the rules are lawfully variable, pinning them is not
+belt-and-braces, it is the only thing that makes the verdict mean anything.
+**[EVIDENCE — `docs/WTR-EXCEPTIONS-REG21-24.md`]**
+
 ### 7.5 The one the taxonomy predicted: DST makes "eleven hours" ambiguous
 
 Found while writing §10's timezone caveat, which is the honest provenance and
@@ -340,6 +350,14 @@ Do not let a reviewer find these first.
   unsafe direction. Disclosed in `DISCLAIMER`; the reading of reg. 10 that makes
   it a defect, and the versioned fix, are in
   `docs/WTR-REG10-CLOCK-CHANGE.md`. See §7.5. **[EVIDENCE]**
+- The larger exposure runs the other way, and no amount of determinism touches
+  it. WTR regs. 21, 22 and 24 disapply the daily rest entitlement for whole
+  categories of worker — reg. 22(a) removes it outright when a shift worker
+  changes shift, which is precisely the changeover a rota tool flags most often.
+  So a flagged breach may be perfectly lawful, all year round, and the facts
+  that decide it are not in the spreadsheet. The check is indicative, and the
+  paper should say so in the same breath as every determinism claim.
+  **[EVIDENCE — `docs/WTR-EXCEPTIONS-REG21-24.md`]**
 
 ## 10. What this does not prove
 

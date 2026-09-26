@@ -469,8 +469,8 @@
     <p class="note" style="margin-top:14px"><b>Indicative mathematical check against
     configured rest and break rules (11h inter-shift rest, 20m break over 6h) —
     not legal advice.</b> It compares times against the thresholds below and nothing
-    more. It knows nothing of opt-outs, young workers, compensatory rest or any
-    collective agreement. A clear result is not a defence and a flagged one is not
+    more. It knows nothing of opt-outs, young workers, shift-change exceptions,
+    compensatory rest or any collective agreement. A clear result is not a defence and a flagged one is not
     an offence. Rest and shift lengths are measured in clock time: on the night the
     clocks go forward, an 11-hour gap is only 10 real hours and is still reported
     as clear.</p>
@@ -513,7 +513,8 @@
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
-import { evaluateRota, humanMinutes, RULES, DISCLAIMER, RULES_NOTE, CLOCK_NOTE } from './rota.js';
+import { evaluateRota, humanMinutes, RULES, DISCLAIMER,
+         RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from './rota.js';
 import { capRoutes, capRotaRows, splitBreaches, importsLeft, recordImport,
          LIMITS, UPSELL, UPSELL_ROTA } from './freetier.js';
 
@@ -1137,7 +1138,7 @@ async function runRota(){
   $('rotaCert').disabled = !entitlement.certificate;
   // Legal line emphasised, clock-time caveat plain — 322 characters of bold
   // 13px dim text buries the half a user can act on.
-  $('rotaDisclaimer').innerHTML='<b>'+RULES_NOTE+'</b> '+CLOCK_NOTE;
+  $('rotaDisclaimer').innerHTML='<b>'+RULES_NOTE+'</b> '+SCOPE_NOTE+' '+CLOCK_NOTE;
   $('rotaPanel').style.display='';
 }
 
