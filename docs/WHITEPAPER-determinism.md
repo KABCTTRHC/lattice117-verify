@@ -1,7 +1,7 @@
 # Reproducible Verdicts: Cross-Platform Determinism in Schedule Verification
 
 **Kurtis Brierley — Brierley Sovereign Group Ltd, Nottingham**
-Draft, 26 September 2026 · Lattice117
+Technical White Paper · 26 September 2026 · Lattice117
 
 ---
 
@@ -79,8 +79,6 @@ is §5.1.
 
 ## 3. System under test
 
-Kept short; it is context, not the contribution.
-
 **Representation.** Q16.16 fixed point on `i32`: one integer scaled by 65,536,
 giving a range of −32,768 … +32,767 and a resolution of 1/65,536. Every quantity
 the engine compares — travel times, arrival times, window boundaries, rest
@@ -132,7 +130,7 @@ spotted by eye afterwards.
 
 ## 5. The central finding: five ways a deterministic system produced verdicts you could not rely on
 
-This is the paper. **§5.1–5.4 are reproducibility failures** — the same input
+**§5.1–5.4 are reproducibility failures** — the same input
 yielded different digests. **§5.5 is a different species**: the digest was stable
 everywhere and the verdict was wrong anyway. It was found not by a test failing
 but by applying §5.6's taxonomy forward, which is the best evidence we have that
@@ -203,8 +201,8 @@ differently wrong.
 
 ### 5.5 The one the taxonomy predicted: daylight saving makes "eleven hours" ambiguous
 
-Found while writing the timezone caveat for §8. That is the honest provenance and
-worth stating: the taxonomy earned its keep by telling us where to look.
+This defect was found while writing the timezone caveat for §8 — that is, by
+applying the taxonomy of §5.6 rather than by a test failing.
 
 The rota parser computes dates with an integer civil-date algorithm and never
 constructs a `Date`, because `new Date('2026-09-28 06:00')` is interpreted
@@ -221,7 +219,7 @@ The autumn row is conservative and harmless. The spring row is a **false negativ
 in the direction that matters**: the worker received ten hours' rest and the
 engine passed it.
 
-Be precise about what kind of defect this is, because it is the paper's point.
+The classification matters here.
 
 - It is **not** a determinism defect. Every platform, and every host timezone
   including those with no such transition, returns the same verdict and the same
@@ -247,7 +245,7 @@ That last point is a reproducibility argument as much as a legal one. The sector
 with the most enforcement and the most litigation over rest periods removed local
 time from the measurement entirely. **UTC is the canonical form for time.**
 
-What we did about it, which is the part worth reporting honestly:
+What we did about it:
 
 - **Disclosed, not silently fixed.** The user-facing disclaimer now names the
   spring-forward night explicitly. It is not in the canonical form, so no
@@ -293,20 +291,20 @@ invisible to the tests that catch the one before it.
 
 | Platform | ISA | Runtime | Fleet | Rota | Sweep |
 |---|---|---|---|---|---|
-| Ubuntu (CI) | x86-64 | native Rust | `611eef21…`¹ | — | — |
-| Windows (CI) | x86-64 | native Rust | `611eef21…`¹ | — | — |
-| macOS (CI) | AArch64 | native Rust | `611eef21…`¹ | — | — |
+| Ubuntu (CI) | x86-64 | native Rust | `611eef21…` * | — | — |
+| Windows (CI) | x86-64 | native Rust | `611eef21…` * | — | — |
+| macOS (CI) | AArch64 | native Rust | `611eef21…` * | — | — |
 | Chromium / Linux | x86-64 | V8 + WASM | `e249d90e…` | `83c66e6d…` | 36,003 / 0 |
 | npm / Node 22 | x86-64 | V8 + WASM | `e249d90e…` | `83c66e6d…` | — |
 | Excel task pane | x86-64 | Edge WebView | `e249d90e…` | `83c66e6d…` | — |
 | Google Sheets sidebar | x86-64 | V8 + WASM | `e249d90e…` | `83c66e6d…` | — |
 | Samsung Galaxy Tab A11 | AArch64 | Chrome 153 / V8 | `e249d90e…` | `83c66e6d…` | 36,003 / 0 |
 | Google Pixel 8 Pro | AArch64 | Chrome 153 / V8 | `e249d90e…` | `83c66e6d…` | 36,003 / 0 |
-| iPhone SE (2020) | AArch64 | Chrome 154 / **JavaScriptCore** | `e249d90e…` | `83c66e6d…` | 36,003 / 0 |
+| iPhone SE (2020) | AArch64 | Chrome 154 / JavaScriptCore | `e249d90e…` | `83c66e6d…` | 36,003 / 0 |
 
-¹ The native rows use `examples/infeasible.json`; the browser rows use
+\* The native rows use `examples/infeasible.json`; the browser rows use
 `demo/example-route-sheet.csv`. These are **different inputs**, not a
-disagreement. Everyone asks.
+disagreement.
 
 Nine device captures — three devices, three consecutive runs each, 26 September
 2026. All nine reproduced both reference digests exactly and all nine reported
@@ -314,8 +312,8 @@ zero divergences across 36,003 swept values. Blocks in Appendix A.
 
 ### 6.2 What the device captures are actually evidence of
 
-Resist the obvious framing. "Three phones" is not the interesting number, and a
-reviewer will say so. Two facts in this dataset are load-bearing.
+"Three phones" is not the interesting number. Two facts in this dataset are
+load-bearing.
 
 **Two independently written WebAssembly implementations agree.** The Android
 captures run V8 (Liftoff/TurboFan). The iPhone capture reports `CriOS/154` —
@@ -335,8 +333,7 @@ oracle cannot.
 **What the devices do not add: a new instruction set.** All three are AArch64,
 and the macOS CI runner already was — that runner is what surfaced six
 `E0133` errors in the NEON path under `#![forbid(unsafe_op_in_unsafe_fn)]`.
-Anyone counting "three new architectures" here is counting wrong, and saying so
-first costs nothing.
+Anyone counting "three new architectures" here would be counting wrong.
 
 ### 6.3 The boundary sweep
 
@@ -355,7 +352,7 @@ that boundary against exact decimal arithmetic via `BigInt`, on-device:
 The fourth band is where the teeth are: those inputs land exactly on
 `Math.round`'s tie-break, which is where a rounding-mode disagreement between
 engines would appear if one existed. It is 11% of the sweep and 100% of its
-value. The sweep is not 36,003 arbitrary numbers.
+value. The sweep is not 36,003 arbitrary values.
 
 ### 6.4 Timezone invariance
 
@@ -378,7 +375,8 @@ Two fixtures plus a 36,003-value sweep complete in well under a second on every
 device, worst case 525 ms. That is what licenses the claim that verification is
 interactive on hardware a depot supervisor already owns.
 
-Do not over-read it. First runs carry WebAssembly compilation and module fetch,
+These figures should not be over-read. First runs carry WebAssembly compilation
+and module fetch,
 and the iPhone's second run being slower than its first is scheduler and thermal
 noise. Three `performance.now()` samples are not a measurement. These figures
 bound the cost; they do not characterise it.
@@ -387,7 +385,7 @@ bound the cost; they do not characterise it.
 
 ## 7. What is *not* a source of divergence
 
-Worth its own section because it is counter-intuitive and we measured it.
+Two candidate sources of divergence were tested and found not to contribute.
 
 **The JavaScript float boundary.** Across 36,003 realistic values, on four engine
 configurations, `Math.round(Number(v) * 65536)` produced bit-identical results to
@@ -404,7 +402,8 @@ this evidence, misdirected. The effort belongs in canonicalisation instead.
 
 ## 8. Limits, and what this does not prove
 
-A short unhedged section buys more credibility than anything else in a paper.
+The following architectural and operational boundaries define what the
+verification digest does and does not establish:
 
 **Determinism is not correctness.** A consistently wrong verdict is still wrong.
 §5.5 is precisely that case.
@@ -466,15 +465,12 @@ between a digest and an attestation. For the problem domain, the SINTEF Solomon
 VRPTW benchmark set and the TSPLIB instances referenced in §8 are the standard
 corpora.
 
-*This section needs the citations read rather than listed; it is the thinnest
-part of the draft.*
-
 ---
 
 ## 10. Reproduction
 
-Every command, with expected output. This section is what makes it a paper
-rather than a claim.
+The results in this paper can be reproduced from source using the following
+commands:
 
 ```sh
 git clone https://github.com/KABCTTRHC/lattice117-verify
@@ -482,19 +478,22 @@ cd lattice117-verify
 
 cargo test --all
 ./target/release/lattice117-audit --input examples/infeasible.json --json
-# verdict digest: 611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085
 
-node tests/rota.test.mjs        # rest and break boundaries, both directions
-node tests/timezone.test.mjs    # nine host timezones, one digest
+# Expected verdict digest:
+# 611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085
+
+# Rest and break boundaries, nine-timezone invariance, free-tier caps,
+# and Sheets bundle parity:
+node tests/rota.test.mjs
+node tests/timezone.test.mjs
 node tests/freetier.test.mjs
-node tests/sheets.test.mjs      # bundle parity and scope assertions
+node tests/sheets.test.mjs
 
+# Install from npm:
 npm install lattice117-verify
 ```
 
-On any device, open
-`https://kabcttrhc.github.io/lattice117-verify/determinism.html`
-and compare the block it prints against Appendix A.
+On any device, open https://kabcttrhc.github.io/lattice117-verify/determinism.html and compare the block it prints against Appendix A.
 
 Reference values:
 

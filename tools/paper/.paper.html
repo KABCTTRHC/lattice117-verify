@@ -1,0 +1,1007 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Reproducible Verdicts</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 18mm; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font: 10.5pt/1.55 "Georgia","Times New Roman",serif;
+    color:#15191f; margin:0; hyphens:none;
+  }
+  h1,h2,h3 { font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; color:#0b0e13;
+             line-height:1.22; break-after:avoid; }
+  h1 { font-size:21pt; letter-spacing:-.015em; margin:0 0 .5em; }
+  h2 { font-size:14pt; margin:1.9em 0 .55em; padding-bottom:.28em;
+       border-bottom:1.2px solid #d5dae1; break-before:auto; }
+  h3 { font-size:11.6pt; margin:1.5em 0 .45em; color:#1d2530; }
+  p, li { orphans:3; widows:3; }
+  p { margin:0 0 .72em; }
+  strong { color:#0b0e13; }
+
+  /* Tables must never lose a cell to a page break. */
+  table { width:100%; border-collapse:collapse; margin:1em 0 1.2em;
+          font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; font-size:8.6pt;
+          break-inside:avoid; }
+  thead { display:table-header-group; }
+  tr { break-inside:avoid; }
+  th, td { border:1px solid #ccd3db; padding:5px 7px; text-align:left;
+           vertical-align:top; }
+  th { background:#eef2f6; font-weight:700; white-space:nowrap; }
+  /* The ISA column: keep AArch64 on one line. */
+  td:nth-child(2) { white-space:nowrap; }
+  td code, th code { font-size:8.2pt; white-space:nowrap; }
+
+  /* Code blocks: never reflow, never break mid-block. */
+  pre { background:#f5f7fa; border:1px solid #d9e0e8; border-radius:4px;
+        padding:9px 11px; overflow:visible; white-space:pre-wrap;
+        word-break:break-word; break-inside:avoid; margin:.9em 0 1.1em; }
+  pre code { font:8.1pt/1.45 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+             color:#1b2230; background:none; padding:0; white-space:pre-wrap; }
+  :not(pre) > code { font:9pt/1 "SFMono-Regular",Consolas,"Liberation Mono",monospace;
+                     background:#eef1f5; border:1px solid #dfe5ec; border-radius:3px;
+                     padding:.08em .32em; }
+
+  blockquote { margin:1em 0; padding:.55em .9em; border-left:3px solid #10817a;
+               background:#f2f8f7; break-inside:avoid; }
+  blockquote p { margin:0 0 .4em; } blockquote p:last-child { margin:0; }
+  hr { border:0; border-top:1px solid #d5dae1; margin:1.6em 0; }
+  a { color:#0d5f8a; text-decoration:none; word-break:break-all; }
+
+  /* The appendix evidence blocks are the record; keep each one whole. */
+  h3 + pre { break-inside:avoid; }
+</style></head><body><h1>Reproducible Verdicts: Cross-Platform Determinism in Schedule Verification</h1>
+<p><strong>Kurtis Brierley — Brierley Sovereign Group Ltd, Nottingham</strong>
+Technical White Paper · 26 September 2026 · Lattice117</p>
+<hr>
+<h2>Abstract</h2>
+<p>A verification tool&#39;s output is only evidence if a second party, on different
+hardware, can re-derive it. We describe Lattice117, a schedule feasibility and
+rest-rule verifier whose evaluation path uses Q16.16 fixed-point integers with
+no floating-point arithmetic, and which emits a SHA-256 digest over a canonical
+form of the integers it actually evaluated together with the verdict it reached.
+We report bit-identical digests across ten platform configurations spanning two
+independently written WebAssembly engine families — Google&#39;s V8 and Apple&#39;s
+JavaScriptCore — and native Rust on Linux, Windows and macOS.</p>
+<p>The result we consider worth publishing is not that one. It is this: <strong>making
+the computation deterministic was the easy half. Every reproducibility defect we
+found was in the canonicalisation — in deciding what to hash — and none of them
+was arithmetic.</strong> We anatomise four such defects, each with a different
+mechanism, and a fifth of a different species in which the digest was stable
+everywhere and the verdict was wrong anyway. We propose a four-part taxonomy —
+representational, type-level, structural, semantic — argue that it is complete
+for digest-based verification, and show that each part requires a different
+control. A system can be perfectly deterministic and still produce
+irreproducible verdicts.</p>
+<hr>
+<h2>1. Introduction</h2>
+<p>A schedule audit is only useful if it can be re-run adversarially. If an
+employer produces a document saying a rota was checked and found compliant, the
+question a regulator, an insurer or a union representative will ask is not
+&quot;what does your tool say?&quot; but &quot;what does your tool say <em>when I run it</em>?&quot;</p>
+<p>That is a stronger requirement than it first appears, and &quot;the code is open&quot; does
+not satisfy it. Reproducibility is a property of the whole pipeline — input
+handling, type coercion, serialisation, and the definition of the quantities
+being compared — not of the source alone. Two people can run identical source
+over identical data and disagree, and every way we found of making that happen
+had nothing to do with the arithmetic.</p>
+<p>This paper is a report from building such a tool across five delivery surfaces:
+a native Rust CLI, an npm package, a browser page, a Microsoft Excel task pane
+and a Google Sheets sidebar, all over one WebAssembly engine. We set out to
+demonstrate cross-platform determinism. We found it, in the sense we expected
+and with less difficulty than anticipated. What consumed the effort — and what
+we think is the transferable result — was everything surrounding it.</p>
+<hr>
+<h2>2. Background: where non-determinism actually comes from</h2>
+<p>It is worth setting expectations honestly before the results, or the results
+look trivial.</p>
+<p><strong>Floating point is the usual suspect and is largely a red herring on modern
+64-bit targets.</strong> IEEE-754 binary64 is fully specified, and both x86-64 and
+AArch64 implement it faithfully for the basic operations. The classic divergence
+sources are narrower than folklore suggests: x87 80-bit excess precision, which
+is a 32-bit x86 concern; and fused-multiply-add contraction, where a compiler
+fuses <code>a*b+c</code> into one instruction with a single rounding instead of two. Neither
+arises in a parse-then-scale-then-compare-integers pipeline.</p>
+<p><strong>What does vary</strong> is less glamorous: library implementations of transcendental
+functions, reduction order under parallelism, hash iteration order, locale,
+line endings, and clocks.</p>
+<p><strong>The under-discussed one is serialisation.</strong> Two runs can agree on every number
+and disagree on the bytes that represent them. Nothing in the literature on
+reproducible builds or floating-point determinism prepares you for a digest that
+moves because a text file was checked out on a different operating system. That
+is §5.1.</p>
+<hr>
+<h2>3. System under test</h2>
+<p><strong>Representation.</strong> Q16.16 fixed point on <code>i32</code>: one integer scaled by 65,536,
+giving a range of −32,768 … +32,767 and a resolution of 1/65,536. Every quantity
+the engine compares — travel times, arrival times, window boundaries, rest
+durations, shortfalls — is one of these integers.</p>
+<p><strong>No floating point in the evaluation path.</strong> <code>crates/lattice117-verify/src/</code> and
+<code>crates/lattice117-wasm/src/</code> contain no <code>f32</code> or <code>f64</code>, enforced by a CI step
+that fails the build if either appears. Floats <em>are</em> permitted at the I/O
+boundary — <code>to_q16</code>/<code>from_q16</code> in the CLI, <code>Math.round(Number(v) * 65536)</code> in
+JavaScript — and that boundary is precisely what §6&#39;s sweep exists to check. The
+distinction matters: the claim is not &quot;no floats anywhere&quot;, it is &quot;no floats
+where the verdict is decided.&quot;</p>
+<p><strong>Refusal over wrapping.</strong> Out-of-range input is rejected by name rather than
+silently wrapped. A wrapped value produces a <em>confident</em> verdict about a
+schedule that was never checked, which is worse than an error.</p>
+<p><strong>Five surfaces, one engine.</strong> The WebAssembly module is 21,525 bytes, has no
+<code>wasm-bindgen</code> layer, no dependencies, and opens no sockets. CI byte-compares the
+binary and the shared canonicalisation source across every surface.</p>
+<hr>
+<h2>4. Method</h2>
+<p><strong>Fixtures.</strong> Two, both in the repository and both small enough to print
+(Appendix B): an 8-round fleet schedule (<code>demo/example-route-sheet.csv</code>) and a
+4-person rota (<code>demo/example-rota.csv</code>). A third, <code>examples/infeasible.json</code>,
+exercises the native CLI.</p>
+<p><strong>The digest.</strong> SHA-256 over a canonical form of the Q16.16 integers actually
+evaluated, plus the verdict, plus — see §5.4 — the thresholds the verdict was
+measured against. It is emphatically <strong>not</strong> a signature; see §8.</p>
+<p><strong>Continuous integration.</strong> The digest is pinned. A matrix job runs the native
+binary on Ubuntu, Windows and macOS and fails the build if any platform
+disagrees. Further jobs assert that the WASM binary, the canonicalisation source,
+the rota rules and the licence check are byte-identical across surfaces; that the
+Sheets bundle is not stale; and that the rota digest is invariant across nine
+host timezones.</p>
+<p><strong>Device capture.</strong> <code>demo/determinism.html</code> runs both fixtures and a boundary
+sweep on whatever device opens it, then prints one evidence block with the
+device&#39;s reported environment and the digests it computed. Expected values are
+compiled in, so a mismatch reads as FAIL on the device rather than needing to be
+spotted by eye afterwards.</p>
+<hr>
+<h2>5. The central finding: five ways a deterministic system produced verdicts you could not rely on</h2>
+<p><strong>§5.1–5.4 are reproducibility failures</strong> — the same input
+yielded different digests. <strong>§5.5 is a different species</strong>: the digest was stable
+everywhere and the verdict was wrong anyway. It was found not by a test failing
+but by applying §5.6&#39;s taxonomy forward, which is the best evidence we have that
+the taxonomy is worth something.</p>
+<h3>5.1 Representational — line endings changed the hash</h3>
+<p>The digest was taken over the input <em>text</em>. With no <code>.gitattributes</code>, Git
+rewrote LF to CRLF on the Windows checkout. Linux and macOS returned
+<code>611eef21…</code>; Windows returned <code>5467faa0…</code> — <strong>with byte-identical Q16.16
+integers in the violation.</strong> Reproduced locally by feeding a CRLF copy to the
+Linux binary. Fixed by normalising CRLF to LF before hashing, which is a no-op on
+LF input, so previously published digests remained valid.</p>
+<blockquote>
+<p><strong>Lesson.</strong> Hashing a representation rather than a value imports every property
+of that representation, including the ones an operating system controls on your
+behalf.</p>
+</blockquote>
+<h3>5.2 Type-level — <code>600</code> and <code>&#39;600&#39;</code> disagreed</h3>
+<p>The npm package hashed values as supplied. A CSV or spreadsheet round-trip yields
+strings, so the same schedule, with the same verdict, produced two digests
+depending on how the caller happened to have parsed it. Fixed by hashing the
+Q16.16 integers the engine evaluated rather than the caller&#39;s inputs.</p>
+<blockquote>
+<p><strong>Lesson.</strong> Canonicalise <em>after</em> normalisation, not before. The boundary where
+types are coerced is the boundary where the canonical form should be taken.</p>
+</blockquote>
+<h3>5.3 Structural — three surfaces, three canonical forms</h3>
+<p>The browser page hashed raw inputs. The Excel task pane hashed a summary that
+<strong>excluded the inputs entirely</strong>, so two unrelated schedules that failed in the
+same shape produced the same digest. The npm package hashed Q16.16 integers. One
+schedule, three digests: <code>e249d90e…</code> against <code>8bad5881…</code> among others, measured
+before the fix.</p>
+<p>This is the one that threatened the product rather than merely the paper. The
+commercial proposition — a certificate anyone can re-derive — is unsellable if
+re-deriving it on a different surface of the same product gives a different
+answer.</p>
+<p>Fixed by extracting one shared <code>digest.js</code>, copied byte-identically to each
+surface and <code>cmp</code>-ed in CI.</p>
+<blockquote>
+<p><strong>Lesson.</strong> A digest whose canonicalisation is reimplemented per surface is not
+a digest. It is several digests wearing the same name.</p>
+</blockquote>
+<h3>5.4 Semantic — a verdict is meaningless without its thresholds</h3>
+<p>The rota check compares against configurable limits: 11 hours&#39; inter-shift rest,
+a 20-minute break on shifts over 6 hours. A digest over shifts and outcomes alone
+could be reproduced under <em>different rules</em> and still match — the verdict &quot;clear&quot;
+is not a fact about a rota, it is a fact about a rota <em>and</em> a ruleset. The
+thresholds are therefore part of the canonical form.</p>
+<p>This turns out to matter legally, not just theoretically. UK Working Time
+Regulations 1998 reg. 23(a) permits a collective or workforce agreement to modify
+or exclude the 11-hour entitlement outright, so a rota lawfully measured against
+a 9-hour rule is not an edge case — derogation is ordinary. A digest that did not
+pin its thresholds would let a derogated verdict and a statutory one collide. One
+that does pin them makes a derogated rota <em>auditable</em> rather than merely
+differently wrong.</p>
+<blockquote>
+<p><strong>Lesson.</strong> The canonical form must cover everything that could change the
+verdict, configuration included. Where the rules are lawfully variable, pinning
+them is not belt-and-braces — it is the only thing that makes the verdict mean
+anything.</p>
+</blockquote>
+<h3>5.5 The one the taxonomy predicted: daylight saving makes &quot;eleven hours&quot; ambiguous</h3>
+<p>This defect was found while writing the timezone caveat for §8 — that is, by
+applying the taxonomy of §5.6 rather than by a test failing.</p>
+<p>The rota parser computes dates with an integer civil-date algorithm and never
+constructs a <code>Date</code>, because <code>new Date(&#39;2026-09-28 06:00&#39;)</code> is interpreted
+against the viewer&#39;s zone. That is what buys the timezone invariance reported in
+§6. It also means rest is measured in <strong>civil</strong> minutes, and on the night the
+clocks change, civil and elapsed time disagree:</p>
+<table>
+<thead>
+<tr>
+<th>Night (Europe/London)</th>
+<th>Civil</th>
+<th>Elapsed</th>
+<th>Engine verdict</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sat 28 Mar 2026 22:00 → Sun 29 Mar 09:00</td>
+<td>11h 00m</td>
+<td><strong>10h 00m</strong></td>
+<td><strong>clear</strong></td>
+</tr>
+<tr>
+<td>Sat 24 Oct 2026 22:00 → Sun 25 Oct 09:00</td>
+<td>11h 00m</td>
+<td>12h 00m</td>
+<td>clear</td>
+</tr>
+</tbody></table>
+<p>The autumn row is conservative and harmless. The spring row is a <strong>false negative
+in the direction that matters</strong>: the worker received ten hours&#39; rest and the
+engine passed it.</p>
+<p>The classification matters here.</p>
+<ul>
+<li>It is <strong>not</strong> a determinism defect. Every platform, and every host timezone
+including those with no such transition, returns the same verdict and the same
+digest for that night. Determinism is intact — and is exactly what makes the
+error <em>consistent</em> rather than intermittent.</li>
+<li>It is a <strong>semantic</strong> defect, §5.4&#39;s category, one level deeper. The canonical
+form covered everything that could change the verdict, but the <em>definition</em> of
+the quantity being compared against the threshold was never written down.
+&quot;Eleven hours&quot; was assumed unambiguous. Twice a year, it is not.</li>
+</ul>
+<p>We then investigated which reading is correct rather than leaving it open. Three
+arguments converge on <strong>elapsed time</strong>. Reg. 10(1) is drafted in durations — &quot;a
+rest period of not less than eleven consecutive hours in each 24-hour period&quot; —
+and a civil reading must explain what a 24-hour period means on a spring-forward
+day that is 23 hours long. The Regulations are health-and-safety law whose
+protected interest is actual recovery, which a clock change does not supply. And
+the closest regulated regime settled it in practice: <strong>drivers&#39; hours under
+Regulation (EC) 561/2006 are recorded by digital tachographs that store UTC</strong>,
+displaying local time but never recording it, precisely so that a clock change
+cannot alter a rest period.</p>
+<p>That last point is a reproducibility argument as much as a legal one. The sector
+with the most enforcement and the most litigation over rest periods removed local
+time from the measurement entirely. <strong>UTC is the canonical form for time.</strong></p>
+<p>What we did about it:</p>
+<ul>
+<li><strong>Disclosed, not silently fixed.</strong> The user-facing disclaimer now names the
+spring-forward night explicitly. It is not in the canonical form, so no
+published digest moved.</li>
+<li><strong>Not fixed with <code>Date</code>.</strong> Computing elapsed time from the host zone would
+reintroduce the defect the integer parser exists to prevent.</li>
+<li><strong>The correct repair is a versioned schema change.</strong> Elapsed rest needs a
+<em>declared</em> UTC offset per shift, supplied as data and refused by name when
+absent. By §5.4 that offset changes the verdict, so it must enter the canonical
+form — which moves every rota digest. That is a new canonical mode, not a
+patch. Specified, deliberately not implemented here.</li>
+</ul>
+<blockquote>
+<p><strong>Lesson, and the strongest in the paper.</strong> Eliminating a dependency does not
+eliminate the decision it was making. Refusing to consult the host timezone
+silently chose civil time over elapsed time. A removed dependency is a policy
+choice with nowhere left to be documented — which is why this survived five
+surfaces, four test suites and nine device captures.</p>
+</blockquote>
+<h3>5.6 Synthesis: a taxonomy</h3>
+<p>We propose four categories, and claim they are complete for digest-based
+verification:</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>The question it answers</th>
+<th>Failure when unanswered</th>
+<th>Control</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Representational</strong></td>
+<td>What bytes encode the value?</td>
+<td>§5.1 — line endings moved the hash</td>
+<td>Hash values, never their transport encoding</td>
+</tr>
+<tr>
+<td><strong>Type-level</strong></td>
+<td>What type is the value?</td>
+<td>§5.2 — <code>600</code> ≠ <code>&#39;600&#39;</code></td>
+<td>Canonicalise after normalisation</td>
+</tr>
+<tr>
+<td><strong>Structural</strong></td>
+<td>What is included, and in what order?</td>
+<td>§5.3 — three surfaces, three forms</td>
+<td>One implementation, byte-compared in CI</td>
+</tr>
+<tr>
+<td><strong>Semantic</strong></td>
+<td>What does the value <em>mean</em>?</td>
+<td>§5.4, §5.5 — unpinned rules; undefined &quot;hour&quot;</td>
+<td>Pin the rules; define the quantities</td>
+</tr>
+</tbody></table>
+<p>The completeness argument is that a digest is a function of <em>bytes</em>, <em>types</em>,
+<em>structure</em> and <em>meaning</em>, and there is nothing else for it to be a function of.
+Each category needs a different control, and the controls do not substitute for
+one another: §5.3&#39;s shared implementation would not have caught §5.1, and none of
+the first three would have caught §5.5. They are ordered by depth — each is
+invisible to the tests that catch the one before it.</p>
+<hr>
+<h2>6. Results</h2>
+<h3>6.1 The determinism matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>ISA</th>
+<th>Runtime</th>
+<th>Fleet</th>
+<th>Rota</th>
+<th>Sweep</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ubuntu (CI)</td>
+<td>x86-64</td>
+<td>native Rust</td>
+<td><code>611eef21…</code> *</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Windows (CI)</td>
+<td>x86-64</td>
+<td>native Rust</td>
+<td><code>611eef21…</code> *</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>macOS (CI)</td>
+<td>AArch64</td>
+<td>native Rust</td>
+<td><code>611eef21…</code> *</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Chromium / Linux</td>
+<td>x86-64</td>
+<td>V8 + WASM</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>36,003 / 0</td>
+</tr>
+<tr>
+<td>npm / Node 22</td>
+<td>x86-64</td>
+<td>V8 + WASM</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Excel task pane</td>
+<td>x86-64</td>
+<td>Edge WebView</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Google Sheets sidebar</td>
+<td>x86-64</td>
+<td>V8 + WASM</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Samsung Galaxy Tab A11</td>
+<td>AArch64</td>
+<td>Chrome 153 / V8</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>36,003 / 0</td>
+</tr>
+<tr>
+<td>Google Pixel 8 Pro</td>
+<td>AArch64</td>
+<td>Chrome 153 / V8</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>36,003 / 0</td>
+</tr>
+<tr>
+<td>iPhone SE (2020)</td>
+<td>AArch64</td>
+<td>Chrome 154 / JavaScriptCore</td>
+<td><code>e249d90e…</code></td>
+<td><code>83c66e6d…</code></td>
+<td>36,003 / 0</td>
+</tr>
+</tbody></table>
+<p>* The native rows use <code>examples/infeasible.json</code>; the browser rows use
+<code>demo/example-route-sheet.csv</code>. These are <strong>different inputs</strong>, not a
+disagreement.</p>
+<p>Nine device captures — three devices, three consecutive runs each, 26 September
+2026. All nine reproduced both reference digests exactly and all nine reported
+zero divergences across 36,003 swept values. Blocks in Appendix A.</p>
+<h3>6.2 What the device captures are actually evidence of</h3>
+<p>&quot;Three phones&quot; is not the interesting number. Two facts in this dataset are
+load-bearing.</p>
+<p><strong>Two independently written WebAssembly implementations agree.</strong> The Android
+captures run V8 (Liftoff/TurboFan). The iPhone capture reports <code>CriOS/154</code> —
+Chrome&#39;s interface over WKWebView, because iOS in the United Kingdom permits no
+other engine — so its WebAssembly is executed by <strong>JavaScriptCore</strong> (BBQ/OMG) and
+its <code>Number</code>/<code>Math.round</code> by JSC. Two engine families, written by different
+vendors from the same specification, reaching byte-identical Q16.16 integers and
+byte-identical digests. This is the strongest single fact in the capture set and
+it was not something we set out to test.</p>
+<p><strong>Each device verified itself against ground truth, not merely against the
+others.</strong> The sweep compares the device&#39;s own <code>toQ()</code> against exact decimal
+arithmetic computed on that device with <code>BigInt</code>. Nine devices agreeing with each
+other could mean nine devices sharing a bug; nine devices agreeing with an exact
+oracle cannot.</p>
+<p><strong>What the devices do not add: a new instruction set.</strong> All three are AArch64,
+and the macOS CI runner already was — that runner is what surfaced six
+<code>E0133</code> errors in the NEON path under <code>#![forbid(unsafe_op_in_unsafe_fn)]</code>.
+Anyone counting &quot;three new architectures&quot; here would be counting wrong.</p>
+<h3>6.3 The boundary sweep</h3>
+<p><code>Math.round(Number(v) * 65536)</code> is the only arithmetic outside WebAssembly, and
+the equivalent <code>to_q16</code> is the only float arithmetic in the CLI. The sweep checks
+that boundary against exact decimal arithmetic via <code>BigInt</code>, on-device:</p>
+<table>
+<thead>
+<tr>
+<th>Band</th>
+<th>Count</th>
+<th>Range</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1 decimal place</td>
+<td>6,001</td>
+<td>0.0 … 600.0</td>
+</tr>
+<tr>
+<td>2 decimal places</td>
+<td>6,001</td>
+<td>0.00 … 60.00</td>
+</tr>
+<tr>
+<td>3 decimal places</td>
+<td>20,001</td>
+<td>0.000 … 20.000</td>
+</tr>
+<tr>
+<td>exact half-ULP offsets, <code>i + 0.5/65536</code>, to 10 dp</td>
+<td>4,000</td>
+<td>0 … 3,999</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>36,003</strong></td>
+<td><strong>0 divergences, every device</strong></td>
+</tr>
+</tbody></table>
+<p>The fourth band is where the teeth are: those inputs land exactly on
+<code>Math.round</code>&#39;s tie-break, which is where a rounding-mode disagreement between
+engines would appear if one existed. It is 11% of the sweep and 100% of its
+value. The sweep is not 36,003 arbitrary values.</p>
+<h3>6.4 Timezone invariance</h3>
+<p>All nine device captures ran in <code>Europe/London</code>, so they do not test timezone
+independence at all. That gap is closed from the other side, in CI: the rota
+fixture digest is re-derived in nine host zones — including the 45-minute offset
+<code>Asia/Kathmandu</code>, the +13:45 <code>Pacific/Chatham</code>, and <code>Pacific/Kiritimati</code> across
+the date line — and is identical in all nine. The same suite asserts statically
+that the rota and digest modules construct no <code>Date</code> and read no locale or zone.</p>
+<h3>6.5 Elapsed time — an operability signal, not a benchmark</h3>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Run 1</th>
+<th>Run 2</th>
+<th>Run 3</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Galaxy Tab A11</td>
+<td>525 ms</td>
+<td>173 ms</td>
+<td>158 ms</td>
+</tr>
+<tr>
+<td>Pixel 8 Pro</td>
+<td>180 ms</td>
+<td>144 ms</td>
+<td>132 ms</td>
+</tr>
+<tr>
+<td>iPhone SE 2020</td>
+<td>353 ms</td>
+<td><strong>446 ms</strong></td>
+<td>108 ms</td>
+</tr>
+</tbody></table>
+<p>Two fixtures plus a 36,003-value sweep complete in well under a second on every
+device, worst case 525 ms. That is what licenses the claim that verification is
+interactive on hardware a depot supervisor already owns.</p>
+<p>These figures should not be over-read. First runs carry WebAssembly compilation
+and module fetch,
+and the iPhone&#39;s second run being slower than its first is scheduler and thermal
+noise. Three <code>performance.now()</code> samples are not a measurement. These figures
+bound the cost; they do not characterise it.</p>
+<hr>
+<h2>7. What is <em>not</em> a source of divergence</h2>
+<p>Two candidate sources of divergence were tested and found not to contribute.</p>
+<p><strong>The JavaScript float boundary.</strong> Across 36,003 realistic values, on four engine
+configurations, <code>Math.round(Number(v) * 65536)</code> produced bit-identical results to
+exact decimal arithmetic. Zero divergences.</p>
+<p><strong>Architecture, for a parse-then-scale pipeline.</strong> See §2.</p>
+<p>We state plainly: <strong>rewriting the parser to avoid the float boundary entirely
+would have added risk and changed nothing.</strong> That is a negative result and it is
+worth publishing, because the instinct to eliminate every float is strong and, on
+this evidence, misdirected. The effort belongs in canonicalisation instead.</p>
+<hr>
+<h2>8. Limits, and what this does not prove</h2>
+<p>The following architectural and operational boundaries define what the
+verification digest does and does not establish:</p>
+<p><strong>Determinism is not correctness.</strong> A consistently wrong verdict is still wrong.
+§5.5 is precisely that case.</p>
+<p><strong>The digest is not a signature.</strong> It proves that the same input reached the same
+conclusion. It proves nothing about who produced it, when, or whether they were
+entitled to. Distinguishing a digest from an attestation matters; systems that
+blur the two are how &quot;verified&quot; comes to mean nothing.</p>
+<p><strong>Range.</strong> Q16.16 caps a schedule at roughly 22 days in minutes, or 9 hours in
+seconds. A wider type is not free: Q40.24 on <code>i64</code> doubles the memory of a dense
+distance matrix — for the 13,509-node TSPLIB instance <code>usa13509</code>, 0.73 GB becomes
+1.46 GB. Above 2²⁹ ≈ 537 million, staging a Q40.24 value through <code>f64</code> silently
+drops low fractional bits, since f64 carries a 53-bit significand and Q40.24
+keeps 24 fractional. Q16.16 never reaches that magnitude, which is exactly why
+§6.3&#39;s sweep found nothing. (Analysis only; parked as a specification, not
+implemented.)</p>
+<p><strong>Test set.</strong> Two fixtures, not a corpus.</p>
+<p><strong>No independent re-derivation.</strong> No external party has yet re-derived a digest.
+Until one has, the claim rests on our own CI.</p>
+<p><strong>Provenance of the captures.</strong> Device blocks are self-reported by the author,
+not attested. Nothing binds a pasted block to the hardware that produced it —
+the same limitation as the digest itself, one level up.</p>
+<p><strong>The user agent cannot identify the devices.</strong> Chrome&#39;s UA reduction freezes
+Android at <code>10</code> and the model at <code>K</code>, so the two Android blocks in Appendix A are
+textually identical but for the word <code>Mobile</code>. They are distinguished by GPU,
+core count and memory.</p>
+<p><strong>The clock-change false negative</strong>, §5.5, remains open by choice: disclosed,
+pinned by test, not fixed.</p>
+<p><strong>And the larger exposure runs the other way.</strong> WTR regs. 21, 22 and 24 disapply
+the daily rest entitlement for whole categories of worker. Reg. 22(1)(a) removes it
+outright when a shift worker changes shift — precisely the changeover a rota tool
+flags most often, though only for a &quot;shift worker&quot; as reg. 22(2) defines one and
+only &quot;[s]ubject to regulation 24&quot; — and reg. 21 covers security and surveillance
+work, continuity of service &quot;as in hospitals&quot;, and foreseeable surges in
+agriculture, tourism and postal services. So a <em>flagged</em> breach may be perfectly lawful, all year round,
+and the facts that decide it are not in the spreadsheet. No amount of determinism
+touches this. The tool is an indicative mathematical check, and this paper&#39;s
+determinism claims should never be read as compliance claims.</p>
+<hr>
+<h2>9. Related work</h2>
+<p>Reproducible Builds (reproducible-builds.org) establishes the general programme
+for bit-identical artefacts from identical sources, and is the closest
+methodological ancestor; our contribution is to apply the same standard to a
+<em>verdict</em> rather than a binary. Goldberg&#39;s <em>What Every Computer Scientist Should
+Know About Floating-Point Arithmetic</em> (1991) remains the reference for §2&#39;s
+distinction between specified and unspecified float behaviour. Certificate
+Transparency (RFC 6962) and Sigstore supply the vocabulary for §8&#39;s distinction
+between a digest and an attestation. For the problem domain, the SINTEF Solomon
+VRPTW benchmark set and the TSPLIB instances referenced in §8 are the standard
+corpora.</p>
+<hr>
+<h2>10. Reproduction</h2>
+<p>The results in this paper can be reproduced from source using the following
+commands:</p>
+<pre><code class="language-sh">git clone https://github.com/KABCTTRHC/lattice117-verify
+cd lattice117-verify
+
+cargo test --all
+./target/release/lattice117-audit --input examples/infeasible.json --json
+
+# Expected verdict digest:
+# 611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085
+
+# Rest and break boundaries, nine-timezone invariance, free-tier caps,
+# and Sheets bundle parity:
+node tests/rota.test.mjs
+node tests/timezone.test.mjs
+node tests/freetier.test.mjs
+node tests/sheets.test.mjs
+
+# Install from npm:
+npm install lattice117-verify
+</code></pre>
+<p>On any device, open <a href="https://kabcttrhc.github.io/lattice117-verify/determinism.html">https://kabcttrhc.github.io/lattice117-verify/determinism.html</a> and compare the block it prints against Appendix A.</p>
+<p>Reference values:</p>
+<table>
+<thead>
+<tr>
+<th>Fixture</th>
+<th>Digest</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>demo/example-route-sheet.csv</code></td>
+<td><code>e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d</code></td>
+</tr>
+<tr>
+<td><code>demo/example-rota.csv</code></td>
+<td><code>83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf</code></td>
+</tr>
+<tr>
+<td><code>examples/infeasible.json</code></td>
+<td><code>611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Appendix A — evidence blocks</h2>
+<p>Verbatim as emitted by <code>demo/determinism.html</code>. Nothing retyped or summarised.
+Captured 26 September 2026.</p>
+<h3>A.1 — Samsung Galaxy Tab A11 (Chrome 153, V8)</h3>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T10:55:56.755Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36
+  platform     Linux armv81
+  cores        8   memory 4 GB
+  screen       1007x601 @ dpr 1.3312500715255737
+  gpu          ANGLE (ARM, Mali-G57 MC2, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 525 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T10:57:13.368Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36
+  platform     Linux armv81
+  cores        8   memory 4 GB
+  screen       1007x601 @ dpr 1.3312500715255737
+  gpu          ANGLE (ARM, Mali-G57 MC2, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 173 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T10:57:42.090Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36
+  platform     Linux armv81
+  cores        8   memory 4 GB
+  screen       1007x601 @ dpr 1.3312500715255737
+  gpu          ANGLE (ARM, Mali-G57 MC2, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 158 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<h3>A.2 — Google Pixel 8 Pro (Chrome 153, V8)</h3>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:00:44.273Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36
+  platform     Linux armv81
+  cores        9   memory 8 GB
+  screen       448x998 @ dpr 2.25
+  gpu          ANGLE (ARM, Mali-G715, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 180 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:01:08.110Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36
+  platform     Linux armv81
+  cores        9   memory 8 GB
+  screen       448x998 @ dpr 2.25
+  gpu          ANGLE (ARM, Mali-G715, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 144 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:01:28.196Z
+
+DEVICE
+  user agent   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36
+  platform     Linux armv81
+  cores        9   memory 8 GB
+  screen       448x998 @ dpr 2.25
+  gpu          ANGLE (ARM, Mali-G715, OpenGL ES 3.2)
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 132 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<h3>A.3 — iPhone SE 2020, iOS 26.6.2 (Chrome 154 / CriOS — JavaScriptCore)</h3>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:03:02.379Z
+
+DEVICE
+  user agent   Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/154.0.8037.55 Mobile/15E148 Safari/604.1
+  platform     iPhone
+  cores        4   memory ? GB
+  screen       375x667 @ dpr 2
+  gpu          Apple GPU
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 353 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:03:16.458Z
+
+DEVICE
+  user agent   Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/154.0.8037.55 Mobile/15E148 Safari/604.1
+  platform     iPhone
+  cores        4   memory ? GB
+  screen       375x667 @ dpr 2
+  gpu          Apple GPU
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 446 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<pre><code>LATTICE117 DETERMINISM EVIDENCE
+captured 2026-09-26T11:03:26.270Z
+
+DEVICE
+  user agent   Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/154.0.8037.55 Mobile/15E148 Safari/604.1
+  platform     iPhone
+  cores        4   memory ? GB
+  screen       375x667 @ dpr 2
+  gpu          Apple GPU
+  wasm         Memory=yes Global=yes Table=yes instantiateStreaming=yes
+  timezone     Europe/London
+
+FLEET FIXTURE  example-route-sheet.csv
+  rounds       8 checked, 5 achievable
+  engine       21525 bytes
+  digest       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  expected     e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+  result       MATCH
+
+ROTA FIXTURE  example-rota.csv
+  staff        4 checked, 2 clear, 2 flagged
+  digest       83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  expected     83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf
+  result       MATCH
+
+Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal
+  values       36003
+  divergences  0
+  result       MATCH
+
+ELAPSED 108 ms
+OVERALL DETERMINISTIC
+</code></pre>
+<h2>Appendix B — the fixtures</h2>
+<h3><code>demo/example-rota.csv</code></h3>
+<pre><code class="language-csv">Staff Name,Date,Shift Start,Shift End,Break (mins)
+Nadia Okafor,2026-09-28,14:00,22:00,30
+Nadia Okafor,2026-09-29,06:00,14:00,30
+Tom Whitmore,2026-09-28,07:00,15:30,15
+Tom Whitmore,2026-09-29,09:00,17:00,30
+Priya Raman,2026-09-28,08:00,16:00,30
+Priya Raman,2026-09-29,08:00,16:00,30
+Marcus Bell,2026-09-28,22:00,06:00,30
+Marcus Bell,2026-09-29,20:00,04:00,30
+</code></pre>
+<h3><code>demo/example-route-sheet.csv</code></h3>
+<pre><code class="language-csv">vehicle,seq,stop,window_open,window_close,travel_mins_from_previous
+VAN-01,0,DEPOT,0,600,0
+VAN-01,1,Bilborough,0,57,22.3
+VAN-01,2,Beeston,0,68,10.9
+VAN-01,3,Clifton,0,74,5.8
+VAN-01,4,DEPOT,0,600,21.0
+VAN-02,0,DEPOT,0,600,0
+VAN-02,1,W-Bridgford,0,42,7.1
+VAN-02,2,Arnold,0,18,17.1
+VAN-02,3,Hucknall,0,78,19.4
+VAN-02,4,DEPOT,0,600,32.8
+VAN-03,0,DEPOT,0,600,0
+VAN-03,1,Carlton,0,53,18.8
+VAN-03,2,Gedling,0,69,15.4
+VAN-03,3,Stapleford,0,93,24.4
+VAN-03,4,DEPOT,0,600,27.0
+VAN-04,0,DEPOT,0,600,0
+VAN-04,1,Long-Eaton,0,46,11.2
+VAN-04,2,Ilkeston,0,63,17.5
+VAN-04,3,Kimberley,0,84,20.7
+VAN-04,4,DEPOT,0,600,6.3
+VAN-05,0,DEPOT,0,600,0
+VAN-05,1,Bulwell,0,64,29.3
+VAN-05,2,Sherwood,0,74,51.1
+VAN-05,3,Mapperley,0,196,42.5
+VAN-05,4,DEPOT,0,600,22.2
+VAN-06,0,DEPOT,0,600,0
+VAN-06,1,Basford,0,63,28.2
+VAN-06,2,Wollaton,0,83,20.0
+VAN-06,3,Lenton,0,92,9.3
+VAN-06,4,DEPOT,0,600,17.2
+VAN-07,0,DEPOT,0,600,0
+VAN-07,1,Sneinton,0,57,22.1
+VAN-07,2,Colwick,0,26,10.4
+VAN-07,3,Netherfield,0,124,45.2
+VAN-07,4,DEPOT,0,600,27.2
+VAN-08,0,DEPOT,0,600,0
+VAN-08,1,Ruddington,0,56,21.4
+VAN-08,2,Keyworth,0,88,32.3
+VAN-08,3,Cotgrave,0,154,43.0
+VAN-08,4,DEPOT,0,600,30.2
+</code></pre>
+</body></html>
