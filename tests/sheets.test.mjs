@@ -113,6 +113,36 @@ console.log('\nSidebar.html is genuinely self-contained');
      srcKey ? `source key ${srcKey.slice(0, 12)}… absent from Sidebar.html` : 'no key found');
   const kb = (html.length / 1024).toFixed(0);
   ok(`bundle is a single file under 200 KB (${kb} KB)`, html.length < 200 * 1024);
+
+  /* The example sheets are inlined so the sidebar can write one into a blank
+     spreadsheet with one click. They must be the SAME bytes demo/ ships and
+     this suite pins: an onboarding example that has drifted from its fixture
+     hands a new user a digest that does not match the documentation, which is
+     the one failure this product cannot afford. */
+  const examples = {
+    routes: 'demo/example-route-sheet.csv',
+    timed: 'demo/example-route-sheet-timed.csv',
+    rota: 'demo/example-rota.csv',
+    nottingham: 'demo/example-fleet-nottingham.csv',
+    matrix: 'demo/example-fleet-nottingham-matrix.txt',
+  };
+  const inlined = /const L117_EXAMPLES = (\{[\s\S]*?\});/.exec(html);
+  ok('the example sheets are inlined', Boolean(inlined));
+  if (inlined) {
+    const got = JSON.parse(inlined[1]);
+    ok(`all ${Object.keys(examples).length} examples are present`,
+       Object.keys(examples).every((k) => typeof got[k] === 'string'));
+    for (const [key, file] of Object.entries(examples)) {
+      ok(`  ${key} matches ${file} byte for byte`, got[key] === read(file));
+    }
+  }
+
+  /* Writing into the sheet is the one new thing Code.gs does. It must still
+     reach nothing beyond the open spreadsheet — the whole scope claim rests on
+     that, and a writer is exactly the kind of addition that quietly widens it. */
+  const code = stripComments(read('sheets-addon/Code.gs'));
+  ok('Code.gs can write an example into the sheet', /function writeExample\(/.test(code));
+  ok('and still uses only SpreadsheetApp', !/\b(DriveApp|UrlFetchApp|PropertiesService)\b/.test(code));
 }
 
 console.log('\nCanonical digests the Sheets bundle must reproduce');

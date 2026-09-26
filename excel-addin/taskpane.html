@@ -55,6 +55,26 @@
   #matrixText{resize:vertical;min-height:90px;box-sizing:border-box}
   #licState{font-size:12.5px}
   .row{display:flex;gap:6px}
+  .steps{margin:8px 0 0;padding-left:18px;font-size:11px;color:var(--ink-faint);line-height:1.6}
+  .steps li{margin-bottom:6px}
+  .steps code{font:10px var(--mono);background:rgba(255,255,255,.06);padding:1px 4px;border-radius:4px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .grid2 button{margin-bottom:0;font-size:11px;padding:7px 6px}
+  .lockrow{display:flex;align-items:center;gap:6px;margin:12px 0 4px}
+  .lockrow h3{margin:0;font-size:12px;font-weight:600}
+  .lock{font:9.5px var(--mono);border-radius:999px;padding:1px 7px;border:1px solid var(--line);
+        color:var(--ink-faint);white-space:nowrap}
+  .lock.open{color:var(--ok);border-color:var(--ok)}
+  .plan{border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-top:7px;background:var(--bg)}
+  .plan h4{margin:0 0 1px;font-size:12.5px}
+  .plan .price{font-size:15px;font-weight:700}
+  .plan .price span{font-size:10.5px;font-weight:400;color:var(--ink-faint)}
+  .plan p{margin:4px 0 7px;font-size:11px;color:var(--ink-faint);line-height:1.5}
+  .plan a.buy{display:block;text-align:center;text-decoration:none;font-size:11.5px;
+              padding:6px;border-radius:6px;border:1px solid var(--line);color:var(--ink)}
+  .plan a.buy.hot{background:var(--accent);border-color:var(--accent);color:#04121d;font-weight:600}
+  .plan.mine{border-color:var(--ok)}
+  .plan .current{text-align:center;font-size:11px;color:var(--ok);padding:6px}
   .row button{margin-bottom:0}
   .modes{display:flex;gap:6px;margin-bottom:10px}
   .modes button{flex:1;margin-bottom:0;font-size:12.5px;padding:8px 6px;
@@ -81,22 +101,45 @@
   <button id="modeRota">UK rota rest</button>
 </div>
 
+<details id="howBox" open>
+  <summary>How to use this</summary>
+  <ol class="steps" id="howSteps"></ol>
+  <p class="note" style="margin-bottom:5px">Nothing in your workbook yet? Drop in
+  a worked example and it will be selected for you.</p>
+  <div class="grid2">
+    <button id="exRoutes" type="button">Sample routes</button>
+    <button id="exTimed" type="button">Repairable routes</button>
+    <button id="exRota" type="button">Sample UK rota</button>
+    <button id="exNottingham" type="button">Nottingham round</button>
+  </div>
+  <p class="note" id="exampleState"></p>
+</details>
+
 <button id="run" disabled>Check selected rows</button>
 <button id="clear" class="secondary">Clear highlighting</button>
 
 <div id="out"></div>
 
-<div id="repairBox" style="display:none">
+<div id="repairBox">
+  <div class="lockrow">
+    <h3>Repair failing rounds</h3>
+    <span class="lock" id="repairLock">Tier 4</span>
+  </div>
   <p class="note" id="repairIntro"></p>
   <button id="runRepair" class="primary">Repair this sheet</button>
   <div id="repairOut"></div>
 </div>
 
-<div id="matrixBox" style="display:none">
+<div id="matrixBox">
+  <div class="lockrow">
+    <h3>Re-sequence with a matrix</h3>
+    <span class="lock" id="matrixLock">Tier 5</span>
+  </div>
   <p class="note" id="matrixIntro"></p>
   <textarea id="matrixText" rows="6" spellcheck="false"
     placeholder="Paste a distance matrix &#8212; one row per stop, whitespace- or comma-separated, same time unit as your windows.&#10;# nodes: 0=DEPOT, 1=Arnold, 2=Beeston&#10;0.0 11.9 9.6&#10;11.9 0.0 20.8&#10;9.6 20.8 0.0"></textarea>
   <p class="note" id="matrixState"></p>
+  <div class="row"><button id="matrixDemo" type="button">Load Nottingham matrix</button></div>
   <button id="runResequence" class="primary">Re-sequence (Enterprise Matrix)</button>
   <div id="resequenceOut"></div>
 </div>
@@ -113,6 +156,21 @@
   <p class="note">Free checks one round and issues no verdict digest. A licence
   checks every round in the selection. The key is verified here, inside the task
   pane — it is not sent anywhere, and neither is your sheet.</p>
+</details>
+
+<details id="plansBox">
+  <summary>Plans &amp; upgrade</summary>
+  <p class="note">Every plan runs the same engine in this pane. What you pay for
+  is depth: how much of your schedule gets checked, whether you get a
+  reproducible digest to hand to a client, and whether the tool repairs what it
+  finds instead of only naming it.</p>
+  <div id="planCards"></div>
+  <ol class="steps">
+    <li>Click <b>Subscribe</b> on a plan. Checkout is handled by Stripe.</li>
+    <li>Copy the signed licence key emailed to the address you paid with.</li>
+    <li>Paste it into <b>Licence</b> above and press <b>Apply</b>. It is checked
+    here by public-key signature &mdash; never uploaded, and neither is your sheet.</li>
+  </ol>
 </details>
 
 <p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
@@ -151,6 +209,7 @@ async function refreshTier(){
   ent=await currentEntitlement();
   if(typeof paintRepairGate==='function') paintRepairGate();
   if(typeof paintMatrixGate==='function') paintMatrixGate();
+  if(typeof paintPlans==='function') paintPlans();
   const b=$('tier');
   b.textContent='tier: '+ent.label.toLowerCase();
   b.className='badge'+(ent.tier!=='free'?' live':'');
@@ -167,7 +226,9 @@ async function loadWasm(){
   const r=await fetch('./lattice117_wasm.wasm');
   const b=await r.arrayBuffer();
   wasm=(await WebAssembly.instantiate(b,{})).instance.exports;
-  $('engine').textContent='engine: WebAssembly, '+(b.byteLength/1024).toFixed(1)+' KB';
+  /* Bytes, not KB: 21,525 bytes is 21.0 KiB and 21.5 kB, and the paper cites
+     the byte count. A byte count cannot be misread as stale. */
+  $('engine').textContent='engine: WebAssembly, '+b.byteLength.toLocaleString('en-GB')+' bytes';
 }
 const mem=()=>new DataView(wasm.memory.buffer);
 function put(a){
@@ -224,13 +285,20 @@ function verifyRoute(stops, depart){
 let lastRun=null;
 
 function paintRepairGate(){
-  const can=!!ent.repair, box=document.getElementById('repairBox');
+  const can=!!ent.repair, box=$('repairBox');
   if(!box) return;
-  box.style.display = lastRun ? '' : 'none';
-  document.getElementById('runRepair').disabled = !can;
-  document.getElementById('repairIntro').innerHTML = can
-    ? 'Moves each round\u2019s departure to the latest time that still holds, then re-verifies with the same engine.'
-    : '<b>Enterprise Repair (\u00a3249/month).</b> Repairs a failing round by moving its departure, re-verifies it, and names the exact shortfall on anything re-timing cannot fix.';
+  /* Shown always, not only after a run and not only to people who have paid. A
+     capability nobody can see is a capability nobody buys. setMode still hides
+     it in rota mode, where it has no meaning. */
+  box.style.display = MODE === 'rota' ? 'none' : '';
+  const lock = $('repairLock');
+  lock.textContent = can ? 'unlocked' : 'Tier 4 \u00b7 \u00a3249/mo';
+  lock.className = 'lock' + (can ? ' open' : '');
+  $('runRepair').disabled = !can || !lastRun;
+  $('repairIntro').innerHTML = can
+    ? 'Moves each round\u2019s departure to the latest time that still holds, re-verifies with the same engine, and shows the digest before and after. Where re-timing cannot fix a round it says so and gives the exact shortfall.'
+    : 'Catches a round that cannot work and <b>fixes it</b> rather than only flagging it: shifts the departure to the latest time that still holds, re-verifies with this same engine, and names the exact shortfall on anything re-timing cannot save. '
+      + 'See it run: load <b>Repairable routes</b> above, and the sample shows 2 of 4 rounds holding before and 3 of 4 after.';
 }
 
 async function runRepair(){
@@ -289,12 +357,16 @@ let loadedMatrix=null;
 function paintMatrixGate(){
   const can=!!ent.matrixSolver, box=$('matrixBox');
   if(!box) return;
-  box.style.display = lastRun ? '' : 'none';
+  box.style.display = MODE === 'rota' ? 'none' : '';
+  const lock = $('matrixLock');
+  lock.textContent = can ? 'unlocked' : 'Tier 5 \u00b7 \u00a3499/mo';
+  lock.className = 'lock' + (can ? ' open' : '');
   $('matrixText').disabled = !can;
-  $('runResequence').disabled = !can || !loadedMatrix;
+  $('matrixDemo').disabled = !can;
+  $('runResequence').disabled = !can || !loadedMatrix || !lastRun;
   $('matrixIntro').innerHTML = can
     ? 'Searches every order of each round’s interior stops against a matrix you paste, keeps the vehicle assignment you planned, then re-verifies with the same engine. Rounds with more than 8 interior stops are reported as unsearched.'
-    : '<b>Enterprise Matrix Optimizer (£499/month).</b> Re-orders the stops within a round against a distance matrix you supply — the one thing a route sheet cannot express — and proves the improvement with the same verifier that graded the original.';
+    : 'Re-orders the stops <b>within</b> a round against a distance matrix you supply \u2014 the one thing a route sheet cannot express \u2014 keeping the vehicle assignment you planned, and proves the saving with the same verifier that graded the original.<br>On the bundled Nottingham round that is <b>99.6 \u2192 60.2 minutes</b>, a 39.4-minute saving, and a round that breached its last window becomes one that holds.';
   if(!can){ $('matrixState').textContent=''; return; }
   $('matrixState').innerHTML = loadedMatrix
     ? `Matrix loaded: <b>${loadedMatrix.n}×${loadedMatrix.n}</b>.`
@@ -433,6 +505,118 @@ Office.onReady(info=>{
   }
 });
 
+/* ---- onboarding, examples and pricing ----------------------------------- */
+/* A first-time user opens this pane on a blank workbook. Before this, all it
+   offered was "Check selected rows" with nothing to check and a licence box
+   quoting a free tier: no columns explained, no data to try, and no sign the
+   paid tiers do anything. Each of those is a reason to close the pane.
+
+   The examples are fetched from the files beside this page, which are copies of
+   the ones demo/ ships and tests/ pin — checked byte-for-byte by
+   tests/surfaces.test.mjs, because an onboarding example that has drifted from
+   its fixture hands a new user a digest that does not match the documentation. */
+
+const STRIPE={
+  standard:'https://buy.stripe.com/9B6dR8eSf5ZF2sn5LfgEg0g',
+  pro:     'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h',
+  tier4:   'https://buy.stripe.com/eVq00i6lJ3Rx6ID5LfgEg0i',
+  tier5:   'https://buy.stripe.com/14AfZg5hF87Nc2Xb5zgEg0j',
+};
+
+/* Operational, not regulatory. The white paper is explicit that determinism is
+   not correctness, discloses the spring-forward false negative, and calls the
+   rota check indicative rather than a compliance verdict. Nothing here promises
+   compliance, certification or legal cover: what is sold is catching and
+   repairing a broken schedule before dispatch. */
+const PLANS=[
+  {key:'standard',name:'Standard',price:'£29',per:'per month',
+   what:'Every round and every person, not just the first. The full breach list.'},
+  {key:'pro',name:'Pro',price:'£99',per:'per month',hot:true,
+   what:'Everything in Standard, plus the reproducible SHA-256 verdict digest and JSON export — the artefact you hand a client so they can re-check the same schedule and get the same answer.'},
+  {key:'tier4',name:'Enterprise Repair',price:'£249',per:'per month',
+   what:'Repairs a failing round instead of only naming it: departure shifts that work, exact shortfalls on the ones that cannot be saved, digests before and after.'},
+  {key:'tier5',name:'Enterprise Matrix',price:'£499',per:'per month',
+   what:'Everything in Repair, plus re-sequencing the stops within a round against a distance matrix you supply. 99.6 → 60.2 minutes on the bundled Nottingham round.'},
+];
+
+const HOW={
+  route:[
+    'Select your rows in the worksheet, <b>including the header row</b> — or press an example below.',
+    'Columns are matched by name, and the names can be anything sensible: the <code>round</code>, the <code>stop</code>, when its window <code>opens</code> and <code>closes</code>, and the <code>travel time from the previous stop</code>. An optional <code>departure</code> column says when the vehicle leaves.',
+    'Press <b>Check selected rows</b>. Rounds that cannot work are named and highlighted in the worksheet itself.',
+    'Then <b>Repair</b> to re-time what can be re-timed, or <b>Re-sequence</b> to re-order stops against a distance matrix.',
+  ],
+  rota:[
+    'Select your shift rows, <b>including the header row</b> — or press <b>Sample UK rota</b> below.',
+    'Columns matched by name: the <code>staff name</code>, the <code>date</code>, the <code>shift start</code> and <code>end</code>, and the <code>break</code> in minutes.',
+    'Press <b>Check selected shifts</b>. Shifts short of the configured rest and break rules are named and highlighted.',
+    'This is an indicative mathematical check against the rules configured here, not a compliance verdict — see the note below the result.',
+  ],
+};
+
+function paintHow(){
+  $('howSteps').innerHTML = HOW[MODE==='rota'?'rota':'route'].map(t=>`<li>${t}</li>`).join('');
+}
+
+function paintPlans(){
+  const cards=$('planCards');
+  if(!cards) return;
+  cards.innerHTML = PLANS.map(p=>{
+    const mine = ent.tier===p.key;
+    const included = (p.key==='standard'&&ent.certificate)
+                  || (p.key==='pro'&&ent.repair)
+                  || (p.key==='tier4'&&ent.matrixSolver);
+    const foot = mine ? '<div class="current">Your current plan</div>'
+      : included ? `<div class="current">Included in ${ent.label}</div>`
+      : `<a class="buy${p.hot?' hot':''}" href="${STRIPE[p.key]}" target="_blank" rel="noopener">Subscribe</a>`;
+    return `<div class="plan${mine?' mine':''}"><h4>${p.name}</h4>`
+      + `<div class="price">${p.price} <span>${p.per}</span></div>`
+      + `<p>${p.what}</p>${foot}</div>`;
+  }).join('');
+}
+
+const EXAMPLE_FILES={
+  routes:'example-route-sheet.csv',
+  timed:'example-route-sheet-timed.csv',
+  rota:'example-rota.csv',
+  nottingham:'example-fleet-nottingham.csv',
+  matrix:'example-fleet-nottingham-matrix.txt',
+};
+
+/** One of the bundled example files, as a grid of strings for the worksheet. */
+async function exampleGrid(key){
+  const text = await (await fetch('./'+EXAMPLE_FILES[key])).text();
+  const lines = text.replace(/\r\n/g,'\n').split('\n').filter(l=>l.trim()!=='');
+  if(key==='matrix') return lines.map(l=>l.startsWith('#')?[l]:l.trim().split(/\s+/));
+  return lines.map(l=>l.split(','));
+}
+
+/* Writes below whatever is already in the sheet, so pressing this on a workbook
+   that holds real work appends rather than destroys. */
+async function insertExample(key,label){
+  const state=$('exampleState');
+  state.textContent='Writing…';
+  try{
+    const grid=await exampleGrid(key);
+    const width=Math.max(...grid.map(r=>r.length));
+    const padded=grid.map(r=>{const c=r.slice(); while(c.length<width) c.push(''); return c;});
+    await Excel.run(async (ctx)=>{
+      const sheet=ctx.workbook.worksheets.getActiveWorksheet();
+      const used=sheet.getUsedRangeOrNullObject();
+      used.load(['rowCount','isNullObject']);
+      await ctx.sync();
+      const start=used.isNullObject ? 0 : used.rowCount+1;
+      const range=sheet.getRangeByIndexes(start,0,padded.length,width);
+      range.values=padded;
+      sheet.getRangeByIndexes(start,0,1,width).format.font.bold=true;
+      range.select();
+      await ctx.sync();
+      state.innerHTML=`Wrote <b>${label}</b> at row ${start+1}, and selected it. `
+        + 'Press <b>Check selected rows</b>.';
+    });
+  }catch(e){ state.innerHTML=`<b>Could not write:</b> ${e.message}`; }
+}
+
 function setMode(m){
   MODE=m;
   $('modeRoute').classList.toggle('on', m==='route');
@@ -440,6 +624,11 @@ function setMode(m){
   $('routeNote').style.display = m==='rota' ? 'none' : '';
   $('rotaNote').style.display  = m==='rota' ? '' : 'none';
   $('run').textContent = m==='rota' ? 'Check selected shifts' : 'Check selected rows';
+  /* Repair and Re-sequence are route concepts; in rota mode they would be dead
+     controls with an upsell attached, which is the worst of both. */
+  $('repairBox').style.display = m==='rota' ? 'none' : '';
+  $('matrixBox').style.display = m==='rota' ? 'none' : '';
+  paintHow();
   $('out').innerHTML=''; $('err').textContent='';
 }
 $('modeRoute').addEventListener('click',()=>setMode('route'));
@@ -449,6 +638,17 @@ $('run').addEventListener('click',run);
 $('runRepair').addEventListener('click',runRepair);
 $('runResequence').addEventListener('click',runResequence);
 $('matrixText').addEventListener('input',loadMatrixFromText);
+$('matrixDemo').addEventListener('click',async ()=>{
+  try{
+    $('matrixText').value = await (await fetch('./'+EXAMPLE_FILES.matrix)).text();
+    loadMatrixFromText();
+  }catch(e){ $('resequenceOut').innerHTML=`<div class="viol">Could not load the matrix: ${e.message}</div>`; }
+});
+$('exRoutes').addEventListener('click',()=>insertExample('routes','the sample fleet'));
+$('exTimed').addEventListener('click',()=>insertExample('timed','the repairable rounds'));
+$('exRota').addEventListener('click',()=>insertExample('rota','the sample UK rota'));
+$('exNottingham').addEventListener('click',()=>insertExample('nottingham','the Nottingham round'));
+paintHow();
 /* Test hook — relaxes the UI gate only; it cannot mint or alter a licence.
    Tier resolution is covered by tests/tiers.test.mjs. */
 window.__grant=(tier='tier5')=>{

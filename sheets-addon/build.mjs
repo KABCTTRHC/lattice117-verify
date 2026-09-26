@@ -55,6 +55,19 @@ function wrap(source, ns) {
 }
 
 const wasm = readFileSync(join(SRC, 'lattice117_wasm.wasm'));
+
+/* Example sheets, inlined so the sidebar can write them into a blank workbook
+   with one click. They are the SAME files demo/ ships and tests/ pin, read at
+   build time rather than retyped here — an onboarding example that has drifted
+   from the fixture it claims to be is worse than none, because the digest a new
+   user gets will not match the one in the documentation. */
+const EXAMPLES = {
+  routes: readFileSync(join(SRC, 'example-route-sheet.csv'), 'utf8'),
+  timed: readFileSync(join(SRC, 'example-route-sheet-timed.csv'), 'utf8'),
+  rota: readFileSync(join(SRC, 'example-rota.csv'), 'utf8'),
+  nottingham: readFileSync(join(SRC, 'example-fleet-nottingham.csv'), 'utf8'),
+  matrix: readFileSync(join(SRC, 'example-fleet-nottingham-matrix.txt'), 'utf8'),
+};
 const modules = MODULES
   .map(([f, ns]) => wrap(readFileSync(join(SRC, f), 'utf8'), ns))
   .join('\n');
@@ -63,6 +76,7 @@ const UI = readFileSync(join(HERE, 'sidebar.template.html'), 'utf8');
 
 const html = UI
   .replace('/*__MODULES__*/', () => modules)
+  .replace('/*__EXAMPLES__*/', () => `const L117_EXAMPLES = ${JSON.stringify(EXAMPLES)};`)
   .replace('__WASM_B64__', () => wasm.toString('base64'));
 
 if (process.argv.includes('--check')) {
@@ -76,5 +90,6 @@ if (process.argv.includes('--check')) {
 } else {
   writeFileSync(OUT, html);
   console.log(`Wrote Sidebar.html — ${(html.length / 1024).toFixed(1)} KB, ` +
-              `${MODULES.length} modules, wasm ${wasm.length} bytes inlined as base64.`);
+              `${MODULES.length} modules, ${Object.keys(EXAMPLES).length} examples, ` +
+              `wasm ${wasm.length} bytes inlined as base64.`);
 }

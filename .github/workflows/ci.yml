@@ -137,6 +137,11 @@ jobs:
       # day: taskpane.html imported a ./resequence.js excel-addin/ did not have,
       # and sw.js's cache-first SHELL did not list it either — which offline is
       # not a slow load but a page that does not run at all.
+      # Also covers onboarding and upsell on both spreadsheet surfaces: the
+      # how-to steps, the one-click example loaders, the Tier 4 and Tier 5
+      # controls being visible-and-locked rather than hidden, all four Stripe
+      # links, and the rule that none of the copy promises compliance
+      # certification — which the white paper explicitly declines to claim.
       - name: Every surface is complete on its own
         run: node tests/surfaces.test.mjs
       - name: WASM is identical on every surface

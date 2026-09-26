@@ -84,3 +84,39 @@ function clearHighlighting() {
   var sheet = SpreadsheetApp.getActiveSheet();
   sheet.getDataRange().setBackground(null);
 }
+
+/**
+ * Writes an example sheet into the active spreadsheet and selects it.
+ *
+ * The rows arrive FROM the sidebar rather than being stored here. The sidebar
+ * carries the example files inlined at build time — the same files `demo/`
+ * ships and the test suite pins — so there is one copy of each example in the
+ * repository rather than a second, drifting copy in this file. An onboarding
+ * example that has drifted from the fixture it claims to be is worse than none,
+ * because the digest a new user gets will not match the documented one.
+ *
+ * It writes into the first empty block below whatever is already in the sheet,
+ * so clicking it on a sheet that already holds work appends rather than
+ * destroys. On a blank sheet that is A1, which is what someone who has just
+ * opened the add-on expects.
+ */
+function writeExample(rows) {
+  if (!rows || !rows.length) return 0;
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var startRow = sheet.getLastRow() > 0 ? sheet.getLastRow() + 2 : 1;
+
+  var width = 0;
+  for (var i = 0; i < rows.length; i++) width = Math.max(width, rows[i].length);
+  var padded = [];
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r].slice();
+    while (row.length < width) row.push('');
+    padded.push(row);
+  }
+
+  var range = sheet.getRange(startRow, 1, padded.length, width);
+  range.setValues(padded);
+  sheet.getRange(startRow, 1, 1, width).setFontWeight('bold');
+  range.activate();
+  return startRow;
+}

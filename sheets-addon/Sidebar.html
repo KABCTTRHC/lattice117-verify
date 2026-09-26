@@ -66,6 +66,28 @@
           border:1px solid var(--line);background:rgba(8,11,18,.55);color:var(--ink)}
   #matrixText{resize:vertical;min-height:84px;box-sizing:border-box}
   .row{display:flex;gap:6px} .row button{margin-bottom:0}
+  .steps{margin:8px 0 0;padding-left:18px;font-size:11px;color:var(--ink-dim);line-height:1.6}
+  .steps li{margin-bottom:6px}
+  .steps code{font:10px var(--mono);background:rgba(255,255,255,.05);padding:1px 4px;border-radius:4px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .grid2 button{margin-bottom:0;font-size:11px;padding:7px 6px}
+  .lockrow{display:flex;align-items:center;gap:6px;margin:10px 0 4px}
+  .lockrow h3{margin:0;font-size:12px;font-weight:600}
+  .lock{font:9.5px var(--mono);border-radius:999px;padding:1px 7px;border:1px solid var(--line);
+        color:var(--ink-faint);white-space:nowrap}
+  .lock.open{color:var(--ok);border-color:var(--ok)}
+  .plan{border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-top:7px;
+        background:rgba(255,255,255,.02)}
+  .plan h4{margin:0 0 1px;font-size:12.5px}
+  .plan .price{font-size:15px;font-weight:700}
+  .plan .price span{font-size:10.5px;font-weight:400;color:var(--ink-faint)}
+  .plan p{margin:4px 0 7px;font-size:11px;color:var(--ink-dim);line-height:1.5}
+  .plan a.buy{display:block;text-align:center;text-decoration:none;font-size:11.5px;
+              padding:6px;border-radius:7px;border:1px solid var(--line);color:var(--ink)}
+  .plan a.buy.hot{background:var(--accent);border-color:var(--accent);color:#04121d;font-weight:600}
+  .plan.mine{border-color:var(--ok)}
+  .plan .current{text-align:center;font-size:11px;color:var(--ok);padding:6px}
+  details>summary{cursor:pointer;font-size:12px;padding:4px 0}
 </style>
 </head>
 <body>
@@ -83,17 +105,45 @@
   <button id="modeRota" type="button">UK rota rest</button>
 </div>
 
+<details id="howBox" open>
+  <summary>How to use this</summary>
+  <ol class="steps" id="howSteps"></ol>
+  <div id="exampleBox">
+    <p class="note" style="margin-bottom:5px">Nothing in your sheet yet? Drop in a
+    worked example and it will be selected for you.</p>
+    <div class="grid2">
+      <button id="exRoutes" type="button">Sample routes</button>
+      <button id="exTimed" type="button">Repairable routes</button>
+      <button id="exRota" type="button">Sample UK rota</button>
+      <button id="exNottingham" type="button">Nottingham round</button>
+    </div>
+    <p class="note" id="exampleState"></p>
+  </div>
+</details>
+
 <button id="run" class="primary" disabled>Check selected rows</button>
-<div id="repairBox" style="display:none">
+
+<div id="repairBox">
+  <div class="lockrow">
+    <h3>Repair failing rounds</h3>
+    <span class="lock" id="repairLock">Tier 4</span>
+  </div>
   <p class="note" id="repairIntro"></p>
   <button id="runRepair" class="primary">Repair these rows</button>
   <div id="repairOut"></div>
 </div>
 
-<div id="matrixBox" style="display:none">
+<div id="matrixBox">
+  <div class="lockrow">
+    <h3>Re-sequence with a matrix</h3>
+    <span class="lock" id="matrixLock">Tier 5</span>
+  </div>
   <p class="note" id="matrixIntro"></p>
   <textarea id="matrixText" rows="6" spellcheck="false"
     placeholder="Paste a distance matrix &#8212; one row per stop, whitespace- or comma-separated, same time unit as your windows.&#10;# nodes: 0=DEPOT, 1=Arnold, 2=Beeston&#10;0.0 11.9 9.6&#10;11.9 0.0 20.8&#10;9.6 20.8 0.0"></textarea>
+  <div class="row">
+    <button id="matrixDemo" type="button">Load Nottingham matrix</button>
+  </div>
   <p class="note" id="matrixState"></p>
   <button id="runResequence" class="primary">Re-sequence (Enterprise Matrix)</button>
   <div id="resequenceOut"></div>
@@ -126,7 +176,23 @@ shift lengths are measured in clock time: on the night the clocks go forward, an
   not sent anywhere, and neither is your sheet.</p>
 </details>
 
+<details id="plansBox" style="margin-top:8px">
+  <summary>Plans &amp; upgrade</summary>
+  <p class="note" style="margin-top:4px">Every plan runs the same engine in this
+  sidebar. What you pay for is depth: how much of your schedule gets checked,
+  whether you get a reproducible digest to hand to a client, and whether the
+  tool repairs what it finds instead of only naming it.</p>
+  <div id="planCards"></div>
+  <ol class="steps" style="margin-top:10px">
+    <li>Click <b>Subscribe</b> on a plan. Checkout is handled by Stripe.</li>
+    <li>Copy the signed licence key emailed to the address you paid with.</li>
+    <li>Paste it into <b>Licence</b> above and press <b>Apply</b>. It is checked
+    here by public-key signature &mdash; never uploaded, and neither is your sheet.</li>
+  </ol>
+</details>
+
 <script>
+const L117_EXAMPLES = {"routes":"vehicle,seq,stop,window_open,window_close,travel_mins_from_previous\nVAN-01,0,DEPOT,0,600,0\nVAN-01,1,Bilborough,0,57,22.3\nVAN-01,2,Beeston,0,68,10.9\nVAN-01,3,Clifton,0,74,5.8\nVAN-01,4,DEPOT,0,600,21.0\nVAN-02,0,DEPOT,0,600,0\nVAN-02,1,W-Bridgford,0,42,7.1\nVAN-02,2,Arnold,0,18,17.1\nVAN-02,3,Hucknall,0,78,19.4\nVAN-02,4,DEPOT,0,600,32.8\nVAN-03,0,DEPOT,0,600,0\nVAN-03,1,Carlton,0,53,18.8\nVAN-03,2,Gedling,0,69,15.4\nVAN-03,3,Stapleford,0,93,24.4\nVAN-03,4,DEPOT,0,600,27.0\nVAN-04,0,DEPOT,0,600,0\nVAN-04,1,Long-Eaton,0,46,11.2\nVAN-04,2,Ilkeston,0,63,17.5\nVAN-04,3,Kimberley,0,84,20.7\nVAN-04,4,DEPOT,0,600,6.3\nVAN-05,0,DEPOT,0,600,0\nVAN-05,1,Bulwell,0,64,29.3\nVAN-05,2,Sherwood,0,74,51.1\nVAN-05,3,Mapperley,0,196,42.5\nVAN-05,4,DEPOT,0,600,22.2\nVAN-06,0,DEPOT,0,600,0\nVAN-06,1,Basford,0,63,28.2\nVAN-06,2,Wollaton,0,83,20.0\nVAN-06,3,Lenton,0,92,9.3\nVAN-06,4,DEPOT,0,600,17.2\nVAN-07,0,DEPOT,0,600,0\nVAN-07,1,Sneinton,0,57,22.1\nVAN-07,2,Colwick,0,26,10.4\nVAN-07,3,Netherfield,0,124,45.2\nVAN-07,4,DEPOT,0,600,27.2\nVAN-08,0,DEPOT,0,600,0\nVAN-08,1,Ruddington,0,56,21.4\nVAN-08,2,Keyworth,0,88,32.3\nVAN-08,3,Cotgrave,0,154,43.0\nVAN-08,4,DEPOT,0,600,30.2\n","timed":"vehicle,seq,stop,window_open,window_close,travel_mins_from_previous,depart\nVAN-11,0,DEPOT,0,1440,0,540\nVAN-11,1,Beeston,480,560,25,540\nVAN-11,2,Chilwell,480,620,28,540\nVAN-11,3,DEPOT,0,1440,30,540\nVAN-12,0,DEPOT,0,1440,0,500\nVAN-12,1,Sherwood,480,600,25,500\nVAN-12,2,Carlton,480,660,30,500\nVAN-12,3,DEPOT,0,1440,26,500\nVAN-13,0,DEPOT,0,1440,0,600\nVAN-13,1,Hucknall,480,700,40,600\nVAN-13,2,Bulwell,480,690,35,600\nVAN-13,3,DEPOT,0,1440,38,600\nVAN-14,0,DEPOT,0,1440,0,0\nVAN-14,1,Arnold,0,30,20,0\nVAN-14,2,Mapperley,0,25,20,0\nVAN-14,3,DEPOT,0,1440,18,0\n","rota":"Staff Name,Date,Shift Start,Shift End,Break (mins)\nNadia Okafor,2026-09-28,14:00,22:00,30\nNadia Okafor,2026-09-29,06:00,14:00,30\nTom Whitmore,2026-09-28,07:00,15:30,15\nTom Whitmore,2026-09-29,09:00,17:00,30\nPriya Raman,2026-09-28,08:00,16:00,30\nPriya Raman,2026-09-29,08:00,16:00,30\nMarcus Bell,2026-09-28,22:00,06:00,30\nMarcus Bell,2026-09-29,20:00,04:00,30\n","nottingham":"vehicle,seq,stop,window_open,window_close,travel_mins_from_previous,depart\nVAN-21,0,DEPOT,0,1440,0.0,540\nVAN-21,1,Arnold,480,615,11.9,540\nVAN-21,2,Beeston,480,615,20.8,540\nVAN-21,3,Bulwell,480,615,16.1,540\nVAN-21,4,Carlton,480,615,15.6,540\nVAN-21,5,Chilwell,480,615,22.0,540\nVAN-21,6,DEPOT,0,1440,13.2,540\n","matrix":"# Lattice117 distance matrix - minutes, Q16.16-safe to 1 dp\n# Derived from WGS84 locality centroids by Haversine great-circle\n# distance at a fixed 30 km/h urban average. Straight-line, NOT road\n# distance: see docs/FIXTURE-NOTTINGHAM.md for the coordinates and the\n# reasons this is a demonstration fixture and not a routing product.\n#\n# GENERATED by tools/fixture/nottingham.mjs - do not hand-edit. Regenerate\n# with `node tools/fixture/nottingham.mjs`; CI checks it is not stale.\n# nodes: 0=DEPOT, 1=Arnold, 2=Beeston, 3=Bulwell, 4=Carlton, 5=Chilwell\n0.0 11.9 9.6 11.0 9.3 13.2\n11.9 0.0 20.8 9.2 9.7 24.2\n9.6 20.8 0.0 16.1 18.6 3.5\n11.0 9.2 16.1 0.0 15.6 18.9\n9.3 9.7 18.6 15.6 0.0 22.0\n13.2 24.2 3.5 18.9 22.0 0.0\n"};
 /* ---- L117_DIGEST ---- */
 const L117_DIGEST = (function(){
 /**
@@ -1421,7 +1487,10 @@ async function loadWasm(){
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const { instance } = await WebAssembly.instantiate(bytes, {});
   wasm = instance.exports;
-  $('engine').textContent = `engine: WebAssembly, ${(bytes.length/1024).toFixed(1)} KB`;
+  /* Bytes, not KB. 21,525 bytes is 21.0 KiB and 21.5 kB, and the paper cites
+     the byte count — printing a KB figure invited exactly the "this badge is
+     stale" report it got. A byte count cannot be misread. */
+  $('engine').textContent = `engine: WebAssembly, ${bytes.length.toLocaleString('en-GB')} bytes`;
 }
 
 const mem = () => new DataView(wasm.memory.buffer);
@@ -1450,11 +1519,20 @@ function paintRepairGate(){
   const box = $('repairBox');
   if (!box) return;
   const can = !!ent.repair;
-  box.style.display = lastRun ? '' : 'none';
-  $('runRepair').disabled = !can;
+  /* Shown always, not only after a run and not only to people who have paid.
+     A capability nobody can see is a capability nobody buys, and hiding it
+     until after a check meant a first-time visitor on a blank sheet saw two
+     buttons and a licence box. Locked and explained beats absent.
+     setMode still hides it in rota mode, where it has no meaning. */
+  box.style.display = MODE === 'rota' ? 'none' : '';
+  const lock = $('repairLock');
+  lock.textContent = can ? 'unlocked' : 'Tier 4 \u00b7 \u00a3249/mo';
+  lock.className = 'lock' + (can ? ' open' : '');
+  $('runRepair').disabled = !can || !lastRun;
   $('repairIntro').innerHTML = can
-    ? 'Moves each round\u2019s departure to the latest time that still holds, then re-verifies with the same engine.'
-    : '<b>Enterprise Repair (\u00a3249/month).</b> Repairs a failing round by moving its departure, re-verifies it, and names the exact shortfall on anything re-timing cannot fix.';
+    ? 'Moves each round\u2019s departure to the latest time that still holds, re-verifies with the same engine, and shows the digest before and after. Where re-timing cannot fix a round it says so and gives the exact shortfall.'
+    : 'Catches a round that cannot work and <b>fixes it</b> rather than only flagging it: shifts the departure to the latest time that still holds, re-verifies with this same engine, and names the exact shortfall on anything re-timing cannot save. '
+      + 'See it run: load <b>Repairable routes</b> above, and the sample shows 2 of 4 rounds holding before and 3 of 4 after.';
 }
 
 async function runRepair(){
@@ -1540,12 +1618,16 @@ let loadedMatrix = null;
 function paintMatrixGate(){
   const can = !!ent.matrixSolver, box = $('matrixBox');
   if (!box) return;
-  box.style.display = lastRun ? '' : 'none';
+  box.style.display = MODE === 'rota' ? 'none' : '';
+  const lock = $('matrixLock');
+  lock.textContent = can ? 'unlocked' : 'Tier 5 \u00b7 \u00a3499/mo';
+  lock.className = 'lock' + (can ? ' open' : '');
   $('matrixText').disabled = !can;
-  $('runResequence').disabled = !can || !loadedMatrix;
+  $('matrixDemo').disabled = !can;
+  $('runResequence').disabled = !can || !loadedMatrix || !lastRun;
   $('matrixIntro').innerHTML = can
     ? 'Searches every order of each round’s interior stops against a matrix you paste, keeps the vehicle assignment you planned, then re-verifies with the same engine. Rounds with more than 8 interior stops are reported as unsearched.'
-    : '<b>Enterprise Matrix Optimizer (£499/month).</b> Re-orders the stops within a round against a distance matrix you supply — the one thing a route sheet cannot express — and proves the improvement with the same verifier that graded the original.';
+    : 'Re-orders the stops <b>within</b> a round against a distance matrix you supply \u2014 the one thing a route sheet cannot express \u2014 keeping the vehicle assignment you planned, and proves the saving with the same verifier that graded the original.<br>On the bundled Nottingham round that is <b>99.6 \u2192 60.2 minutes</b>, a 39.4-minute saving, and a round that breached its last window becomes one that holds.';
   if (!can){ $('matrixState').textContent = ''; return; }
   $('matrixState').innerHTML = loadedMatrix
     ? `Matrix loaded: <b>${loadedMatrix.n}×${loadedMatrix.n}</b>.`
@@ -1608,6 +1690,106 @@ async function runResequence(){
       + `<div class="digest"><b>digest before</b><br>${before}<br><br><b>digest after</b><br>${after}`
       + (fleet.isNoOp ? ' <i>(unchanged — no order moved)</i>' : '') + `</div>`;
   } catch (e){ out.innerHTML = `<div class="viol">Re-sequencing failed: ${e.message}</div>`; }
+}
+
+/* ---- onboarding, examples and pricing ----------------------------------- */
+/* A first-time visitor lands on a blank sheet. Before this, all they saw was
+   "Check selected rows" with nothing to check, a Clear button, and a licence
+   box quoting a free tier. No columns explained, no data to try, no sign that
+   the paid tiers do anything at all. Every one of those is a reason to close
+   the sidebar and not come back.
+
+   The examples are the files demo/ ships and tests/ pin, inlined at build time
+   as L117_EXAMPLES, so the digest a new user gets matches the documented one.
+   A worked example that has drifted from its fixture is worse than none. */
+
+const STRIPE = {
+  standard: 'https://buy.stripe.com/9B6dR8eSf5ZF2sn5LfgEg0g',
+  pro:      'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h',
+  tier4:    'https://buy.stripe.com/eVq00i6lJ3Rx6ID5LfgEg0i',
+  tier5:    'https://buy.stripe.com/14AfZg5hF87Nc2Xb5zgEg0j',
+};
+
+/* Deliberately operational, not regulatory. The white paper is explicit that
+   determinism is not correctness, discloses the spring-forward false negative,
+   and calls the rota check an indicative mathematical check rather than a
+   compliance claim. So nothing here promises compliance, certification or
+   legal cover: what is sold is catching and repairing a broken schedule before
+   dispatch, which is a thing this engine demonstrably does. */
+const PLANS = [
+  { key:'standard', name:'Standard', price:'£29', per:'per month',
+    what:'Every round and every person, not just the first. The full breach list.' },
+  { key:'pro', name:'Pro', price:'£99', per:'per month', hot:true,
+    what:'Everything in Standard, plus the reproducible SHA-256 verdict digest and JSON export — the artefact you hand a client so they can re-check the same schedule and get the same answer.' },
+  { key:'tier4', name:'Enterprise Repair', price:'£249', per:'per month',
+    what:'Repairs a failing round instead of only naming it: departure shifts that work, exact shortfalls on the ones that cannot be saved, digests before and after.' },
+  { key:'tier5', name:'Enterprise Matrix', price:'£499', per:'per month',
+    what:'Everything in Repair, plus re-sequencing the stops within a round against a distance matrix you supply. 99.6 → 60.2 minutes on the bundled Nottingham round.' },
+];
+
+const HOW = {
+  route: [
+    'Select your rows in the sheet, <b>including the header row</b> — or press an example below.',
+    'Columns are matched by name, and the names can be anything sensible: the <code>round</code>, the <code>stop</code>, when its window <code>opens</code> and <code>closes</code>, and the <code>travel time from the previous stop</code>. An optional <code>departure</code> column says when the vehicle leaves.',
+    'Press <b>Check selected rows</b>. Rounds that cannot work are named and highlighted in the sheet itself.',
+    'Then <b>Repair</b> to re-time what can be re-timed, or <b>Re-sequence</b> to re-order stops against a distance matrix.',
+  ],
+  rota: [
+    'Select your shift rows, <b>including the header row</b> — or press <b>Sample UK rota</b> below.',
+    'Columns matched by name: the <code>staff name</code>, the <code>date</code>, the <code>shift start</code> and <code>end</code>, and the <code>break</code> in minutes.',
+    'Press <b>Check selected rows</b>. Shifts that fall short of the configured rest and break rules are named and highlighted.',
+    'This is an indicative mathematical check against the rules configured here, not a compliance verdict — see the note below the result.',
+  ],
+};
+
+function paintHow(){
+  const steps = HOW[MODE === 'rota' ? 'rota' : 'route'];
+  $('howSteps').innerHTML = steps.map((t) => `<li>${t}</li>`).join('');
+  $('exampleBox').style.display = '';
+}
+
+function paintPlans(){
+  $('planCards').innerHTML = PLANS.map((p) => {
+    const mine = ent.tier === p.key;
+    const included =
+      (p.key === 'standard' && ent.certificate) ||
+      (p.key === 'pro' && ent.repair) ||
+      (p.key === 'tier4' && ent.matrixSolver);
+    const foot = mine
+      ? '<div class="current">Your current plan</div>'
+      : included
+        ? `<div class="current">Included in ${ent.label}</div>`
+        : `<a class="buy${p.hot ? ' hot' : ''}" href="${STRIPE[p.key]}" target="_blank" rel="noopener">Subscribe</a>`;
+    return `<div class="plan${mine ? ' mine' : ''}"><h4>${p.name}</h4>`
+      + `<div class="price">${p.price} <span>${p.per}</span></div>`
+      + `<p>${p.what}</p>${foot}</div>`;
+  }).join('');
+}
+
+/* Parses one of the inlined example files into a grid of strings for the sheet.
+   The matrix file is whitespace-separated with comment lines; everything else
+   is CSV. Comments are kept as a single first column so the provenance of the
+   numbers travels with them into the user's sheet. */
+function exampleGrid(key){
+  const text = L117_EXAMPLES[key] || '';
+  const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim() !== '');
+  if (key === 'matrix') {
+    return lines.map((l) => (l.startsWith('#') ? [l] : l.trim().split(/\s+/)));
+  }
+  return lines.map((l) => l.split(','));
+}
+
+function insertExample(key, label){
+  const state = $('exampleState');
+  state.textContent = 'Writing…';
+  google.script.run
+    .withSuccessHandler((row) => {
+      state.innerHTML = `Wrote <b>${label}</b> at row ${row}, and selected it. `
+        + 'Press <b>Check selected rows</b>.';
+      $('run').disabled = false;
+    })
+    .withFailureHandler((e) => { state.innerHTML = `<b>Could not write:</b> ${e.message}`; })
+    .writeExample(exampleGrid(key));
 }
 
 /* ---- column matching (same vocabulary as the other surfaces) ------------- */
@@ -1681,6 +1863,7 @@ async function refreshTier(){
   ent = await currentEntitlement();
   if (typeof paintRepairGate === 'function') paintRepairGate();
   if (typeof paintMatrixGate === 'function') paintMatrixGate();
+  if (typeof paintPlans === 'function') paintPlans();
   const t = $('tier');
   t.textContent = 'tier: ' + ent.label.toLowerCase();
   t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
@@ -1700,6 +1883,12 @@ function setMode(m){
   $('routeNote').style.display = m === 'rota' ? 'none' : '';
   $('rotaNote').style.display  = m === 'rota' ? '' : 'none';
   $('run').textContent = m === 'rota' ? 'Check selected shifts' : 'Check selected rows';
+  /* Repair and Re-sequence are route concepts. In rota mode they would be dead
+     controls with an upsell attached, which is the worst of both. */
+  const route = m !== 'rota';
+  $('repairBox').style.display = route ? '' : 'none';
+  $('matrixBox').style.display = route ? '' : 'none';
+  paintHow();
   $('out').innerHTML = ''; $('err').textContent = '';
 }
 
@@ -1863,6 +2052,14 @@ $('run')      .addEventListener('click', run);
 $('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
 $('runRepair').addEventListener('click', runRepair);
 $('runResequence').addEventListener('click', runResequence);
+$('exRoutes').addEventListener('click', () => insertExample('routes', 'the sample fleet'));
+$('exTimed').addEventListener('click', () => insertExample('timed', 'the repairable rounds'));
+$('exRota').addEventListener('click', () => insertExample('rota', 'the sample UK rota'));
+$('exNottingham').addEventListener('click', () => insertExample('nottingham', 'the Nottingham round'));
+$('matrixDemo').addEventListener('click', () => {
+  $('matrixText').value = L117_EXAMPLES.matrix;
+  loadMatrixFromText();
+});
 $('matrixText').addEventListener('input', loadMatrixFromText);
 /* Test hook — relaxes the UI gate only; it cannot mint or alter a licence.
    Defaults to tier5; pass 'tier4' to check the matrix panel is genuinely gated. */
@@ -1884,6 +2081,7 @@ $('licApply').addEventListener('click', async () => {
 $('licRemove').addEventListener('click', async () => { clearLicence(); await refreshTier(); });
 
 refreshTier();
+paintHow();
 loadWasm().then(() => { $('run').disabled = false; })
   .catch(e => { $('engine').textContent = 'engine: failed'; $('err').textContent = e.message; });
 
