@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Brand asset</title>
+<style>
+  :root{ --bg:#07090e; --ink:#e8eef6; --ink-dim:#94a3b8; --ok:#10b981; }
+  *{box-sizing:border-box} html,body{margin:0}
+  /* The id rules below set display, which outranks the UA stylesheet's
+     [hidden]{display:none} — without this both assets render stacked. */
+  [hidden]{display:none !important}
+  body{background:var(--bg); color:var(--ink); overflow:hidden;
+       font:400 14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .mesh{position:fixed; inset:-30%;
+    background:
+      radial-gradient(50% 50% at 24% 16%, rgba(16,185,129,.30), transparent 62%),
+      radial-gradient(46% 46% at 84% 26%, rgba(14,165,233,.22), transparent 60%),
+      radial-gradient(54% 50% at 58% 98%, rgba(99,102,241,.22), transparent 64%);}
+
+  /* ---- 128x128 app icon ------------------------------------------------ */
+  #icon{position:relative; width:128px; height:128px;
+        display:grid; place-items:center;}
+  #icon svg{width:74px; height:74px; overflow:visible}
+
+  /* ---- 220x140 promo tile ---------------------------------------------- */
+  #promo{position:relative; width:220px; height:140px; padding:14px 15px;
+         display:flex; flex-direction:column; justify-content:space-between;}
+  #promo .row{display:flex; align-items:center; gap:8px}
+  #promo svg{width:22px; height:22px; flex:none}
+  #promo .name{font-size:14.5px; font-weight:700; letter-spacing:-.01em}
+  #promo .line{font-size:11.5px; line-height:1.35; color:var(--ink-dim)}
+  #promo .chip{align-self:flex-start; font-size:9.5px; letter-spacing:.07em;
+    text-transform:uppercase; font-weight:600; color:var(--ok); padding:4px 8px;
+    border-radius:999px; border:1px solid rgba(16,185,129,.36);
+    background:rgba(16,185,129,.10);}
+</style></head><body>
+<div class="mesh"></div>
+
+<div id="icon" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3"
+       stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 6 9 17l-5-5"/>
+  </svg>
+</div>
+
+<div id="promo" hidden>
+  <div class="row">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3"
+         stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <span class="name">Lattice117</span>
+  </div>
+  <div class="line">Schedule &amp; rota checks that run entirely in your spreadsheet.</div>
+  <span class="chip">No data leaves</span>
+</div>
+
+<script>
+  const which = new URLSearchParams(location.search).get('a') || 'icon';
+  document.getElementById(which).hidden = false;
+  document.body.style.width  = which === 'icon' ? '128px' : '220px';
+  document.body.style.height = which === 'icon' ? '128px' : '140px';
+</script></body></html>

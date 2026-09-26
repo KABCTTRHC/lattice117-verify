@@ -1,0 +1,74 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Store frame</title>
+<style>
+  /* A product shot, not a mock of a host application. The surface below is the
+     real page rendered live in an iframe; the frame adds only a caption and a
+     ground for it to sit on. Nothing here imitates Excel or Sheets chrome. */
+  :root{ --bg:#07090e; --ink:#e8eef6; --ink-dim:#94a3b8; --ok:#10b981;
+         --accent:#0ea5e9; --indigo:#6366f1; --line:rgba(255,255,255,.08); }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:400 15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:grid; grid-template-columns:1fr auto; align-items:center;
+    gap:56px; padding:56px 64px; overflow:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:-20%; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(48% 42% at 18% 12%, rgba(16,185,129,.16), transparent 62%),
+      radial-gradient(44% 40% at 86% 20%, rgba(14,165,233,.14), transparent 60%),
+      radial-gradient(52% 46% at 62% 96%, rgba(99,102,241,.13), transparent 64%);
+    filter:blur(6px);
+  }
+  .copy{position:relative; z-index:1; max-width:620px}
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px; margin:0 0 20px;
+    padding:7px 13px; border-radius:999px; font-size:12.5px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--ok); font-weight:600;
+    border:1px solid rgba(16,185,129,.34); background:rgba(16,185,129,.09);
+  }
+  .eyebrow b{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+  h1{margin:0 0 16px; font-size:41px; line-height:1.1; letter-spacing:-.022em; font-weight:700}
+  h1 em{font-style:normal; color:var(--ok)}
+  p{margin:0 0 22px; font-size:17px; line-height:1.55; color:var(--ink-dim); max-width:560px}
+  ul{margin:0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:9px}
+  li{
+    font-size:13px; padding:7px 12px; border-radius:8px; color:var(--ink-dim);
+    border:1px solid var(--line); background:rgba(17,24,39,.6);
+  }
+  li.on{color:var(--ok); border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.08)}
+  .stage{position:relative; z-index:1; flex:none}
+  .stage iframe{
+    display:block; border:0; border-radius:14px;
+    background:var(--bg);
+    border:1px solid rgba(255,255,255,.1);
+    box-shadow:0 30px 70px -18px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.04);
+  }
+  .foot{
+    position:fixed; left:64px; bottom:22px; z-index:1;
+    font-size:12.5px; color:#64748b; letter-spacing:.02em;
+  }
+</style></head><body>
+  <div class="copy">
+    <span class="eyebrow"><b></b><span id="eyebrow">Runs on your machine</span></span>
+    <h1 id="head"></h1>
+    <p id="sub"></p>
+    <ul id="tags"></ul>
+  </div>
+  <div class="stage"><iframe id="f" title="Lattice117"></iframe></div>
+  <div class="foot">Lattice117 · Brierley Sovereign Group Ltd, Nottingham</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('head').innerHTML  = q.get('head')  || '';
+  document.getElementById('sub').textContent = q.get('sub')   || '';
+  if (q.get('eyebrow')) document.getElementById('eyebrow').textContent = q.get('eyebrow');
+  document.getElementById('tags').innerHTML =
+    (q.get('tags')||'').split('|').filter(Boolean)
+      .map((t,i)=>`<li class="${i===0?'on':''}">${t}</li>`).join('');
+  const f = document.getElementById('f');
+  f.style.width  = (q.get('w') || 430) + 'px';
+  f.style.height = (q.get('h') || 640) + 'px';
+  f.src = q.get('src');
+</script></body></html>
