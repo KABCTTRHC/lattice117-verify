@@ -31,7 +31,7 @@
        generated once per published add-in and then never changed — changing it
        makes every existing install look like a different add-in. -->
   <Id>c37d5590-205e-44a0-94dc-ee35ce9aae95</Id>
-  <Version>0.2.0.0</Version>
+  <Version>1.0.0.0</Version>
   <ProviderName>Brierley Sovereign Group Ltd</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
   <DisplayName DefaultValue="Lattice117 Schedule Check"/>
