@@ -78,6 +78,7 @@ console.log('\nSidebar.html is genuinely self-contained');
     ['demo/rota.js',     'restMinutes: 660'],
     ['demo/licence.js',  'lattice117.licence'],
     ['demo/freetier.js', 'routeStops: 6'],
+    ['demo/repair.js',   'latestFeasibleDeparture'],
   ]) {
     ok(`${file.split('/')[1]} is inlined`, html.includes(marker) && read(file).includes(marker));
   }

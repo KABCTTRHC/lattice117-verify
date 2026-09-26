@@ -37,6 +37,7 @@ const OUT = join(HERE, 'Sidebar.html');
 const MODULES = [
   ['digest.js',   'L117_DIGEST'],
   ['rota.js',     'L117_ROTA'],
+  ['repair.js',   'L117_REPAIR'],
   ['licence.js',  'L117_LICENCE'],
   ['freetier.js', 'L117_FREETIER'],
 ];

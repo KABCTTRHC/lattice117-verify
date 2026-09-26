@@ -83,6 +83,11 @@
 </div>
 
 <button id="run" class="primary" disabled>Check selected rows</button>
+<div id="repairBox" style="display:none">
+  <p class="note" id="repairIntro"></p>
+  <button id="runRepair" class="primary">Repair these rows</button>
+  <div id="repairOut"></div>
+</div>
 <button id="clear">Clear highlighting</button>
 
 <div id="out"></div>
@@ -123,6 +128,7 @@ const WASM_B64 = "__WASM_B64__";
 const $ = (id) => document.getElementById(id);
 const { verdictDigest, rotaDigest } = L117_DIGEST;
 const { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } = L117_ROTA;
+const { repairFixedSequence, roundsFromRows, fromQ: qUnits } = L117_REPAIR;
 const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
 const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
 
@@ -153,6 +159,55 @@ const toQ = (v, what) => {
 };
 const fmt = (v) => (v/Q).toFixed(4);
 
+/* ---- Tier 4 repair ------------------------------------------------------
+   Same pipeline as the browser page and the Excel pane: the solver proposes
+   departure shifts and never touches a digest; the SAME inlined WebAssembly
+   verifier that produced digest_before is re-run for digest_after. The
+   departure is folded into the first leg for evaluation only — the canonical
+   form keeps `depart` as its own field. */
+let lastRun = null;
+
+function paintRepairGate(){
+  const box = $('repairBox');
+  if (!box) return;
+  const can = !!ent.repair;
+  box.style.display = lastRun ? '' : 'none';
+  $('runRepair').disabled = !can;
+  $('repairIntro').innerHTML = can
+    ? 'Moves each round\u2019s departure to the latest time that still holds, then re-verifies with the same engine.'
+    : '<b>Enterprise Repair (\u00a3249/month).</b> Repairs a failing round by moving its departure, re-verifies it, and names the exact shortfall on anything re-timing cannot fix.';
+}
+
+async function runRepair(){
+  if (!lastRun || !ent.repair) return;
+  const out = $('repairOut');
+  try {
+    const before = await verdictDigest(lastRun.canonRoutes, lastRun.canonVerdict);
+    const fix = repairFixedSequence(roundsFromRows(lastRun.canonRoutes));
+    const shift = new Map(fix.changes.map(c => [c.roundId, qUnits(c.toQ)]));
+    let after = before;
+    if (shift.size){
+      const routes = lastRun.canonRoutes.map(r => shift.has(r.id) ? { ...r, depart: shift.get(r.id) } : r);
+      const verdict = routes.map(r => {
+        const d = shift.get(r.id) ?? 0;
+        const stops = r.stops.map((st, i) => i === 1 ? { ...st, travel: Number(st.travel) + d } : st);
+        const o = verifyRoute(stops);
+        if (o[0] === 0) return { id: r.id, feasible: true, violation: null };
+        const s = stops[o[1]];
+        return { id: r.id, feasible: false, violation: { stop: s?.id ?? String(o[1]),
+          raw: { arrival: o[2], windowClose: o[3], deficit: o[4] } } };
+      });
+      after = await verdictDigest(routes, verdict);
+    }
+    const rows = fix.changes.map(c => `<div class="viol"><b>${c.roundId}</b> re-timed ${qUnits(c.fromQ)} \u2192 <b>${qUnits(c.toQ)}</b></div>`).join('');
+    const res = fix.residual.map(r => `<div class="viol"><b>${r.roundId}</b> \u2014 ${r.stopId} short by <b>${qUnits(r.deficitQ)}</b><br><small>needs re-sequencing \u2014 Enterprise Matrix</small></div>`).join('');
+    out.innerHTML = `<div class="note"><b>${fix.feasibleBefore} of ${fix.roundsTotal}</b> held before, <b>${fix.feasibleAfter} of ${fix.roundsTotal}</b> after.</div>`
+      + rows + res
+      + `<div class="digest"><b>digest before</b><br>${before}<br><br><b>digest after</b><br>${after}`
+      + (shift.size ? '' : ' <i>(unchanged \u2014 no departure moved)</i>') + `</div>`;
+  } catch (e) { out.innerHTML = `<div class="viol">Repair failed: ${e.message}</div>`; }
+}
+
 function verifyRoute(stops){
   const k = stops.length;
   const dist = new Array(k*k).fill(0);
@@ -175,6 +230,9 @@ const FIELDS=[
   {key:'close',  hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'],avoid:[]},
   {key:'travel', hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'],avoid:[]},
   {key:'seq',    hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'],avoid:[]},
+  /* Optional, and the only column Tier 4 repair needs. Absent means "leaves at
+     zero", so a sheet without it hashes exactly as it always did. */
+  {key:'depart', hints:['depart','departure','leave','leaves','leavetime','departtime','setoff','rollout'],avoid:['window']},
 ];
 const ROTA_FIELDS=[
   {key:'staff',hints:['staff','name','employee','worker','person','operative','carer','colleague','id','payroll'],avoid:['shift','site','ward','team','role']},
@@ -233,6 +291,7 @@ const host = {
 /* ---- licence ------------------------------------------------------------- */
 async function refreshTier(){
   ent = await currentEntitlement();
+  if (typeof paintRepairGate === 'function') paintRepairGate();
   const t = $('tier');
   t.textContent = 'tier: ' + ent.label.toLowerCase();
   t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
@@ -284,6 +343,7 @@ async function runRoutes(grid, headers, map){
     rounds.get(veh).push({
       id: String(row[map.stop] ?? `row${r+1}`).trim(),
       open: row[map.open] ?? 0, close: row[map.close] ?? 0, travel: row[map.travel] ?? 0,
+      depart: map.depart !== undefined ? row[map.depart] : undefined,
       seq: map.seq !== undefined ? Number(row[map.seq]) : r,
       sheetRow: r + 1,
     });
@@ -303,7 +363,8 @@ async function runRoutes(grid, headers, map){
   for (const r of routes){
     if (r.stops.length < 2){ fails.push({ veh: r.vehicle, msg: 'only one stop' }); continue; }
     const o = verifyRoute(r.stops);
-    canonRoutes.push({ id: r.vehicle, stops: r.stops.map(s => ({ id: s.id, open: s.open, close: s.close, travel: s.travel })) });
+    const depart = r.stops.find(x => x.depart !== undefined && x.depart !== '')?.depart ?? 0;
+    canonRoutes.push({ id: r.vehicle, depart, stops: r.stops.map(s => ({ id: s.id, open: s.open, close: s.close, travel: s.travel })) });
     if (o[0] === 0){ feasible++; canonVerdict.push({ id: r.vehicle, feasible: true, violation: null }); }
     else if (o[0] === 1){
       const s = r.stops[o[1]];
@@ -336,6 +397,8 @@ async function runRoutes(grid, headers, map){
   if (shown.hiddenCount)
     html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
   $('out').innerHTML = html;
+  lastRun = { canonRoutes, canonVerdict };
+  paintRepairGate();
   await emitDigest(() => verdictDigest(canonRoutes, canonVerdict), 'verdict digest');
 }
 
@@ -409,6 +472,10 @@ $('modeRoute').addEventListener('click', () => setMode('route'));
 $('modeRota') .addEventListener('click', () => setMode('rota'));
 $('run')      .addEventListener('click', run);
 $('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
+$('runRepair').addEventListener('click', runRepair);
+/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence. */
+window.__grant = () => { ent = { ...ent, tier:'tier4', maxRounds:Infinity, certificate:true,
+  repair:true, matrixSolver:true, label:'Enterprise Repair' }; paintRepairGate(); };
 $('licApply').addEventListener('click', async () => {
   const k = $('licKey').value.trim();
   const probe = await verifyLicence(k);

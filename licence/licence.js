@@ -63,26 +63,26 @@ const TIERS = Object.freeze({
   tier5:    { maxRounds: Infinity, certificate: true, repair: true, matrixSolver: true,  label: 'Enterprise Matrix' },
 });
 
-/* Aliases accepted on an issued key, so a licence minted as `enterprise_249`
-   grants exactly what `tier4` grants. Kept explicit rather than pattern-matched:
-   an unrecognised tier degrades to Standard by design, and a silent degrade is
-   the correct failure for a typo but the wrong one for a name we chose. */
-const TIER_ALIASES = Object.freeze({
-  enterprise_249: 'tier4',
-  enterprise_499: 'tier5',
-});
+/* One slug per tier, and no aliases.
+   `enterprise_249` and `enterprise_499` were removed: two names for one
+   entitlement is the same drift hazard as two canonicalisations for one
+   schedule (§5.3 of the determinism paper). A price is not an identity —
+   moving Tier 4 to £299 would have left a slug called `enterprise_249`
+   granting it, which is how a naming convention becomes a lie. */
 
 /** Canonical tier name for an issued string, or null if it is not one of ours. */
 export function canonicalTier(name) {
   const t = String(name ?? '').trim();
-  if (Object.prototype.hasOwnProperty.call(TIERS, t)) return t;
-  if (Object.prototype.hasOwnProperty.call(TIER_ALIASES, t)) return TIER_ALIASES[t];
-  return null;
+  return Object.prototype.hasOwnProperty.call(TIERS, t) ? t : null;
 }
 
-/** Every tier name that may legitimately be issued, aliases included. */
+/* Every tier a key may be minted for.
+   `standard` is here, not only in verification, because it is a live product
+   with a live Stripe link at £29/month — dropping it would leave a paying
+   customer unable to receive a key at all. `free` is excluded because it is
+   the absence of a licence, not a licence. */
 export const ISSUABLE_TIERS = Object.freeze(
-  [...Object.keys(TIERS), ...Object.keys(TIER_ALIASES)].filter((t) => t !== 'free'),
+  Object.keys(TIERS).filter((t) => t !== 'free'),
 );
 
 const unb64u = (s) => {
@@ -121,6 +121,10 @@ export async function verifyLicence(licence) {
     if (p.exp * 1000 < Date.now()) {
       return { ...FREE_TIER, reason: `expired ${new Date(p.exp * 1000).toISOString().slice(0, 10)}` };
     }
+    /* An unrecognised tier degrades to Standard rather than refusing outright:
+       a key that was mis-issued should under-deliver and get reported, not
+       silently hand out a paid feature. issue.mjs refuses unknown tiers at
+       mint time so this path only ever sees a forged or corrupted key. */
     const canonical = canonicalTier(p.tier);
     const grant = canonical ? TIERS[canonical] : TIERS.standard;
     return {

@@ -14,12 +14,14 @@ const eq = (name, got, want) => {
   ok ? pass++ : fail++;
 };
 
-console.log('\nTier names resolve, including the paid aliases');
-eq('tier4 is itself',            canonicalTier('tier4'), 'tier4');
-eq('tier5 is itself',            canonicalTier('tier5'), 'tier5');
-eq('enterprise_249 -> tier4',    canonicalTier('enterprise_249'), 'tier4');
-eq('enterprise_499 -> tier5',    canonicalTier('enterprise_499'), 'tier5');
-eq('pro still resolves',         canonicalTier('pro'), 'pro');
+console.log('\nOne slug per tier, and no aliases');
+eq('tier4 resolves',             canonicalTier('tier4'), 'tier4');
+eq('tier5 resolves',             canonicalTier('tier5'), 'tier5');
+eq('pro resolves',               canonicalTier('pro'), 'pro');
+// Removed deliberately: two names for one entitlement is the same drift hazard
+// as two canonicalisations for one schedule, and a price is not an identity.
+eq('enterprise_249 is gone',     canonicalTier('enterprise_249'), null);
+eq('enterprise_499 is gone',     canonicalTier('enterprise_499'), null);
 // The degrade-to-Standard fallback is correct for a forged key and wrong for a
 // typo at issue time, which is why issue.mjs refuses rather than relying on it.
 eq('an unknown tier is null, not Standard', canonicalTier('tier_5'), null);
@@ -43,6 +45,28 @@ console.log('\nissue.mjs cannot drift from the tiers licence.js enforces');
   eq('free is not issuable', ISSUABLE_TIERS.includes('free'), false);
   eq('both enterprise tiers are issuable',
      ISSUABLE_TIERS.includes('tier4') && ISSUABLE_TIERS.includes('tier5'), true);
+  // standard is a live product at £29/month with a live Stripe link. If it
+  // ever stops being issuable, a paying customer cannot receive a key.
+  eq('standard is still issuable', ISSUABLE_TIERS.includes('standard'), true);
+  eq('exactly one slug per tier', ISSUABLE_TIERS.length, 5);
+  eq('no alias slugs survive',
+     ISSUABLE_TIERS.filter((t) => /^enterprise_/.test(t)), []);
+}
+
+console.log('\nAnything with a live Stripe link must be issuable');
+{
+  // The failure this catches is silent and expensive: a card takes money for a
+  // tier whose slug issue.mjs refuses, so the customer pays and no key exists.
+  const page = readFileSync(new URL('../demo/audit.html', import.meta.url), 'utf8');
+  for (const [constant, tier] of [
+    ['STANDARD_STRIPE_URL', 'standard'],
+    ['PRO_STRIPE_URL', 'pro'],
+    ['TIER4_STRIPE_URL', 'tier4'],
+    ['TIER5_STRIPE_URL', 'tier5'],
+  ]) {
+    const live = new RegExp(`${constant}\\s*=\\s*'https`).test(page);
+    if (live) eq(`${tier} is for sale and issuable`, ISSUABLE_TIERS.includes(tier), true);
+  }
 }
 
 console.log('\nEvery surface carries the same licence module');

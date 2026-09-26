@@ -84,6 +84,12 @@
 <button id="clear" class="secondary">Clear highlighting</button>
 
 <div id="out"></div>
+
+<div id="repairBox" style="display:none">
+  <p class="note" id="repairIntro"></p>
+  <button id="runRepair" class="primary">Repair this sheet</button>
+  <div id="repairOut"></div>
+</div>
 <div class="err" id="err"></div>
 
 <details id="licBox">
@@ -114,6 +120,7 @@ the previous stop. Names can be anything.</p>
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
+import { repairFixedSequence, roundsFromRows, fromQ as qUnits } from './repair.js';
 import { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } from './rota.js';
 
 const Q=65536, QMAX=32767, QMIN=-32768;
@@ -130,6 +137,7 @@ let ent={tier:'free',maxRounds:1,certificate:false,label:'Free'};
 
 async function refreshTier(){
   ent=await currentEntitlement();
+  if(typeof paintRepairGate==='function') paintRepairGate();
   const b=$('tier');
   b.textContent='tier: '+ent.label.toLowerCase();
   b.className='badge'+(ent.tier!=='free'?' live':'');
@@ -174,10 +182,68 @@ function verifyRoute(stops){
   return o;
 }
 
+/* ---- Tier 4 repair ------------------------------------------------------ */
+/* Identical pipeline to the browser page: the solver proposes departure shifts
+   and never touches a digest, then the SAME WebAssembly verifier that produced
+   digest_before is re-run to produce digest_after. A departure is folded into
+   the first leg for evaluation only — the canonical form keeps `depart` as its
+   own field, so the digest describes the schedule a planner would run. */
+let lastRun=null;
+
+function paintRepairGate(){
+  const can=!!ent.repair, box=document.getElementById('repairBox');
+  if(!box) return;
+  box.style.display = lastRun ? '' : 'none';
+  document.getElementById('runRepair').disabled = !can;
+  document.getElementById('repairIntro').innerHTML = can
+    ? 'Moves each round\u2019s departure to the latest time that still holds, then re-verifies with the same engine.'
+    : '<b>Enterprise Repair (\u00a3249/month).</b> Repairs a failing round by moving its departure, re-verifies it, and names the exact shortfall on anything re-timing cannot fix.';
+}
+
+async function runRepair(){
+  if(!lastRun || !ent.repair) return;
+  const out=document.getElementById('repairOut');
+  try{
+    const before=await sharedDigest(lastRun.canonRoutes, lastRun.canonVerdict);
+    const fix=repairFixedSequence(roundsFromRows(lastRun.canonRoutes));
+    const shift=new Map(fix.changes.map(c=>[c.roundId, qUnits(c.toQ)]));
+
+    let after=before;
+    if(shift.size){
+      const routes=lastRun.canonRoutes.map(r=>{
+        if(!shift.has(r.id)) return r;
+        return {...r, depart:shift.get(r.id)};
+      });
+      const verdict=routes.map(r=>{
+        const d=shift.get(r.id)??0;
+        // Re-verify through the untouched engine, departure folded into leg 1.
+        const stops=r.stops.map((st,i)=> i===1 ? {...st, travel:Number(st.travel)+d} : st);
+        const o=verifyRoute(stops);
+        if(o[0]===0) return {id:r.id, feasible:true, violation:null};
+        const s=stops[o[1]];
+        return {id:r.id, feasible:false, violation:{stop:s?.id??String(o[1]),
+          raw:{arrival:o[2], windowClose:o[3], deficit:o[4]}}};
+      });
+      after=await sharedDigest(routes, verdict);
+    }
+
+    const rows=fix.changes.map(c=>`<div class="viol"><b>${c.roundId}</b> re-timed ${qUnits(c.fromQ)} \u2192 <b>${qUnits(c.toQ)}</b></div>`).join('');
+    const res=fix.residual.map(r=>`<div class="viol"><b>${r.roundId}</b> \u2014 ${r.stopId} short by <b>${qUnits(r.deficitQ)}</b><br><small>needs re-sequencing \u2014 Enterprise Matrix</small></div>`).join('');
+    out.innerHTML=`<div class="card"><b>${fix.feasibleBefore} of ${fix.roundsTotal}</b> held before, <b>${fix.feasibleAfter} of ${fix.roundsTotal}</b> after.</div>`
+      +rows+res
+      +`<div class="digest"><b>digest before</b><br>${before}<br><br><b>digest after</b><br>${after}`
+      +(shift.size?'':' <i>(unchanged \u2014 no departure moved)</i>')+`</div>`;
+  }catch(e){ out.innerHTML=`<div class="viol">Repair failed: ${e.message}</div>`; }
+}
+
 /* ---- column matching --------------------------------------------------- */
 const FIELDS=[
   {key:'vehicle',hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'],avoid:[]},
   {key:'stop',   hints:['stop','location','site','customer','drop','address','name','point','deliverypoint','premises'],avoid:['no','num','seq','order','index','count']},
+  /* Optional, and the only column Tier 4 repair needs. Absent means "leaves at
+     zero", which is what this schema has always meant, so a sheet without it
+     hashes exactly as before. 'start' is not a hint — that is window-opens. */
+  {key:'depart', hints:['depart','departure','leave','leaves','leavetime','departtime','setoff','rollout'],avoid:['window']},
   {key:'open',   hints:['open','ready','earliest','from','start','windowopen','twstart','earliestarrival'],avoid:[]},
   {key:'close',  hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'],avoid:[]},
   {key:'travel', hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'],avoid:[]},
@@ -257,6 +323,10 @@ $('modeRoute').addEventListener('click',()=>setMode('route'));
 $('modeRota').addEventListener('click',()=>setMode('rota'));
 
 $('run').addEventListener('click',run);
+$('runRepair').addEventListener('click',runRepair);
+/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence.
+   Tier resolution is covered by tests/tiers.test.mjs. */
+window.__grant=()=>{ ent={...ent, tier:'tier4', maxRounds:Infinity, certificate:true, repair:true, matrixSolver:true, label:'Enterprise Repair'}; paintRepairGate(); };
 $('clear').addEventListener('click',clearHighlight);
 
 $('licApply').addEventListener('click',async()=>{
@@ -303,6 +373,7 @@ async function run(){
           id:String(row[map.stop]??`row${r+1}`).trim(),
           open:row[map.open]??0, close:row[map.close]??0, travel:row[map.travel]??0,
           seq: map.seq!==undefined ? Number(row[map.seq]) : r,
+          depart: map.depart!==undefined ? row[map.depart] : undefined,
           sheetRow: rng.rowIndex + r,
         });
       }
@@ -324,7 +395,8 @@ async function run(){
         stops[0].travel=0;                      // nothing precedes the first stop
         if(stops.length<2){ fails.push({veh,msg:'only one stop'}); continue; }
         const o=verifyRoute(stops);
-        canonRoutes.push({id:veh, stops:stops.map(st=>({
+        const depart = stops.find(x=>x.depart!==undefined&&x.depart!=='')?.depart ?? 0;
+        canonRoutes.push({id:veh, depart, stops:stops.map(st=>({
           id:st.id, open:st.open, close:st.close, travel:st.travel}))});
         if(o[0]===0){
           feasible++;
@@ -339,6 +411,8 @@ async function run(){
         } else fails.push({veh,msg:'rejected before evaluation'});
       }
 
+      lastRun={canonRoutes,canonVerdict};
+      paintRepairGate();
       await render(checked,feasible,fails,headers,map,rounds.size,canonRoutes,canonVerdict);
 
       // Colour the offending rows in the sheet itself.
