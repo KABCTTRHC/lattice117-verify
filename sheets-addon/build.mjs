@@ -38,6 +38,7 @@ const MODULES = [
   ['digest.js',   'L117_DIGEST'],
   ['rota.js',     'L117_ROTA'],
   ['repair.js',   'L117_REPAIR'],
+  ['resequence.js', 'L117_RESEQ'],
   ['licence.js',  'L117_LICENCE'],
   ['freetier.js', 'L117_FREETIER'],
 ];

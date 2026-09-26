@@ -62,8 +62,9 @@
         background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--ink)}
   details{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--glass-2)}
   summary{cursor:pointer;font:600 11.5px var(--sans);color:var(--ink-dim)}
-  #licKey{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
+  #licKey,#matrixText{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
           border:1px solid var(--line);background:rgba(8,11,18,.55);color:var(--ink)}
+  #matrixText{resize:vertical;min-height:84px;box-sizing:border-box}
   .row{display:flex;gap:6px} .row button{margin-bottom:0}
 </style>
 </head>
@@ -87,6 +88,15 @@
   <p class="note" id="repairIntro"></p>
   <button id="runRepair" class="primary">Repair these rows</button>
   <div id="repairOut"></div>
+</div>
+
+<div id="matrixBox" style="display:none">
+  <p class="note" id="matrixIntro"></p>
+  <textarea id="matrixText" rows="6" spellcheck="false"
+    placeholder="Paste a distance matrix &#8212; one row per stop, whitespace- or comma-separated, same time unit as your windows.&#10;# nodes: 0=DEPOT, 1=Arnold, 2=Beeston&#10;0.0 11.9 9.6&#10;11.9 0.0 20.8&#10;9.6 20.8 0.0"></textarea>
+  <p class="note" id="matrixState"></p>
+  <button id="runResequence" class="primary">Re-sequence (Enterprise Matrix)</button>
+  <div id="resequenceOut"></div>
 </div>
 <button id="clear">Clear highlighting</button>
 
@@ -722,6 +732,317 @@ function fromQ(q) {
 return { arrivals, latestFeasibleDeparture, violations, repairFixedSequence, roundsFromRows, fromQ };
 })();
 
+/* ---- L117_RESEQ ---- */
+const L117_RESEQ = (function(){
+/**
+ * Tier 5 — per-vehicle re-sequencing against a supplied distance matrix,
+ * browser side.
+ *
+ * A port of `crates/lattice117-solve/src/resequence.rs`, which is the reference
+ * implementation. Two implementations of one algorithm is the structural hazard
+ * §5.3 of the white paper is about, so `tests/resequence.test.mjs` asserts the
+ * same cases and the same integers as the Rust tests — including the Nottingham
+ * benchmark's 6 527 386 -> 3 945 267 — and says so when they diverge.
+ *
+ * Why a port at all: the referee is the published 21,525-byte WASM binary and it
+ * must not change when the solver does. Keeping the solver outside that module
+ * is what lets `digest_after` come from the same engine that produced every
+ * digest in the paper and in the nine device captures.
+ *
+ * # What this does and does not decide
+ *
+ * The vehicle assignment is an input. A sheet that names `VAN-21` carries a
+ * decision a planner made, usually encoding things no matrix knows — driver
+ * knowledge, vehicle type, customer relationships, bay allocation — and
+ * re-clustering the fleet throws all of it away. Only the order *within* each
+ * round is searched, and the first and last stops stay pinned because a vehicle
+ * that starts somewhere other than its depot is a different problem.
+ *
+ * # Exhaustive, and where it stops
+ *
+ * Up to EXACT_LIMIT interior stops every permutation is evaluated and the
+ * optimum returned — not a heuristic's guess at one. That is 8! = 40,320 orders
+ * at the limit, trivial for a browser, and it means the result carries no tuning
+ * parameters at all: no iteration budget, no temperature, no seed. Above the
+ * limit the round comes back untouched with `searched: false`, because reporting
+ * "not searched" is honest and labelling a heuristic result "optimal" is not.
+ *
+ * # Determinism
+ *
+ * Candidates rank by `(infeasible, cost, sequence)`. Feasibility dominates cost
+ * — a cheaper route that misses a window is not an improvement — and the
+ * sequence breaks remaining ties by position, so the lowest index wins at the
+ * first place two tied orders differ. That rule is total: no two distinct orders
+ * compare equal, so the search has exactly one answer and it does not depend on
+ * generation order. On a symmetric matrix a round and its exact reverse cost the
+ * same and the forward one is always returned.
+ */
+
+const Q = 65536;
+
+/** Interior stops up to which every permutation is searched. Mirrors Rust. */
+const EXACT_LIMIT = 8;
+
+/** Q16.16, refusing anything that is not a finite number. */
+function toQ(value, what) {
+  const n = typeof value === 'number' ? value : Number(String(value ?? '').trim());
+  if (!Number.isFinite(n)) throw new RangeError(`${what}: "${value}" is not a finite number`);
+  return Math.round(n * Q);
+}
+
+/** Q16.16 back to the schedule's own unit, for display. */
+function fromQ(q) {
+  return q / Q;
+}
+
+/**
+ * Total travel for one ordering, plus how many stops miss their window.
+ *
+ * `order` holds POSITIONS in `stops`; the matrix is indexed by each stop's
+ * `node`, which is its row in the matrix. Those two index spaces are distinct
+ * and conflating them was a real bug in the Rust original — it surfaced only
+ * once a round had been reordered and the positions stopped matching the nodes.
+ */
+function evaluate(order, stops, matrix, n, departQ) {
+  let cost = 0;
+  let t = departQ;
+  let infeasible = 0;
+  for (let k = 1; k < order.length; k++) {
+    const leg = matrix[stops[order[k - 1]].node * n + stops[order[k]].node];
+    cost += leg;
+    t += leg;
+    const s = stops[order[k]];
+    if (t < s.openQ) t = s.openQ;     // wait for the window to open
+    if (t > s.closeQ) infeasible++;
+  }
+  return { cost, infeasible };
+}
+
+/**
+ * Every permutation of `items`, in lexicographic order of the input.
+ *
+ * Heap's algorithm would be faster and would not emit in a defined order. This
+ * one does, which is what makes the tie-break reproducible.
+ */
+function permutations(items) {
+  const out = [];
+  const used = items.map(() => false);
+  const current = [];
+  const walk = () => {
+    if (current.length === items.length) { out.push(current.slice()); return; }
+    for (let i = 0; i < items.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; current.push(items[i]);
+      walk();
+      current.pop(); used[i] = false;
+    }
+  };
+  walk();
+  return out;
+}
+
+/** Lexicographic compare of two equal-length position lists. */
+function beforeIn(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+/** `(infeasible, cost, sequence)` ordering, lowest wins. */
+function better(a, b) {
+  if (a.infeasible !== b.infeasible) return a.infeasible < b.infeasible;
+  if (a.cost !== b.cost) return a.cost < b.cost;
+  return beforeIn(a.order, b.order);
+}
+
+/**
+ * Searches one round's interior orderings against a supplied matrix.
+ *
+ * `matrix` is a flat row-major n x n array of Q16.16 integers in the same time
+ * unit as the windows. `round.stops[i].node` indexes into it.
+ */
+function resequenceRound(round, matrix, n) {
+  const m = round.stops.length;
+  const original = Array.from({ length: m }, (_, i) => i);
+  const base = evaluate(original, round.stops, matrix, n, round.departQ);
+
+  const out = {
+    roundId: round.id,
+    searched: false,
+    original,
+    best: original.slice(),
+    originalCostQ: base.cost,
+    bestCostQ: base.cost,
+    infeasibleBefore: base.infeasible,
+    infeasibleAfter: base.infeasible,
+  };
+
+  if (m < 3) { out.searched = true; return finish(out, round); }
+  const interior = Array.from({ length: m - 2 }, (_, i) => i + 1);
+  // searched stays false: nothing returned below would be a search result.
+  if (interior.length > EXACT_LIMIT) return finish(out, round);
+  out.searched = true;
+
+  let best = { infeasible: base.infeasible, cost: base.cost, order: original };
+  for (const perm of permutations(interior)) {
+    const order = [0, ...perm, m - 1];
+    const { cost, infeasible } = evaluate(order, round.stops, matrix, n, round.departQ);
+    const cand = { infeasible, cost, order };
+    if (better(cand, best)) best = cand;
+  }
+  out.infeasibleAfter = best.infeasible;
+  out.bestCostQ = best.cost;
+  out.best = best.order;
+  return finish(out, round);
+}
+
+/** Adds the derived fields a UI wants, so no surface computes them twice. */
+function finish(out, round) {
+  out.changed = out.searched && out.best.some((p, i) => p !== out.original[i]);
+  out.savingQ = out.originalCostQ - out.bestCostQ;
+  out.originalIds = out.original.map((p) => round.stops[p].id);
+  out.bestIds = out.best.map((p) => round.stops[p].id);
+  return out;
+}
+
+/**
+ * Re-sequences every round against one shared matrix.
+ *
+ * Rounds never interact: the assignment is an input, not something this
+ * searches. So the pass is order-independent — swapping two rounds in the input
+ * swaps two entries in `outcomes` and changes nothing else.
+ *
+ * Aggregates are over ROUNDS, never over stops. "3 of 4 rounds hold" is a
+ * sentence a planner can act on; "17 of 22 stops hold" is not.
+ */
+function resequenceFleet(rounds, matrix, n) {
+  const outcomes = rounds.map((r) => resequenceRound(r, matrix, n));
+  const sum = (f) => outcomes.reduce((a, o) => a + f(o), 0);
+  const totalBefore = sum((o) => o.originalCostQ);
+  const totalAfter = sum((o) => o.bestCostQ);
+  return {
+    roundsTotal: rounds.length,
+    feasibleBefore: outcomes.filter((o) => o.infeasibleBefore === 0).length,
+    feasibleAfter: outcomes.filter((o) => o.infeasibleAfter === 0).length,
+    unsearched: outcomes.filter((o) => !o.searched).length,
+    totalCostBeforeQ: totalBefore,
+    totalCostAfterQ: totalAfter,
+    savingQ: totalBefore - totalAfter,
+    fullyRepaired: outcomes.every((o) => o.infeasibleAfter === 0),
+    isNoOp: outcomes.every((o) => !o.changed),
+    outcomes,
+  };
+}
+
+/**
+ * Applies an outcome's ordering, rewriting each leg from the matrix.
+ *
+ * Returns a route in the SAME shape the CSV mapper produces, so it can go
+ * straight back through the verifier and `digest.js` with nothing special-cased.
+ * That is the whole point: `digest_after` must be produced by exactly the path
+ * that produced `digest_before`.
+ */
+function applyToRoute(route, round, outcome, matrix, n) {
+  return {
+    ...route,
+    stops: outcome.best.map((p, pos) => ({
+      ...route.stops[p],
+      travel: pos === 0
+        ? 0
+        : fromQ(matrix[round.stops[outcome.best[pos - 1]].node * n + round.stops[p].node]),
+    })),
+  };
+}
+
+/**
+ * Rows as the CSV mapper produces them -> the shape the search works on.
+ *
+ * `nodeOf` maps a stop id to its matrix row. A stop the matrix does not name is
+ * a hard error rather than a default: silently routing an unknown stop to node 0
+ * would produce a confident answer about a schedule nobody checked, and that is
+ * the worst failure this kind of tool can have.
+ */
+function roundsFromRows(routes, nodeOf) {
+  return routes.map((r) => ({
+    id: r.id,
+    departQ: toQ(r.depart ?? 0, `${r.id} departure`),
+    stops: r.stops.map((s, i) => {
+      const node = nodeOf(s.id);
+      if (!Number.isInteger(node) || node < 0) {
+        throw new RangeError(
+          `${r.id}: stop "${s.id}" is not named in the distance matrix. Add a ` +
+          `row for it, or remove the stop — a matrix that does not cover the ` +
+          `sheet cannot be used to re-sequence it.`
+        );
+      }
+      return {
+        id: s.id,
+        node,
+        openQ: toQ(s.open ?? 0, `${s.id} window open`),
+        closeQ: toQ(s.close ?? 0, `${s.id} window close`),
+        travelQ: i === 0 ? 0 : toQ(s.travel, `${s.id} travel`),
+      };
+    }),
+  }));
+}
+
+/**
+ * Parses an uploaded or pasted distance matrix.
+ *
+ * Accepts the fixture's own format and the shapes people actually paste:
+ * whitespace- or comma-separated rows, blank lines ignored, `#` comments
+ * ignored except for a `# nodes: 0=NAME, 1=NAME` legend, which names the rows.
+ * Without a legend the rows are named by their index, which is what a bare
+ * matrix out of a routing tool looks like.
+ *
+ * Throws on anything ragged. A matrix that is not square, or whose legend does
+ * not cover its rows, cannot be used to re-sequence anything, and guessing at
+ * the missing part would be the same defect as defaulting an unknown stop to
+ * node 0.
+ */
+function parseMatrix(text) {
+  const names = new Map();
+  const rows = [];
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#')) {
+      const legend = /^#\s*nodes\s*:(.*)$/i.exec(line);
+      if (legend) {
+        for (const entry of legend[1].split(',')) {
+          const pair = /^\s*(\d+)\s*=\s*(.+?)\s*$/.exec(entry);
+          if (pair) names.set(pair[2], Number(pair[1]));
+        }
+      }
+      continue;
+    }
+    const cells = line.split(/[\s,;]+/).filter((c) => c !== '');
+    rows.push(cells.map((c, j) => toQ(c, `matrix row ${rows.length} column ${j}`)));
+  }
+  const n = rows.length;
+  if (n === 0) throw new RangeError('the distance matrix is empty');
+  const ragged = rows.findIndex((r) => r.length !== n);
+  if (ragged !== -1) {
+    throw new RangeError(
+      `the distance matrix is not square: it has ${n} rows but row ${ragged} has ` +
+      `${rows[ragged].length} columns. Every stop needs a distance to every ` +
+      `other stop.`
+    );
+  }
+  if (names.size === 0) {
+    for (let i = 0; i < n; i++) names.set(String(i), i);
+  } else if (names.size !== n) {
+    throw new RangeError(
+      `the matrix legend names ${names.size} nodes but the matrix has ${n} rows.`
+    );
+  }
+  return { matrix: rows.flat(), n, names };
+}
+
+return { EXACT_LIMIT, fromQ, resequenceRound, resequenceFleet, applyToRoute, roundsFromRows, parseMatrix };
+})();
+
 /* ---- L117_LICENCE ---- */
 const L117_LICENCE = (function(){
 /**
@@ -1085,6 +1406,8 @@ const $ = (id) => document.getElementById(id);
 const { verdictDigest, rotaDigest } = L117_DIGEST;
 const { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } = L117_ROTA;
 const { repairFixedSequence, roundsFromRows, fromQ: qUnits } = L117_REPAIR;
+const { parseMatrix, resequenceFleet, roundsFromRows: matrixRounds,
+        fromQ: mUnits } = L117_RESEQ;
 const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
 const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
 
@@ -1198,6 +1521,95 @@ function verifyRoute(stops, depart){
   return o;
 }
 
+/* ---- Tier 5 Enterprise Matrix optimiser --------------------------------- */
+/* Same pipeline as the repair above: the solver proposes an order, the untouched
+   engine grades it, digest_after comes from the engine. What Tier 5 adds is the
+   one thing a spreadsheet cannot express — what an order OTHER than the one in
+   the sheet would cost. A sheet gives the travel time into each stop in the
+   order given, enough to verify and re-time that order and nothing about any
+   other, so a stop-to-stop matrix has to be supplied. It is pasted rather than
+   read from a second range, because this sidebar holds ONE OAuth scope —
+   spreadsheets.currentonly — and reaching for another sheet is exactly the kind
+   of widening that scope exists to refuse.
+
+   The vehicle assignment is not searched. Up to 8 interior stops every
+   permutation is evaluated, so the answer is the optimum with no iteration
+   budget, temperature or seed. Past 8 the round is reported as unsearched. */
+let loadedMatrix = null;
+
+function paintMatrixGate(){
+  const can = !!ent.matrixSolver, box = $('matrixBox');
+  if (!box) return;
+  box.style.display = lastRun ? '' : 'none';
+  $('matrixText').disabled = !can;
+  $('runResequence').disabled = !can || !loadedMatrix;
+  $('matrixIntro').innerHTML = can
+    ? 'Searches every order of each round’s interior stops against a matrix you paste, keeps the vehicle assignment you planned, then re-verifies with the same engine. Rounds with more than 8 interior stops are reported as unsearched.'
+    : '<b>Enterprise Matrix Optimizer (£499/month).</b> Re-orders the stops within a round against a distance matrix you supply — the one thing a route sheet cannot express — and proves the improvement with the same verifier that graded the original.';
+  if (!can){ $('matrixState').textContent = ''; return; }
+  $('matrixState').innerHTML = loadedMatrix
+    ? `Matrix loaded: <b>${loadedMatrix.n}×${loadedMatrix.n}</b>.`
+    : 'No matrix loaded yet.';
+}
+
+/* A bad matrix loads nothing and says what is wrong. A partially-parsed matrix
+   would re-sequence against distances nobody supplied. */
+function loadMatrixFromText(){
+  const text = $('matrixText').value.trim();
+  if (!text){ loadedMatrix = null; paintMatrixGate(); return; }
+  try { loadedMatrix = parseMatrix(text); $('resequenceOut').innerHTML = ''; }
+  catch (e){ loadedMatrix = null; $('resequenceOut').innerHTML = `<div class="viol">${e.message}</div>`; }
+  paintMatrixGate();
+}
+
+async function runResequence(){
+  if (!lastRun || !ent.matrixSolver || !loadedMatrix) return;
+  const out = $('resequenceOut');
+  try {
+    const { matrix, n, names } = loadedMatrix;
+    const before = await verdictDigest(lastRun.canonRoutes, lastRun.canonVerdict);
+    const rounds = matrixRounds(lastRun.canonRoutes, id => names.has(id) ? names.get(id) : -1);
+    const fleet = resequenceFleet(rounds, matrix, n);
+
+    /* Apply: reorder and rewrite every leg FROM THE MATRIX, so the order a
+       planner would key back in costs exactly what was searched. */
+    const routes = lastRun.canonRoutes.map((r, ri) => {
+      const o = fleet.outcomes[ri];
+      if (!o || !o.changed) return r;
+      const src = rounds[ri];
+      return { ...r, stops: o.best.map((pos, k) => ({
+        ...r.stops[pos],
+        travel: k === 0 ? 0
+          : mUnits(matrix[src.stops[o.best[k-1]].node * n + src.stops[pos].node]),
+      })) };
+    });
+    const verdict = routes.map(r => {
+      const o = verifyRoute(r.stops, r.depart ?? 0);
+      if (o[0] === 0) return { id: r.id, feasible: true, violation: null };
+      const s = r.stops[o[1]];
+      return { id: r.id, feasible: false, violation: { stop: s?.id ?? String(o[1]),
+        raw: { arrival: o[2], windowClose: o[3], deficit: o[4] } } };
+    });
+    const after = await verdictDigest(routes, verdict);
+
+    const rows = fleet.outcomes.map(o => {
+      if (!o.searched) return `<div class="viol"><b>${o.roundId}</b> — more than 8 interior stops, <b>not searched</b></div>`;
+      if (!o.changed) return `<div class="note"><b>${o.roundId}</b> — already the best order found (${mUnits(o.originalCostQ).toFixed(1)})</div>`;
+      return `<div class="note"><b>${o.roundId}</b> ${mUnits(o.originalCostQ).toFixed(1)} → <b>${mUnits(o.bestCostQ).toFixed(1)}</b>`
+        + ` (−${mUnits(o.savingQ).toFixed(1)})<br><small>${o.bestIds.join(' → ')}</small></div>`;
+    }).join('');
+
+    out.innerHTML =
+      `<div class="note"><b>${fleet.feasibleBefore} of ${fleet.roundsTotal}</b> held before, `
+      + `<b>${fleet.feasibleAfter} of ${fleet.roundsTotal}</b> after. Travel `
+      + `<b>${mUnits(fleet.totalCostBeforeQ).toFixed(1)}</b> → <b>${mUnits(fleet.totalCostAfterQ).toFixed(1)}</b>`
+      + (fleet.savingQ > 0 ? ` (−${mUnits(fleet.savingQ).toFixed(1)}).` : '.') + `</div>`
+      + rows
+      + `<div class="digest"><b>digest before</b><br>${before}<br><br><b>digest after</b><br>${after}`
+      + (fleet.isNoOp ? ' <i>(unchanged — no order moved)</i>' : '') + `</div>`;
+  } catch (e){ out.innerHTML = `<div class="viol">Re-sequencing failed: ${e.message}</div>`; }
+}
+
 /* ---- column matching (same vocabulary as the other surfaces) ------------- */
 const FIELDS=[
   {key:'vehicle',hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'],avoid:[]},
@@ -1268,6 +1680,7 @@ const host = {
 async function refreshTier(){
   ent = await currentEntitlement();
   if (typeof paintRepairGate === 'function') paintRepairGate();
+  if (typeof paintMatrixGate === 'function') paintMatrixGate();
   const t = $('tier');
   t.textContent = 'tier: ' + ent.label.toLowerCase();
   t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
@@ -1374,7 +1787,7 @@ async function runRoutes(grid, headers, map){
     html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
   $('out').innerHTML = html;
   lastRun = { canonRoutes, canonVerdict };
-  paintRepairGate();
+  paintRepairGate(); paintMatrixGate();
   await emitDigest(() => verdictDigest(canonRoutes, canonVerdict), 'verdict digest');
 }
 
@@ -1449,9 +1862,16 @@ $('modeRota') .addEventListener('click', () => setMode('rota'));
 $('run')      .addEventListener('click', run);
 $('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
 $('runRepair').addEventListener('click', runRepair);
-/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence. */
-window.__grant = () => { ent = { ...ent, tier:'tier4', maxRounds:Infinity, certificate:true,
-  repair:true, matrixSolver:true, label:'Enterprise Repair' }; paintRepairGate(); };
+$('runResequence').addEventListener('click', runResequence);
+$('matrixText').addEventListener('input', loadMatrixFromText);
+/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence.
+   Defaults to tier5; pass 'tier4' to check the matrix panel is genuinely gated. */
+window.__grant = (tier = 'tier5') => {
+  const matrixSolver = tier === 'tier5';
+  ent = { ...ent, tier, maxRounds:Infinity, certificate:true, repair:true, matrixSolver,
+          label: matrixSolver ? 'Enterprise Matrix' : 'Enterprise Repair' };
+  paintRepairGate(); paintMatrixGate();
+};
 $('licApply').addEventListener('click', async () => {
   const k = $('licKey').value.trim();
   const probe = await verifyLicence(k);

@@ -62,8 +62,9 @@
         background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--ink)}
   details{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--glass-2)}
   summary{cursor:pointer;font:600 11.5px var(--sans);color:var(--ink-dim)}
-  #licKey{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
+  #licKey,#matrixText{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
           border:1px solid var(--line);background:rgba(8,11,18,.55);color:var(--ink)}
+  #matrixText{resize:vertical;min-height:84px;box-sizing:border-box}
   .row{display:flex;gap:6px} .row button{margin-bottom:0}
 </style>
 </head>
@@ -87,6 +88,15 @@
   <p class="note" id="repairIntro"></p>
   <button id="runRepair" class="primary">Repair these rows</button>
   <div id="repairOut"></div>
+</div>
+
+<div id="matrixBox" style="display:none">
+  <p class="note" id="matrixIntro"></p>
+  <textarea id="matrixText" rows="6" spellcheck="false"
+    placeholder="Paste a distance matrix &#8212; one row per stop, whitespace- or comma-separated, same time unit as your windows.&#10;# nodes: 0=DEPOT, 1=Arnold, 2=Beeston&#10;0.0 11.9 9.6&#10;11.9 0.0 20.8&#10;9.6 20.8 0.0"></textarea>
+  <p class="note" id="matrixState"></p>
+  <button id="runResequence" class="primary">Re-sequence (Enterprise Matrix)</button>
+  <div id="resequenceOut"></div>
 </div>
 <button id="clear">Clear highlighting</button>
 
@@ -129,6 +139,8 @@ const $ = (id) => document.getElementById(id);
 const { verdictDigest, rotaDigest } = L117_DIGEST;
 const { evaluateRota, humanMinutes, RULES_NOTE, SCOPE_NOTE, CLOCK_NOTE } = L117_ROTA;
 const { repairFixedSequence, roundsFromRows, fromQ: qUnits } = L117_REPAIR;
+const { parseMatrix, resequenceFleet, roundsFromRows: matrixRounds,
+        fromQ: mUnits } = L117_RESEQ;
 const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
 const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
 
@@ -242,6 +254,95 @@ function verifyRoute(stops, depart){
   return o;
 }
 
+/* ---- Tier 5 Enterprise Matrix optimiser --------------------------------- */
+/* Same pipeline as the repair above: the solver proposes an order, the untouched
+   engine grades it, digest_after comes from the engine. What Tier 5 adds is the
+   one thing a spreadsheet cannot express — what an order OTHER than the one in
+   the sheet would cost. A sheet gives the travel time into each stop in the
+   order given, enough to verify and re-time that order and nothing about any
+   other, so a stop-to-stop matrix has to be supplied. It is pasted rather than
+   read from a second range, because this sidebar holds ONE OAuth scope —
+   spreadsheets.currentonly — and reaching for another sheet is exactly the kind
+   of widening that scope exists to refuse.
+
+   The vehicle assignment is not searched. Up to 8 interior stops every
+   permutation is evaluated, so the answer is the optimum with no iteration
+   budget, temperature or seed. Past 8 the round is reported as unsearched. */
+let loadedMatrix = null;
+
+function paintMatrixGate(){
+  const can = !!ent.matrixSolver, box = $('matrixBox');
+  if (!box) return;
+  box.style.display = lastRun ? '' : 'none';
+  $('matrixText').disabled = !can;
+  $('runResequence').disabled = !can || !loadedMatrix;
+  $('matrixIntro').innerHTML = can
+    ? 'Searches every order of each round’s interior stops against a matrix you paste, keeps the vehicle assignment you planned, then re-verifies with the same engine. Rounds with more than 8 interior stops are reported as unsearched.'
+    : '<b>Enterprise Matrix Optimizer (£499/month).</b> Re-orders the stops within a round against a distance matrix you supply — the one thing a route sheet cannot express — and proves the improvement with the same verifier that graded the original.';
+  if (!can){ $('matrixState').textContent = ''; return; }
+  $('matrixState').innerHTML = loadedMatrix
+    ? `Matrix loaded: <b>${loadedMatrix.n}×${loadedMatrix.n}</b>.`
+    : 'No matrix loaded yet.';
+}
+
+/* A bad matrix loads nothing and says what is wrong. A partially-parsed matrix
+   would re-sequence against distances nobody supplied. */
+function loadMatrixFromText(){
+  const text = $('matrixText').value.trim();
+  if (!text){ loadedMatrix = null; paintMatrixGate(); return; }
+  try { loadedMatrix = parseMatrix(text); $('resequenceOut').innerHTML = ''; }
+  catch (e){ loadedMatrix = null; $('resequenceOut').innerHTML = `<div class="viol">${e.message}</div>`; }
+  paintMatrixGate();
+}
+
+async function runResequence(){
+  if (!lastRun || !ent.matrixSolver || !loadedMatrix) return;
+  const out = $('resequenceOut');
+  try {
+    const { matrix, n, names } = loadedMatrix;
+    const before = await verdictDigest(lastRun.canonRoutes, lastRun.canonVerdict);
+    const rounds = matrixRounds(lastRun.canonRoutes, id => names.has(id) ? names.get(id) : -1);
+    const fleet = resequenceFleet(rounds, matrix, n);
+
+    /* Apply: reorder and rewrite every leg FROM THE MATRIX, so the order a
+       planner would key back in costs exactly what was searched. */
+    const routes = lastRun.canonRoutes.map((r, ri) => {
+      const o = fleet.outcomes[ri];
+      if (!o || !o.changed) return r;
+      const src = rounds[ri];
+      return { ...r, stops: o.best.map((pos, k) => ({
+        ...r.stops[pos],
+        travel: k === 0 ? 0
+          : mUnits(matrix[src.stops[o.best[k-1]].node * n + src.stops[pos].node]),
+      })) };
+    });
+    const verdict = routes.map(r => {
+      const o = verifyRoute(r.stops, r.depart ?? 0);
+      if (o[0] === 0) return { id: r.id, feasible: true, violation: null };
+      const s = r.stops[o[1]];
+      return { id: r.id, feasible: false, violation: { stop: s?.id ?? String(o[1]),
+        raw: { arrival: o[2], windowClose: o[3], deficit: o[4] } } };
+    });
+    const after = await verdictDigest(routes, verdict);
+
+    const rows = fleet.outcomes.map(o => {
+      if (!o.searched) return `<div class="viol"><b>${o.roundId}</b> — more than 8 interior stops, <b>not searched</b></div>`;
+      if (!o.changed) return `<div class="note"><b>${o.roundId}</b> — already the best order found (${mUnits(o.originalCostQ).toFixed(1)})</div>`;
+      return `<div class="note"><b>${o.roundId}</b> ${mUnits(o.originalCostQ).toFixed(1)} → <b>${mUnits(o.bestCostQ).toFixed(1)}</b>`
+        + ` (−${mUnits(o.savingQ).toFixed(1)})<br><small>${o.bestIds.join(' → ')}</small></div>`;
+    }).join('');
+
+    out.innerHTML =
+      `<div class="note"><b>${fleet.feasibleBefore} of ${fleet.roundsTotal}</b> held before, `
+      + `<b>${fleet.feasibleAfter} of ${fleet.roundsTotal}</b> after. Travel `
+      + `<b>${mUnits(fleet.totalCostBeforeQ).toFixed(1)}</b> → <b>${mUnits(fleet.totalCostAfterQ).toFixed(1)}</b>`
+      + (fleet.savingQ > 0 ? ` (−${mUnits(fleet.savingQ).toFixed(1)}).` : '.') + `</div>`
+      + rows
+      + `<div class="digest"><b>digest before</b><br>${before}<br><br><b>digest after</b><br>${after}`
+      + (fleet.isNoOp ? ' <i>(unchanged — no order moved)</i>' : '') + `</div>`;
+  } catch (e){ out.innerHTML = `<div class="viol">Re-sequencing failed: ${e.message}</div>`; }
+}
+
 /* ---- column matching (same vocabulary as the other surfaces) ------------- */
 const FIELDS=[
   {key:'vehicle',hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'],avoid:[]},
@@ -312,6 +413,7 @@ const host = {
 async function refreshTier(){
   ent = await currentEntitlement();
   if (typeof paintRepairGate === 'function') paintRepairGate();
+  if (typeof paintMatrixGate === 'function') paintMatrixGate();
   const t = $('tier');
   t.textContent = 'tier: ' + ent.label.toLowerCase();
   t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
@@ -418,7 +520,7 @@ async function runRoutes(grid, headers, map){
     html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
   $('out').innerHTML = html;
   lastRun = { canonRoutes, canonVerdict };
-  paintRepairGate();
+  paintRepairGate(); paintMatrixGate();
   await emitDigest(() => verdictDigest(canonRoutes, canonVerdict), 'verdict digest');
 }
 
@@ -493,9 +595,16 @@ $('modeRota') .addEventListener('click', () => setMode('rota'));
 $('run')      .addEventListener('click', run);
 $('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
 $('runRepair').addEventListener('click', runRepair);
-/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence. */
-window.__grant = () => { ent = { ...ent, tier:'tier4', maxRounds:Infinity, certificate:true,
-  repair:true, matrixSolver:true, label:'Enterprise Repair' }; paintRepairGate(); };
+$('runResequence').addEventListener('click', runResequence);
+$('matrixText').addEventListener('input', loadMatrixFromText);
+/* Test hook — relaxes the UI gate only; it cannot mint or alter a licence.
+   Defaults to tier5; pass 'tier4' to check the matrix panel is genuinely gated. */
+window.__grant = (tier = 'tier5') => {
+  const matrixSolver = tier === 'tier5';
+  ent = { ...ent, tier, maxRounds:Infinity, certificate:true, repair:true, matrixSolver,
+          label: matrixSolver ? 'Enterprise Matrix' : 'Enterprise Repair' };
+  paintRepairGate(); paintMatrixGate();
+};
 $('licApply').addEventListener('click', async () => {
   const k = $('licKey').value.trim();
   const probe = await verifyLicence(k);
