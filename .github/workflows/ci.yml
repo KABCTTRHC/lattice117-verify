@@ -204,6 +204,15 @@ jobs:
       # in the repository and this fails if either file drifts from it.
       - name: Nottingham fixture is reproducible from its coordinates
         run: node tools/fixture/nottingham.mjs --check
+      # Fixture B. Its optimum is a theorem rather than a downloaded instance,
+      # because TSPLIB's licence is non-commercial and forbids redistribution
+      # and Solomon's instances carry no licence at all — see
+      # docs/FIXTURE-B-BENCHMARK.md. Nothing third-party ships, and the last
+      # section of the suite checks it stays that way.
+      - name: Convex-position benchmark is reproducible from its geometry
+        run: node tools/fixture/convex.mjs --check
+      - name: Fixture B, and the benchmark harness
+        run: node tests/benchmark.test.mjs
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
       # Two implementations of one algorithm, so the JS port and the Rust

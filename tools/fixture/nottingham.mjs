@@ -123,9 +123,15 @@ function render() {
   ].join('\n');
 }
 
+/* Only act on argv when run as a script. These modules are imported by the
+   test suite, and a `--check` meant for the importer must not be read as one
+   for the generator — nor may an import ever write a file. */
+const RUN_AS_SCRIPT = process.argv[1]
+  && fileURLToPath(import.meta.url) === process.argv[1];
+
 const artifacts = [[OUT, render()], [CSV, renderCsv()]];
 
-if (process.argv.includes('--check')) {
+if (RUN_AS_SCRIPT && process.argv.includes('--check')) {
   let stale = [];
   for (const [path, want] of artifacts) {
     let have = '';
@@ -137,7 +143,7 @@ if (process.argv.includes('--check')) {
     process.exit(1);
   }
   console.log('Nottingham fixture is up to date');
-} else if (process.argv[1] && process.argv[1].endsWith('nottingham.mjs')) {
+} else if (RUN_AS_SCRIPT) {
   for (const [path, want] of artifacts) {
     writeFileSync(path, want);
     console.log(`wrote ${path}`);

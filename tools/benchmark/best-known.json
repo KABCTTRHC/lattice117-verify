@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Published optimal or best-known tour lengths, recorded as CITED FACTS.",
+    "No instance data is stored here and none is stored anywhere in this",
+    "repository: a tour length is a number from a paper, which is a fact and",
+    "not a copyrightable dataset, whereas the coordinate table that produces",
+    "it is the dataset. See docs/FIXTURE-B-BENCHMARK.md.",
+    "",
+    "Supply the instance file yourself and the runner will compare against the",
+    "value here. If an instance is not listed, pass --optimum."
+  ],
+  "tsplib": {
+    "burma14":  { "optimum": 3323,  "status": "proven optimal", "source": "TSPLIB, Reinelt 1991" },
+    "ulysses16":{ "optimum": 6859,  "status": "proven optimal", "source": "TSPLIB, Reinelt 1991" },
+    "berlin52": { "optimum": 7542,  "status": "proven optimal", "source": "TSPLIB, Reinelt 1991" },
+    "eil51":    { "optimum": 426,   "status": "proven optimal", "source": "TSPLIB, Reinelt 1991" },
+    "st70":     { "optimum": 675,   "status": "proven optimal", "source": "TSPLIB, Reinelt 1991" }
+  },
+  "solomon": {
+    "_comment": "Distance of the best-known MULTI-VEHICLE, CAPACITY-FEASIBLE solution. Not comparable to a single uncapacitated tour; the runner refuses to print a ratio.",
+    "C101": { "vehicles": 10, "distance": 827.3, "source": "Solomon 1987; best-known set maintained by SINTEF" },
+    "R101": { "vehicles": 19, "distance": 1650.8, "source": "Solomon 1987; best-known set maintained by SINTEF" },
+    "RC101":{ "vehicles": 14, "distance": 1696.95, "source": "Solomon 1987; best-known set maintained by SINTEF" }
+  }
+}
