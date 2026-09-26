@@ -28,41 +28,85 @@ A native-only ingestion path for NRE-scale datasets, in four parts.
 4. **Report** binary size delta, wall time on the 13,509-node benchmark, and
    whether determinism holds across architectures.
 
-## What has to be true before this is worth doing
+## The dataset — resolved
 
-**The 13,509-node dataset is not in this repository.** `TRL-POSITION` records
-that the large datasets "are not distributed and no generator for them
-survives". Without it, part 4 cannot be measured, and an unmeasured performance
-claim is exactly the class of statement the engineering records exist to
-prevent. Either the dataset is located, or a generator is written and the
-results are labelled as synthetic.
+It is **`usa13509`, a standard TSPLIB instance**: 13,509 US cities, road-network
+derived, public and citable. `LATTICE117_DATAROOM_BENCHMARKS_AND_DATASETS.md`
+names it directly alongside `d18512`, `d15112`, `brd14051`, `pcb3038`, `pr2392`
+and `rl11849`. So the benchmark is independently reproducible by a third party,
+which is worth considerably more than a synthetic generator would have been.
 
-## The question that decides the whole experiment
+What is missing from the repository is only the *derived* pair
+`datasets/matrix_13509.txt` and `datasets/constraints_13509.txt`, and there is a
+good reason for that:
 
-Part 3 is not really a benchmark, it is a correctness test, and the expected
-answer is worth stating up front so the result is interpretable:
+| Representation | Size |
+|---|---|
+| Dense 13,509² matrix as text | **1.46 GB** (0.73 GB upper-triangle only) |
+| Dense in RAM as `i32` (Q16.16) | 0.73 GB |
+| Dense in RAM as `i64` (Q40.24) | **1.46 GB** |
+| The 13,509 coordinate pairs | **216 KB** |
 
-- **An `f64` intermediate is deterministic across architectures.** IEEE-754
-  binary64 arithmetic is fully specified; x86_64 and aarch64 both implement it.
-  The divergence risk is not the architecture, it is `x87` 80-bit excess
-  precision on 32-bit x86 targets, and FMA contraction changing `a*b+c`
-  rounding. Neither applies to a straightforward parse-then-scale on either
-  64-bit target.
-- **It is not exact, though.** Q40.24 has 24 fractional bits; `f64` has 52 bits
-  of mantissa, so for values under ~2^28 the scaling is exact and above that it
-  is not. Q16.16 never exposed this because the range was too small to reach it.
-  **This is the finding to look for** — not a cross-architecture difference, but
-  a magnitude above which `f64` staging silently loses the low fractional bits
-  while direct ASCII→integer parsing does not.
-- Therefore the measurement that matters is **direct-parse vs f64-staged at
-  large magnitudes on one machine**, with the cross-architecture run as the
-  control that should show no difference at all.
+Two consequences follow, and they change the experiment.
 
-A prior measurement on this engine already found the same shape of problem in
-the opposite direction: 36,014 realistic Q16.16 values showed **zero**
-divergence between the double path and exact decimal arithmetic, because the
-magnitudes were small. Q40.24 is being adopted precisely to allow larger
-magnitudes, which is where that guarantee stops holding.
+**Reproduction is a fetch plus a conversion, not a generator.** Download
+`usa13509.tsp` from TSPLIB, parse the `NODE_COORD_SECTION`, and compute EUC_2D
+distances. Record the source URL and a SHA-256 of the downloaded `.tsp` in the
+results so the run is checkable. The constraints file is *not* from TSPLIB —
+`usa13509` is a distance-only single-vehicle instance with **no time windows**,
+so any constraints used with it were synthesised locally. That distinction has
+to be stated wherever the 13,509 figure is quoted, because the product is sold
+on time-window verification and this instance does not test it.
+
+**Q40.24 doubles the footprint of the thing that is already the bottleneck.**
+Widening a dense matrix from `i32` to `i64` takes 13,509 nodes from 0.73 GB to
+1.46 GB of RAM. On the current workstation that is not viable, so a naive
+"same matrix, wider integers" port makes large instances worse, not better.
+
+**The SoA representation that actually matters is therefore coordinates, not a
+matrix.** 13,509 `(x, y)` pairs are 216 KB; distances are computed on demand.
+That is what TSP solvers do, it is ~6,700× smaller, and it largely removes the
+motivation for memory-mapping the matrix at all — part 2 of the brief may be
+solving a problem that the right representation deletes.
+
+## Why Q40.24 at all — the concrete number
+
+`usa13509` coordinates run to ~1e5–1e6, so Euclidean distances reach roughly
+1e6. **Q16.16 saturates at 32,767** — the instance overflows it by about two
+orders of magnitude and cannot be represented at all without rescaling. That,
+not speed, is the real argument for a wider fixed-point type, and it is a
+checkable fact rather than a preference.
+
+## The f64-staging question, corrected
+
+The cross-architecture framing in the original brief is the wrong test, and the
+dataset cannot exercise the right one.
+
+- **x86_64 and aarch64 will not disagree.** IEEE-754 binary64 is fully
+  specified and both implement it. The classic divergence sources are `x87`
+  80-bit excess precision (32-bit x86 only) and FMA contraction altering
+  `a*b+c` rounding — neither applies to a parse-then-scale on either 64-bit
+  target. Run it as a **control** that should show zero difference; treat any
+  difference as a bug in the harness before believing it is architectural.
+- **The real exposure is magnitude, not architecture.** Q40.24 keeps 24
+  fractional bits and `f64` has a 53-bit significand, so an f64-staged value is
+  exact only while its integer part stays below `2^(53-24) = 2^29 = 536,870,912`.
+  Above that, f64 staging silently drops low fractional bits that a direct
+  ASCII→integer parse retains.
+- **`usa13509` cannot show this.** Its magnitudes (~1e6) are roughly 500× below
+  the 2^29 threshold, so f64 staging is *exact* for this dataset and the
+  benchmark will show no divergence whatsoever. A null result there means
+  nothing.
+
+So the correctness experiment needs its own fixture: values swept across
+2^20 → 2^40, comparing direct ASCII→Q40.24 against f64→Q40.24, to locate the
+divergence point empirically and confirm it lands where the arithmetic predicts.
+That is a few hundred lines and no dataset at all.
+
+A precedent on this engine points the same way: 36,014 realistic Q16.16 values
+showed **zero** divergence between the double path and exact decimal arithmetic
+— because those magnitudes were small. Q40.24 exists to allow larger ones, which
+is exactly where that guarantee stops.
 
 ## Why it must stay off main
 
@@ -80,8 +124,9 @@ magnitudes, which is where that guarantee stops holding.
 | 1 | `cargo build --target wasm32-unknown-unknown` succeeds and the WASM is byte-identical to main's |
 | 2 | `cargo tree --target wasm32-unknown-unknown` shows no `memmap2` |
 | 3 | Q16.16 digests on main's fixtures are unchanged |
-| 4 | Direct-parse and f64-staged results compared at increasing magnitude, divergence point identified |
-| 5 | x86_64 vs aarch64 results identical, or the difference explained |
-| 6 | Binary size delta and wall time reported against a named, reproducible dataset |
+| 4 | Synthetic sweep 2^20 → 2^40 locates the direct-parse vs f64-staged divergence point, and it matches the predicted 2^29 |
+| 5 | x86_64 vs aarch64 identical (control — a difference here is a harness bug until proven otherwise) |
+| 6 | Binary size delta and wall time on `usa13509`, quoted with the source URL and the .tsp SHA-256, and stating that its constraints are synthetic and it has no time windows |
+| 7 | Coordinate-SoA (216 KB) measured against dense-matrix (1.46 GB) before any mmap work — if coordinates win, part 2 of the brief is moot |
 
 Criteria 1–3 are non-negotiable. 4–6 are the experiment.
