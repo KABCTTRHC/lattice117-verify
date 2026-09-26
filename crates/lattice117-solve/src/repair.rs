@@ -251,7 +251,12 @@ mod tests {
         mins * Q16_ONE
     }
     fn stop(id: usize, open: i32, close: i32, travel: i32) -> Stop {
-        Stop { id, open_q16: q(open), close_q16: q(close), travel_q16: q(travel) }
+        Stop {
+            id,
+            open_q16: q(open),
+            close_q16: q(close),
+            travel_q16: q(travel),
+        }
     }
 
     /// A round whose windows open later in the day, which is the ordinary case
@@ -264,8 +269,8 @@ mod tests {
             depart_q16: q(depart),
             stops: alloc::vec![
                 stop(0, 0, 600, 0),
-                stop(1, 60, 90, 20),   // opens 60, closes 90
-                stop(2, 80, 100, 15),  // opens 80, closes 100
+                stop(1, 60, 90, 20),  // opens 60, closes 90
+                stop(2, 80, 100, 15), // opens 80, closes 100
             ],
         }
     }
@@ -304,13 +309,16 @@ mod tests {
             stops: alloc::vec![
                 stop(0, 0, 600, 0),
                 stop(1, 0, 42, 7),
-                stop(2, 0, 18, 17),  // arrives 24, closes 18 — 6 late
+                stop(2, 0, 18, 17), // arrives 24, closes 18 — 6 late
             ],
         };
         let out = repair_fixed_sequence(&[round]);
         assert_eq!(out.feasible_after, 0);
         assert!(!out.fully_repaired());
-        assert!(out.is_no_op(), "must not propose a change that still breaches");
+        assert!(
+            out.is_no_op(),
+            "must not propose a change that still breaches"
+        );
         assert_eq!(out.residual.len(), 1);
         assert_eq!(out.residual[0].stop_id, 2);
         assert_eq!(out.residual[0].deficit_q16, q(6));
@@ -338,9 +346,10 @@ mod tests {
         let r = late_window_round(0);
         let n = r.stops.len();
         let m = band_matrix(&r);
-        assert_eq!(m[0 * n + 1], q(20));
-        assert_eq!(m[1 * n + 2], q(15));
-        assert_eq!(m[0 * n + 0], 0);
-        assert_eq!(m[2 * n + 0], i32::MAX / 2, "off-sequence legs stay unreachable");
+        let at = |row: usize, col: usize| m[row * n + col];
+        assert_eq!(at(0, 1), q(20));
+        assert_eq!(at(1, 2), q(15));
+        assert_eq!(at(0, 0), 0);
+        assert_eq!(at(2, 0), i32::MAX / 2, "off-sequence legs stay unreachable");
     }
 }

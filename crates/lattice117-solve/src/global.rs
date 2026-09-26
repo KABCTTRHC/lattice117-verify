@@ -74,7 +74,9 @@ impl GlobalOutcome {
 
 /// Total travel over a tour, read straight from the matrix.
 fn tour_cost(tour: &[usize], matrix: &[Q16], n: usize) -> i64 {
-    tour.windows(2).map(|w| matrix[w[0] * n + w[1]] as i64).sum()
+    tour.windows(2)
+        .map(|w| matrix[w[0] * n + w[1]] as i64)
+        .sum()
 }
 
 /// Rotates a tour so the depot (node 0) leads, then closes it back to the depot.
@@ -98,8 +100,13 @@ pub fn solve_unassigned(
     n: usize,
     qubo_solver_fn: impl Fn(&[i32; 32 * 32], i32, i32) -> u32,
 ) -> GlobalOutcome {
-    let LogisticsResult { route, total_distance_q16, cluster_count, qubo_solution_valid, .. } =
-        kondo::solve_logistics_kondo(matrix, n, qubo_solver_fn);
+    let LogisticsResult {
+        route,
+        total_distance_q16,
+        cluster_count,
+        qubo_solution_valid,
+        ..
+    } = kondo::solve_logistics_kondo(matrix, n, qubo_solver_fn);
     let tour = depot_first(&route);
     GlobalOutcome {
         cost_q16: tour_cost(&tour, matrix, n),

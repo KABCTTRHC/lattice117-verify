@@ -178,7 +178,10 @@ pub fn kondo_cluster_nodes(
 /// Builds a 32x32 QUBO (flattened, row-major) encoding "visit each cluster
 /// exactly once, at exactly one tour position" plus inter-cluster travel
 /// cost as the objective. Variable index = `cluster * k + position`.
-pub fn build_inter_cluster_qubo(clusters: &[KondoCluster], inter_cluster_distances: &[i32]) -> [i32; 32 * 32] {
+pub fn build_inter_cluster_qubo(
+    clusters: &[KondoCluster],
+    inter_cluster_distances: &[i32],
+) -> [i32; 32 * 32] {
     let k = clusters.len();
     let mut q = [0i32; 32 * 32];
     // Must exceed the total possible objective savings from violating a
@@ -190,7 +193,12 @@ pub fn build_inter_cluster_qubo(clusters: &[KondoCluster], inter_cluster_distanc
     // travel than the fixed penalty costs, regardless of how well it's
     // annealed. Scaling per the actual max distance present closes that gap
     // for any input scale.
-    let max_travel_cost = inter_cluster_distances.iter().copied().map(i32::abs).max().unwrap_or(0);
+    let max_travel_cost = inter_cluster_distances
+        .iter()
+        .copied()
+        .map(i32::abs)
+        .max()
+        .unwrap_or(0);
     let penalty_a = (max_travel_cost.saturating_mul(k.max(1) as i32)).max(4 * Q16_ONE);
 
     for c in 0..k {
@@ -257,12 +265,16 @@ pub fn validate_tour(result: u32, k: usize) -> bool {
     let mut cluster_visits = alloc::vec![0u32; k];
     let mut position_visits = alloc::vec![0u32; k];
 
-    for cluster in 0..k {
-        for position in 0..k {
+    // Both counters are walked by iterator rather than by index, so the bit
+    // layout `cluster * k + position` stays the only place `k` is used as a
+    // stride. The two vectors are distinct, so the inner mutable borrow is
+    // independent of the outer one.
+    for (cluster, seen) in cluster_visits.iter_mut().enumerate() {
+        for (position, filled) in position_visits.iter_mut().enumerate() {
             let bit = cluster * k + position;
             if (result >> bit) & 1 == 1 {
-                cluster_visits[cluster] += 1;
-                position_visits[position] += 1;
+                *seen += 1;
+                *filled += 1;
             }
         }
     }
@@ -329,7 +341,11 @@ pub fn default_qubo_solver(q: &[i32; 32 * 32], temperature_q16: i32, cooling_q16
                     // Saturate rather than wrap: an exponent past i32::MAX
                     // means e^-x is zero to well beyond Q16.16 precision,
                     // which is exactly what fast_exp_negative returns there.
-                    let x_q16 = if x >= i32::MAX as i128 { i32::MAX } else { x as i32 };
+                    let x_q16 = if x >= i32::MAX as i128 {
+                        i32::MAX
+                    } else {
+                        x as i32
+                    };
                     // The LCG's top 16 bits give a uniform Q16.16 fraction
                     // in [0, 1) — the same comparison the f64 version made,
                     // with no float and no libm call.
@@ -411,7 +427,11 @@ fn qubo_flip_delta(q: &[i32; 32 * 32], state: u32, i: usize) -> i64 {
 /// re-optimized visiting sequence; the DP's only real degree of freedom is
 /// the include/skip decision itself, which the dominant bias always
 /// resolves to "include".
-pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32], n_nodes: usize) -> Vec<u32> {
+pub fn solve_intra_cluster_chain(
+    cluster: &KondoCluster,
+    distance_matrix: &[i32],
+    n_nodes: usize,
+) -> Vec<u32> {
     let members = &cluster.members;
 
     if members.len() <= 1 {
@@ -419,7 +439,9 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
     }
 
     let mut ordered = members.clone();
-    ordered.sort_by_key(|&node| distance_matrix[node as usize * n_nodes + cluster.center_idx as usize]);
+    ordered.sort_by_key(|&node| {
+        distance_matrix[node as usize * n_nodes + cluster.center_idx as usize]
+    });
 
     let m = ordered.len().min(MAX_NODES_PER_CLUSTER);
     ordered.truncate(m);
@@ -443,7 +465,12 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
     // from the route, the opposite of "all nodes must be visited". Scaling
     // per the actual max coupling cost present closes that gap, matching
     // the same fix applied to `build_inter_cluster_qubo`'s penalty above.
-    let max_coupling = coupling_costs.iter().copied().map(i32::abs).max().unwrap_or(0);
+    let max_coupling = coupling_costs
+        .iter()
+        .copied()
+        .map(i32::abs)
+        .max()
+        .unwrap_or(0);
     let inclusion_bias = max_coupling.saturating_mul(2).max(Q16_ONE);
     for cost in linear_costs.iter_mut() {
         *cost = -inclusion_bias;
@@ -490,7 +517,11 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
 
     // Same tie-break direction as above, for the same reason.
     let mut states = alloc::vec![0i32; m];
-    states[m - 1] = if cost[m - 1][0] < cost[m - 1][1] { 0 } else { 1 };
+    states[m - 1] = if cost[m - 1][0] < cost[m - 1][1] {
+        0
+    } else {
+        1
+    };
     for i in (0..m - 1).rev() {
         states[i] = best_prev[i + 1][states[i + 1] as usize] as i32;
     }
@@ -549,7 +580,8 @@ pub fn solve_logistics_kondo(
     let mut inter_dist = alloc::vec![0i32; k * k];
     for (i, c1) in clusters.iter().enumerate() {
         for (j, c2) in clusters.iter().enumerate() {
-            inter_dist[i * k + j] = distance_matrix[c1.center_idx as usize * n_nodes + c2.center_idx as usize];
+            inter_dist[i * k + j] =
+                distance_matrix[c1.center_idx as usize * n_nodes + c2.center_idx as usize];
         }
     }
 
@@ -638,12 +670,20 @@ mod tests {
 
         let mut all_members: Vec<u32> = clusters.iter().flat_map(|c| c.members.clone()).collect();
         all_members.sort_unstable();
-        assert_eq!(all_members, alloc::vec![0, 1, 2], "every node must appear exactly once across all clusters");
+        assert_eq!(
+            all_members,
+            alloc::vec![0, 1, 2],
+            "every node must appear exactly once across all clusters"
+        );
 
         let mut centers: Vec<u32> = clusters.iter().map(|c| c.center_idx).collect();
         centers.sort_unstable();
         centers.dedup();
-        assert_eq!(centers.len(), clusters.len(), "no duplicate cluster centers");
+        assert_eq!(
+            centers.len(),
+            clusters.len(),
+            "no duplicate cluster centers"
+        );
     }
 
     #[test]
@@ -720,9 +760,12 @@ mod tests {
         let inter_dist = line_matrix(5, Q16_ONE);
 
         let q = build_inter_cluster_qubo(&clusters, &inter_dist);
-        let result = default_qubo_solver(&q, (2 * Q16_ONE), Q16_950_MILLI);
+        let result = default_qubo_solver(&q, 2 * Q16_ONE, Q16_950_MILLI);
 
-        assert!(validate_tour(result, 5), "default_qubo_solver should find a constraint-satisfying tour for a 5x5 problem");
+        assert!(
+            validate_tour(result, 5),
+            "default_qubo_solver should find a constraint-satisfying tour for a 5x5 problem"
+        );
     }
 
     #[test]
@@ -732,7 +775,10 @@ mod tests {
 
         let result = solve_logistics_kondo_default(&matrix, n);
 
-        assert!(result.qubo_solution_valid, "inter-cluster QUBO solve should converge on this small instance");
+        assert!(
+            result.qubo_solution_valid,
+            "inter-cluster QUBO solve should converge on this small instance"
+        );
 
         let mut visited = result.route.clone();
         visited.sort_unstable();
@@ -766,4 +812,3 @@ mod tests {
         assert!(!validate_tour(result, k));
     }
 }
-

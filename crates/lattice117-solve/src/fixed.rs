@@ -267,7 +267,11 @@ mod tests {
         // q16_mul. Not the most accurate choice - the consistent one.
         let v = Q2_22::from_raw(-1);
         let narrowed: Q2_15 = v.convert();
-        assert_eq!(narrowed.raw(), -1, "arithmetic shift floors, it does not truncate to 0");
+        assert_eq!(
+            narrowed.raw(),
+            -1,
+            "arithmetic shift floors, it does not truncate to 0"
+        );
 
         let v = Q2_22::from_raw(1);
         let narrowed: Q2_15 = v.convert();
@@ -291,7 +295,9 @@ mod tests {
     fn round_trip_is_lossless_for_values_representable_in_both_formats() {
         // Q2.29 spans ±4, so the Q16.16 raws that survive are within
         // ±4 × 65536 = ±262_144. Inside that window the round trip is exact.
-        for raw in [0, 1, -1, 65_536, -65_536, 56_229, -56_229, 262_143, -262_143] {
+        for raw in [
+            0, 1, -1, 65_536, -65_536, 56_229, -56_229, 262_143, -262_143,
+        ] {
             let start = Q16_16::from_raw(raw);
             let wide: Q2_29 = start.convert();
             let back: Q16_16 = wide.convert();
@@ -370,8 +376,14 @@ mod tests {
         // repr(transparent): adopting a wire value costs nothing at runtime.
         let raw: crate::Q16 = q16_16(0.858);
         assert_eq!(Q16_16::from_wire(raw).to_wire(), raw);
-        assert_eq!(core::mem::size_of::<Q16_16>(), core::mem::size_of::<crate::Q16>());
-        assert_eq!(core::mem::align_of::<Q16_16>(), core::mem::align_of::<crate::Q16>());
+        assert_eq!(
+            core::mem::size_of::<Q16_16>(),
+            core::mem::size_of::<crate::Q16>()
+        );
+        assert_eq!(
+            core::mem::align_of::<Q16_16>(),
+            core::mem::align_of::<crate::Q16>()
+        );
     }
 
     #[test]

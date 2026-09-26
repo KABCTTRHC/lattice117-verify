@@ -17,7 +17,12 @@ fn q(mins: i32) -> Q16 {
     mins * Q16_ONE
 }
 fn stop(id: usize, open: i32, close: i32, travel: i32) -> Stop {
-    Stop { id, open_q16: q(open), close_q16: q(close), travel_q16: q(travel) }
+    Stop {
+        id,
+        open_q16: q(open),
+        close_q16: q(close),
+        travel_q16: q(travel),
+    }
 }
 
 /// A round whose windows open later in the day and which leaves too late for
@@ -42,10 +47,17 @@ fn late_round(depart: i32) -> Round {
 fn referee_says_feasible(round: &Round, depart_q16: Q16) -> bool {
     let n = round.stops.len();
     let mut m = band_matrix(round);
-    m[0 * n + 1] = m[0 * n + 1].saturating_add(depart_q16);
+    // The leg out of the first stop: row 0, column 1 of a row-major n x n
+    // matrix, so index 1. Written as a named constant rather than `0 * n + 1`,
+    // which is arithmetic on a zero and reads as a mistake either way.
+    const FIRST_LEG: usize = 1;
+    m[FIRST_LEG] = m[FIRST_LEG].saturating_add(depart_q16);
     let order: Vec<usize> = (0..n).collect();
-    let windows: Vec<(Q16, Q16)> =
-        round.stops.iter().map(|s| (s.open_q16, s.close_q16)).collect();
+    let windows: Vec<(Q16, Q16)> = round
+        .stops
+        .iter()
+        .map(|s| (s.open_q16, s.close_q16))
+        .collect();
     evaluate_order(&order, &m, n, &windows).is_ok()
 }
 
@@ -119,7 +131,9 @@ use std::path::PathBuf;
 
 fn repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is crates/lattice117-solve.
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
 }
 
 /// Parses a fixture decimal such as `"11.9"` into Q16.16 **without floats**.
@@ -139,9 +153,16 @@ fn q_decimal(text: &str) -> Q16 {
         Some((w, f)) => (w, f),
         None => (t, ""),
     };
-    assert!(frac.len() <= 1, "fixture values are specified to one decimal place, got {text:?}");
+    assert!(
+        frac.len() <= 1,
+        "fixture values are specified to one decimal place, got {text:?}"
+    );
     let tenths: i64 = whole.parse::<i64>().expect("whole part") * 10
-        + if frac.is_empty() { 0 } else { frac.parse::<i64>().expect("tenth") };
+        + if frac.is_empty() {
+            0
+        } else {
+            frac.parse::<i64>().expect("tenth")
+        };
     let scaled = tenths * Q16_ONE as i64;
     let rounded = (scaled + 5) / 10; // tenths are always non-negative here
     (sign * rounded) as Q16
@@ -149,8 +170,9 @@ fn q_decimal(text: &str) -> Q16 {
 
 /// The matrix and its node legend, read from the generated fixture.
 fn nottingham_matrix() -> (Vec<Q16>, usize, BTreeMap<String, usize>) {
-    let text = std::fs::read_to_string(repo_root().join("demo/example-fleet-nottingham-matrix.txt"))
-        .expect("matrix fixture is missing — run node tools/fixture/nottingham.mjs");
+    let text =
+        std::fs::read_to_string(repo_root().join("demo/example-fleet-nottingham-matrix.txt"))
+            .expect("matrix fixture is missing — run node tools/fixture/nottingham.mjs");
     let mut legend = BTreeMap::new();
     let mut rows: Vec<Vec<Q16>> = Vec::new();
     for line in text.lines() {
@@ -160,7 +182,10 @@ fn nottingham_matrix() -> (Vec<Q16>, usize, BTreeMap<String, usize>) {
         }
         if let Some(list) = line.strip_prefix("# nodes:") {
             for entry in list.split(',') {
-                let (idx, name) = entry.trim().split_once('=').expect("legend entry is idx=name");
+                let (idx, name) = entry
+                    .trim()
+                    .split_once('=')
+                    .expect("legend entry is idx=name");
                 legend.insert(name.to_string(), idx.parse().expect("legend index"));
             }
             continue;
@@ -181,7 +206,12 @@ fn nottingham_round(legend: &BTreeMap<String, usize>) -> Round {
     let text = std::fs::read_to_string(repo_root().join("demo/example-fleet-nottingham.csv"))
         .expect("CSV fixture is missing — run node tools/fixture/nottingham.mjs");
     let mut lines = text.lines().filter(|l| !l.trim().is_empty());
-    let header: Vec<&str> = lines.next().expect("header").split(',').map(str::trim).collect();
+    let header: Vec<&str> = lines
+        .next()
+        .expect("header")
+        .split(',')
+        .map(str::trim)
+        .collect();
     let col = |name: &str| header.iter().position(|h| *h == name).expect(name);
     let mut stops = Vec::new();
     let mut depart = 0;
@@ -195,7 +225,11 @@ fn nottingham_round(legend: &BTreeMap<String, usize>) -> Round {
             travel_q16: q_decimal(f[col("travel_mins_from_previous")]),
         });
     }
-    Round { id: 21, depart_q16: depart, stops }
+    Round {
+        id: 21,
+        depart_q16: depart,
+        stops,
+    }
 }
 
 /// Grades an arbitrary ordering against the untouched verifier.
@@ -203,9 +237,13 @@ fn nottingham_round(legend: &BTreeMap<String, usize>) -> Round {
 /// The departure is expressed by adding it to the leg out of the depot, exactly
 /// as `referee_says_feasible` does above: the verifier starts its clock at zero
 /// and this crate does not get to change that.
-fn referee_grades(order_ids: &[usize], matrix: &[Q16], n: usize, windows: &[(Q16, Q16)], depart_q16: Q16)
-    -> Result<Q16, lattice117_verify::TimeParadoxViolation>
-{
+fn referee_grades(
+    order_ids: &[usize],
+    matrix: &[Q16],
+    n: usize,
+    windows: &[(Q16, Q16)],
+    depart_q16: Q16,
+) -> Result<Q16, lattice117_verify::TimeParadoxViolation> {
     let mut m = matrix.to_vec();
     let first = order_ids[1];
     m[order_ids[0] * n + first] = m[order_ids[0] * n + first].saturating_add(depart_q16);
@@ -235,8 +273,15 @@ fn the_nottingham_round_resequences_from_99_6_to_60_2_minutes() {
     let before_ids: Vec<usize> = round.stops.iter().map(|s| s.id).collect();
     assert_eq!(
         before_ids,
-        vec![legend["DEPOT"], legend["Arnold"], legend["Beeston"],
-             legend["Bulwell"], legend["Carlton"], legend["Chilwell"], legend["DEPOT"]],
+        vec![
+            legend["DEPOT"],
+            legend["Arnold"],
+            legend["Beeston"],
+            legend["Bulwell"],
+            legend["Carlton"],
+            legend["Chilwell"],
+            legend["DEPOT"]
+        ],
         "the fixture must still be the alphabetical round the benchmark is about"
     );
 
@@ -245,7 +290,7 @@ fn the_nottingham_round_resequences_from_99_6_to_60_2_minutes() {
     // stop and the deficit the documentation quotes.
     let verdict_before = referee_grades(&before_ids, &matrix, n, &windows, round.depart_q16)
         .expect_err("the alphabetical round breaches Chilwell's window");
-    assert_eq!(verdict_before.node_id as usize, legend["Chilwell"]);
+    assert_eq!(verdict_before.node_id, legend["Chilwell"]);
 
     // 41_051_751 is 626.40002 minutes, and `q_decimal("626.4")` is 41_051_750.
     // The one-ulp gap is not a defect and it is not noise: an arrival is the SUM
@@ -262,7 +307,10 @@ fn the_nottingham_round_resequences_from_99_6_to_60_2_minutes() {
 
     // The solver proposes.
     let outcome = resequence_round(&round, &matrix, n);
-    assert!(outcome.searched, "five interior stops are well inside EXACT_LIMIT");
+    assert!(
+        outcome.searched,
+        "five interior stops are well inside EXACT_LIMIT"
+    );
     assert!(outcome.changed());
     assert_eq!(outcome.infeasible_before, 1);
     assert_eq!(outcome.infeasible_after, 0);
@@ -275,20 +323,36 @@ fn the_nottingham_round_resequences_from_99_6_to_60_2_minutes() {
     let after_ids = outcome.best_ids(&round);
     assert_eq!(
         after_ids,
-        vec![legend["DEPOT"], legend["Beeston"], legend["Chilwell"],
-             legend["Bulwell"], legend["Arnold"], legend["Carlton"], legend["DEPOT"]],
+        vec![
+            legend["DEPOT"],
+            legend["Beeston"],
+            legend["Chilwell"],
+            legend["Bulwell"],
+            legend["Arnold"],
+            legend["Carlton"],
+            legend["DEPOT"]
+        ],
         "the optimum is Beeston -> Chilwell -> Bulwell -> Arnold -> Carlton"
     );
 
     // ...and the referee decides. digest_after's verdict half.
     let arrival_after = referee_grades(&after_ids, &matrix, n, &windows, round.depart_q16)
         .expect("the untouched verifier must independently confirm the re-sequenced round");
-    assert_eq!(arrival_after, q_decimal("600.2"), "arrival back at the depot");
+    assert_eq!(
+        arrival_after,
+        q_decimal("600.2"),
+        "arrival back at the depot"
+    );
 
     // The applied round must cost what was searched, so the sheet a customer
     // exports and the number they were shown are the same thing.
     let fixed = apply(&round, &outcome, &matrix, n);
-    let applied: i64 = fixed.stops.iter().skip(1).map(|s| s.travel_q16 as i64).sum();
+    let applied: i64 = fixed
+        .stops
+        .iter()
+        .skip(1)
+        .map(|s| s.travel_q16 as i64)
+        .sum();
     assert_eq!(applied, outcome.best_cost_q16);
 }
 
@@ -345,11 +409,16 @@ fn real_geometry_does_not_reproduce_the_van_14_breach() {
     // same structural result, which is the finding.
     let other = legend["Bulwell"];
 
-    let there = matrix[depot * n + arnold] as i64 + matrix[arnold * n + other] as i64
+    let there = matrix[depot * n + arnold] as i64
+        + matrix[arnold * n + other] as i64
         + matrix[other * n + depot] as i64;
-    let back = matrix[depot * n + other] as i64 + matrix[other * n + arnold] as i64
+    let back = matrix[depot * n + other] as i64
+        + matrix[other * n + arnold] as i64
         + matrix[arnold * n + depot] as i64;
-    assert_eq!(there, back, "a symmetric matrix makes both two-stop orders identical");
+    assert_eq!(
+        there, back,
+        "a symmetric matrix makes both two-stop orders identical"
+    );
 
     let windows = vec![(0, q_decimal("1440.0")); n];
     assert!(referee_grades(&[depot, arnold, other, depot], &matrix, n, &windows, 0).is_ok());

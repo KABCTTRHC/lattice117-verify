@@ -165,7 +165,13 @@ pub fn resequence_fleet(rounds: &[Round], matrix: &[Q16], n: usize) -> FleetOutc
 ///
 /// The first and last entries of a round are its depot legs and stay pinned —
 /// a vehicle that starts somewhere other than the depot is a different problem.
-fn evaluate(order: &[usize], stops: &[Stop], matrix: &[Q16], n: usize, depart: Q16) -> (i64, usize) {
+fn evaluate(
+    order: &[usize],
+    stops: &[Stop],
+    matrix: &[Q16],
+    n: usize,
+    depart: Q16,
+) -> (i64, usize) {
     let mut cost: i64 = 0;
     let mut t: i64 = depart as i64;
     let mut infeasible = 0usize;
@@ -193,7 +199,10 @@ fn permutations(items: &[usize]) -> Vec<Vec<usize>> {
     let mut current = Vec::with_capacity(items.len());
     let mut used = alloc::vec![false; items.len()];
     fn walk(
-        items: &[usize], used: &mut Vec<bool>, current: &mut Vec<usize>, out: &mut Vec<Vec<usize>>,
+        items: &[usize],
+        used: &mut Vec<bool>,
+        current: &mut Vec<usize>,
+        out: &mut Vec<Vec<usize>>,
     ) {
         if current.len() == items.len() {
             out.push(current.clone());
@@ -283,7 +292,11 @@ pub fn apply(round: &Round, outcome: &ResequenceOutcome, matrix: &[Q16], n: usiz
             s
         })
         .collect();
-    Round { id: round.id, depart_q16: round.depart_q16, stops }
+    Round {
+        id: round.id,
+        depart_q16: round.depart_q16,
+        stops,
+    }
 }
 
 #[cfg(test)]
@@ -291,9 +304,16 @@ mod tests {
     use super::*;
     use crate::Q16_ONE;
 
-    fn q(v: i32) -> Q16 { v * Q16_ONE }
+    fn q(v: i32) -> Q16 {
+        v * Q16_ONE
+    }
     fn stop(id: usize, open: i32, close: i32) -> Stop {
-        Stop { id, open_q16: q(open), close_q16: q(close), travel_q16: 0 }
+        Stop {
+            id,
+            open_q16: q(open),
+            close_q16: q(close),
+            travel_q16: 0,
+        }
     }
 
     /// Depot, three stops, depot. The given order is the expensive one.
@@ -314,9 +334,9 @@ mod tests {
             depart_q16: 0,
             stops: alloc::vec![
                 stop(0, 0, 1000),
-                stop(3, 0, 1000),   // C
-                stop(1, 0, 1000),   // A
-                stop(2, 0, 1000),   // B
+                stop(3, 0, 1000), // C
+                stop(1, 0, 1000), // A
+                stop(2, 0, 1000), // B
                 stop(4, 0, 1000),
             ],
         };
@@ -346,8 +366,10 @@ mod tests {
         // Make the cheap order miss a window, so the search must reject it.
         round.stops[1].close_q16 = q(1); // C must be reached almost immediately
         let out = resequence_round(&round, &m, n);
-        assert!(out.infeasible_after <= out.infeasible_before,
-                "re-sequencing must never increase the number of missed windows");
+        assert!(
+            out.infeasible_after <= out.infeasible_before,
+            "re-sequencing must never increase the number of missed windows"
+        );
     }
 
     #[test]
@@ -357,9 +379,16 @@ mod tests {
         // 30_000 rather than 100_000: Q16.16 caps at 32,767, and q(100_000)
         // overflows i32 — the engine's own range limit, hit by the test first.
         let stops: Vec<Stop> = (0..n).map(|i| stop(i, 0, 30_000)).collect();
-        let round = Round { id: 9, depart_q16: 0, stops };
+        let round = Round {
+            id: 9,
+            depart_q16: 0,
+            stops,
+        };
         let out = resequence_round(&round, &m, n);
-        assert!(!out.searched, "must not claim a result it did not search for");
+        assert!(
+            !out.searched,
+            "must not claim a result it did not search for"
+        );
         assert!(!out.changed());
     }
 
@@ -377,9 +406,20 @@ mod tests {
         let (round, m, n) = line_round();
         let out = resequence_round(&round, &m, n);
         let fixed = apply(&round, &out, &m, n);
-        assert_eq!(fixed.stops[0].travel_q16, 0, "nothing precedes the first stop");
-        let (cost, _) = evaluate(&(0..fixed.stops.len()).collect::<Vec<_>>(),
-                                &fixed.stops, &m, n, 0);
-        assert_eq!(cost, out.best_cost_q16, "applied round must cost what was searched");
+        assert_eq!(
+            fixed.stops[0].travel_q16, 0,
+            "nothing precedes the first stop"
+        );
+        let (cost, _) = evaluate(
+            &(0..fixed.stops.len()).collect::<Vec<_>>(),
+            &fixed.stops,
+            &m,
+            n,
+            0,
+        );
+        assert_eq!(
+            cost, out.best_cost_q16,
+            "applied round must cost what was searched"
+        );
     }
 }
