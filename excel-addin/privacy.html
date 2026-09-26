@@ -36,6 +36,31 @@ simplest way to confirm it.</p>
 GitHub Pages when the pane first opens, exactly as any web page is. Those
 requests carry no information about your workbook.</p>
 
+<h2>Google Sheets</h2>
+<p>The same add-in is published for Google Sheets, and the architecture there
+differs in one respect that we would rather state than gloss over.</p>
+<p><b>The sidebar page itself is served by Google.</b> Apps Script delivers it
+from a sandboxed <code>googleusercontent.com</code> iframe each time you open
+it. That is Google serving the page — not us. We operate no server and receive
+nothing from it.</p>
+<p><b>Everything after that is local.</b> Once the sidebar has loaded, reading
+the grid, the Q16.16 fixed-point evaluation in WebAssembly, the rest and break
+arithmetic, the SHA-256 digest and the licence check all happen inside that
+iframe on your own machine. <b>Zero network requests are made to Brierley
+Sovereign Group Ltd at any point.</b> The 21 KB engine is inlined into the
+sidebar, so there is nothing to download either.</p>
+<p>The add-on holds exactly one OAuth scope,
+<code>spreadsheets.currentonly</code>, which permits access to the single
+spreadsheet you have open and to no other file in your Drive. It holds no scope
+permitting external requests, and its server-side code contains no
+<code>UrlFetchApp</code> — a test in the repository asserts this on every
+commit rather than leaving it as a claim.</p>
+<p>One honest difference from Excel: the Excel task pane is served from GitHub
+Pages with a service worker, so it keeps working with the network disconnected.
+The Sheets sidebar is delivered by Google each time it opens, so it needs a
+connection to <i>open</i> — but not to <i>compute</i>. Both are equally local
+once running.</p>
+
 <h2>Licence keys</h2>
 <p>If you buy a Standard or Pro licence, payment is handled by <b>Stripe</b>,
 who process your payment details under their own privacy policy. We receive

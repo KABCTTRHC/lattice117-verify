@@ -1,0 +1,26 @@
+{
+  "timeZone": "Europe/London",
+  "dependencies": {},
+  "exceptionLogging": "NONE",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets.currentonly"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Lattice117 Schedule Check",
+      "logoUrl": "https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-80.png",
+      "useLocaleFromApp": true,
+      "homepageTrigger": {
+        "runFunction": "onOpen",
+        "enabled": false
+      }
+    },
+    "sheets": {
+      "homepageTrigger": {
+        "runFunction": "onOpen",
+        "enabled": false
+      }
+    }
+  }
+}

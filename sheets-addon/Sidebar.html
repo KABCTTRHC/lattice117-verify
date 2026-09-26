@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<title>Lattice117 Schedule Check</title>
+<style>
+  :root{
+    --bg:#07090e; --ink:#e8eef6; --ink-dim:#94a3b8; --ink-faint:#64748b;
+    --ok:#10b981; --bad:#f43f5e; --warn:#f59e0b; --accent:#0ea5e9; --indigo:#6366f1;
+    --glass:rgba(17,24,39,.65); --glass-2:rgba(23,32,48,.58);
+    --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+    --rim:inset 0 1px 0 rgba(255,255,255,.07);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg)}
+  body{
+    margin:0;padding:13px;color:var(--ink);font:13.5px/1.5 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(420px 300px at 10% -6%, rgba(16,185,129,.11), transparent 62%),
+      radial-gradient(380px 280px at 96% 3%, rgba(14,165,233,.10), transparent 60%),
+      radial-gradient(360px 340px at 50% 106%, rgba(99,102,241,.09), transparent 60%);
+    background-attachment:fixed;
+  }
+  h1{font:700 15px/1.25 var(--sans);margin:0 0 3px;letter-spacing:-.01em}
+  .sub{color:var(--ink-dim);font-size:11.5px;margin:0 0 11px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+  .tag{font:600 9.5px/1 var(--mono);padding:5px 7px;border-radius:7px;
+       background:var(--glass-2);border:1px solid var(--line);color:var(--ink-dim);
+       box-shadow:var(--rim)}
+  .tag.live{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,transparent)}
+  .modes{display:flex;gap:4px;padding:4px;margin-bottom:10px;border-radius:999px;
+         background:var(--glass-2);border:1px solid var(--line);box-shadow:var(--rim)}
+  .modes button{flex:1;margin:0;padding:7px 4px;border-radius:999px;font:600 11.5px var(--sans);
+                background:transparent;border:1px solid transparent;color:var(--ink-dim);cursor:pointer}
+  .modes button.on{color:#06251a;border-color:color-mix(in srgb,var(--ok) 60%,transparent);
+    background:linear-gradient(180deg,color-mix(in srgb,var(--ok) 95%,#fff),var(--ok))}
+  button{width:100%;font:600 13px var(--sans);padding:10px;border-radius:10px;cursor:pointer;
+         border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);margin-bottom:7px}
+  button.primary{border-color:color-mix(in srgb,var(--accent) 70%,transparent);color:#fff;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 96%,#fff),var(--accent))}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;
+        background:var(--glass);box-shadow:var(--rim);
+        -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .rate{font:800 30px/1 var(--mono);letter-spacing:-.025em}
+  .rate.ok{color:var(--ok)} .rate.bad{color:var(--bad)}
+  .rate small{display:block;font:600 9px/1.3 var(--sans);letter-spacing:.08em;
+              text-transform:uppercase;color:var(--ink-faint);margin-top:5px}
+  .flag{border-left:3px solid var(--bad);padding:8px 10px;margin-top:7px;border-radius:0 8px 8px 0;
+        background:rgba(8,11,18,.5);font:11.5px var(--mono);line-height:1.55}
+  .flag .who{color:var(--ink);font-weight:700} .flag b{color:var(--bad)}
+  .digest{font:9.5px var(--mono);color:var(--ink-faint);word-break:break-all;margin-top:9px;
+          background:rgba(8,11,18,.5);border:1px solid var(--line);border-radius:9px;padding:8px}
+  .note{font-size:11px;color:var(--ink-faint);margin-top:9px;line-height:1.5}
+  .err{color:var(--bad);font:11.5px var(--mono);white-space:pre-wrap;margin-top:8px}
+  .lock{margin-top:9px;padding:9px 10px;border-radius:9px;font-size:11.5px;line-height:1.45;
+        border:1px solid color-mix(in srgb,var(--warn) 42%,transparent);
+        background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--ink)}
+  details{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--glass-2)}
+  summary{cursor:pointer;font:600 11.5px var(--sans);color:var(--ink-dim)}
+  #licKey{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
+          border:1px solid var(--line);background:rgba(8,11,18,.55);color:var(--ink)}
+  .row{display:flex;gap:6px} .row button{margin-bottom:0}
+</style>
+</head>
+<body>
+
+<h1>Lattice117 Schedule Check</h1>
+<p class="sub">Select your rows, including the header.</p>
+<div class="tags">
+  <span class="tag live" id="engine">engine: loading…</span>
+  <span class="tag" id="tier">tier: …</span>
+  <span class="tag">never uploaded</span>
+</div>
+
+<div class="modes">
+  <button id="modeRoute" class="on" type="button">Routes</button>
+  <button id="modeRota" type="button">UK rota rest</button>
+</div>
+
+<button id="run" class="primary" disabled>Check selected rows</button>
+<button id="clear">Clear highlighting</button>
+
+<div id="out"></div>
+<div class="err" id="err"></div>
+
+<p class="note" id="routeNote">Columns are matched from your header row: the
+round, the stop, when its window opens and closes, and the travel time from the
+previous stop. Names can be anything.</p>
+
+<p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
+check against configured rest and break rules (11h inter-shift rest, 20m break
+over 6h) — not legal advice.</b> It knows nothing of opt-outs, young workers,
+compensatory rest or any collective agreement.</p>
+
+<details id="licBox" style="margin-top:10px">
+  <summary>Licence</summary>
+  <div id="licState"></div>
+  <input id="licKey" placeholder="paste licence key" spellcheck="false">
+  <div class="row">
+    <button id="licApply">Apply</button>
+    <button id="licRemove">Remove</button>
+  </div>
+  <p class="note">Verified here, in this sidebar, by public-key signature. It is
+  not sent anywhere, and neither is your sheet.</p>
+</details>
+
+<script>
+/* ---- L117_DIGEST ---- */
+const L117_DIGEST = (function(){
+/**
+ * The verdict digest — one canonicalisation, shared by every surface.
+ *
+ * This file exists because the three surfaces each grew their own. The browser
+ * audit hashed raw input values, the Excel pane hashed a summary that did not
+ * include the inputs at all, and the npm package hashed Q16.16 integers. Three
+ * different hashes for one schedule, which makes the digest worse than useless:
+ * its entire purpose is letting two parties confirm they reached the same
+ * verdict, and a planner checking in Excel could not match their client
+ * checking in the browser.
+ *
+ * The canonicalisation here is npm 0.2.0's, unchanged, so digests already
+ * issued by the package stay valid and the other surfaces move onto it.
+ *
+ * Two deliberate choices, both of which exist to stop the digest moving when
+ * the verdict has not:
+ *
+ *   * Values are hashed as the Q16.16 integers the engine actually evaluated,
+ *     not as supplied. `600` and `'600'` are the same schedule, and a CSV or
+ *     spreadsheet round-trip hands you strings as a matter of course.
+ *   * The first stop's travel time is pinned to 0. Nothing precedes it, so it
+ *     takes no part in the evaluation.
+ *
+ * Zero dependencies, no network, WebCrypto only — usable unchanged in the
+ * browser, in the Excel task pane and in Node.
+ */
+
+/** Q16.16 scale factor. */
+const Q = 65536;
+/** Representable range of Q16.16 on i32. */
+const Q16_MAX = 32767;
+const Q16_MIN = -32768;
+
+/**
+ * Converts one value to its Q16.16 integer.
+ *
+ * The multiply goes through a double, which is unavoidable in JavaScript and
+ * measurably harmless here: across 36,014 realistic route-sheet values
+ * (0-600 with up to three decimal places, plus exact half-unit boundaries)
+ * this produces bit-identical results to exact decimal arithmetic. IEEE-754
+ * is fully specified, so it is also identical on every platform.
+ *
+ * Out-of-range input throws rather than wrapping. A wrapped value yields a
+ * confident verdict about a schedule that was never checked, which is the
+ * worst failure this kind of tool can have.
+ */
+function toQ(value, what) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new RangeError(`${what}: "${value}" is not a finite number`);
+  }
+  if (n < Q16_MIN || n > Q16_MAX) {
+    throw new RangeError(
+      `${what}: ${n} is outside the Q16.16 representable range ` +
+      `(${Q16_MIN}..${Q16_MAX}). Rescale your time unit — minutes instead of ` +
+      `seconds, for example — rather than truncating.`
+    );
+  }
+  return Math.round(n * Q);
+}
+
+/**
+ * The exact string that gets hashed. Exposed so a surface can show it, and so
+ * a test can diff two surfaces' canonical forms rather than only their hashes
+ * — when they disagree, the string says where.
+ *
+ * @param {{id:string, stops:{id:string, open?:*, close?:*, travel:*}[]}[]} routes
+ * @param {{id:string, feasible:boolean,
+ *          violation:?{stop:string, raw:{arrival:number, windowClose:number, deficit:number}}}[]} verdict
+ */
+function canonicalise(routes, verdict) {
+  return JSON.stringify({
+    routes: routes.map((r) => [
+      r.id,
+      r.stops.map((s, i) => [
+        s.id,
+        toQ(s.open ?? 0, `${s.id} window open`),
+        toQ(s.close ?? 0, `${s.id} window close`),
+        i === 0 ? 0 : toQ(s.travel, `${s.id} travel`),
+      ]),
+    ]),
+    verdict: verdict.map((r) => [
+      r.id,
+      r.feasible,
+      r.violation?.stop ?? null,
+      r.violation?.raw?.arrival ?? null,
+      r.violation?.raw?.windowClose ?? null,
+      r.violation?.raw?.deficit ?? null,
+    ]),
+  });
+}
+
+/** SHA-256 of a canonical string, lowercase hex. Both modes hash through here. */
+async function sha256(canon) {
+  const data = new TextEncoder().encode(canon);
+  const subtle = globalThis.crypto?.subtle
+    ?? (await import('node:crypto')).webcrypto.subtle;
+  const buf = await subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Canonical SHA-256 over the inputs and the verdict, lowercase hex. */
+async function verdictDigest(routes, verdict) {
+  return sha256(canonicalise(routes, verdict));
+}
+
+/* ---- rota mode -----------------------------------------------------------
+   A second canonicalisation for the rest/break check. Same discipline, own
+   shape: a rota is people and shifts, not routes and stops, and forcing it
+   through the routing canon would produce a hash whose structure lied about
+   what was checked.
+
+   Absolute shift times are hashed as EXACT INTEGER MINUTES rather than Q16.16.
+   Minutes since the civil epoch run to tens of millions, which overflows
+   Q16.16 entirely; they are already exact integers, so scaling them would add
+   risk and remove nothing. The differences the check turns on - rest gaps,
+   break shortfalls - are small, and those are hashed in Q16.16 where every
+   whole minute is exactly representable.
+
+   The thresholds are part of the canon. A record that did not pin them could
+   be reproduced against different rules and still match, which would make the
+   digest meaningless for the one thing it exists to prove.
+-------------------------------------------------------------------------- */
+
+/**
+ * @param {{id:string, shifts:{start:number,end:number,breakMins:number}[]}[]} people
+ * @param {{id:string, ok:boolean, breaches:{kind:string, q:{actual:number,expected:number,shortfall:number}}[]}[]} verdict
+ * @param {{restMinutes:number, longShiftMinutes:number, breakMinutes:number}} rules
+ */
+function canonicaliseRota(people, verdict, rules) {
+  return JSON.stringify({
+    mode: 'lattice117.rota.v1',
+    rules: [rules.restMinutes * Q, rules.longShiftMinutes * Q, rules.breakMinutes * Q],
+    people: people.map((p) => [
+      p.id,
+      p.shifts.map((s) => [s.start, s.end, s.breakMins]),
+    ]),
+    verdict: verdict.map((v) => [
+      v.id,
+      v.ok,
+      v.breaches.map((b) => [b.kind, b.q.actual, b.q.expected, b.q.shortfall]),
+    ]),
+  });
+}
+
+/** SHA-256 over the rota canonical form, lowercase hex. */
+async function rotaDigest(people, verdict, rules) {
+  return sha256(canonicaliseRota(people, verdict, rules));
+}
+
+return { Q, Q16_MAX, Q16_MIN, toQ, canonicalise, verdictDigest, canonicaliseRota, rotaDigest };
+})();
+
+/* ---- L117_ROTA ---- */
+const L117_ROTA = (function(){
+/**
+ * UK rota rest & break checking — a second evaluation mode, not a route preset.
+ *
+ * A rota is not a route. A route is a sequence of arrivals along one path; a
+ * rota is a set of shifts per person, where what matters is the GAP BETWEEN
+ * consecutive shifts and the length of each one. The two share the engine's
+ * discipline (exact integers, no floating point, named violations) and nothing
+ * else, so this is its own path rather than the routing check wearing a hat.
+ *
+ * ---------------------------------------------------------------------------
+ * INDICATIVE MATHEMATICAL CHECK ONLY — NOT LEGAL ADVICE.
+ *
+ * This compares times against the rest and break thresholds configured below.
+ * It is arithmetic, not a determination of compliance with the Working Time
+ * Regulations 1998 or any other law. It does not know about opt-outs, young
+ * workers, shift-work exceptions, compensatory rest, unmeasured working time,
+ * or any collective agreement. A clean result here is not a defence, and a
+ * flagged result is not an offence.
+ * ---------------------------------------------------------------------------
+ *
+ * ## Why the arithmetic is in whole minutes
+ *
+ * Absolute times are held as exact integer minutes since the civil epoch, and
+ * only the DIFFERENCES are expressed in Q16.16.
+ *
+ * That split is deliberate. Q16.16 spans +/-32,768, so absolute minutes over a
+ * monthly rota would overflow it, while Q16.16 *hours* cannot represent most
+ * clock times exactly - 06:20 is 6.333... hours, which lands between two
+ * Q16.16 steps. A rest gap computed that way could come out as 10.99999 hours
+ * against an 11.00000 threshold and report a breach that does not exist. For a
+ * tool people may show to an employment lawyer, a false positive at exactly
+ * the threshold is the worst available bug.
+ *
+ * Gaps and durations are small (a rest gap is hours, not weeks), so they fit
+ * Q16.16 comfortably and every whole minute is exactly representable:
+ * 660 minutes is exactly 11 hours, and the comparison is integer-exact.
+ */
+
+/** Q16.16 scale factor, shared with the routing path. */
+const Q = 65536;
+
+/** Minutes in a day, used when a shift crosses midnight. */
+const DAY = 1440;
+
+/**
+ * The configured thresholds, in whole minutes.
+ *
+ * Named after what they are rather than the regulation they echo, because the
+ * check is against these numbers and nothing more.
+ */
+const RULES = Object.freeze({
+  /** Minimum rest between the end of one shift and the start of the next. */
+  restMinutes: 660,          // 11.0 hours
+  /** A shift longer than this is expected to carry a break. */
+  longShiftMinutes: 360,     // 6.0 hours
+  /** The break a long shift is expected to carry. */
+  breakMinutes: 20,
+});
+
+const DISCLAIMER =
+  'Indicative mathematical check against configured rest and break rules ' +
+  '(11h inter-shift rest, 20m break over 6h) — not legal advice.';
+
+/* ---- time parsing, without Date ------------------------------------------
+
+   `new Date('2026-09-28 06:00')` is interpreted against the viewer's time
+   zone and differs between engines. Every value here is parsed to an integer
+   by hand so two people in two countries hash the same rota identically.
+-------------------------------------------------------------------------- */
+
+/** Days from 1970-01-01 for a civil y/m/d. Integer arithmetic throughout. */
+function daysFromCivil(y, m, d) {
+  y -= m <= 2 ? 1 : 0;
+  const era = Math.floor(y / 400);
+  const yoe = y - era * 400;                                   // [0, 399]
+  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+
+/** "HH:MM" or "HH:MM:SS" -> minutes past midnight. Seconds are truncated. */
+function timeOfDay(str) {
+  const m = /^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/.exec(String(str));
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+
+/** "YYYY-MM-DD" or "DD/MM/YYYY" -> day number. UK order for slashes. */
+function dayNumber(str) {
+  const s = String(str).trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return daysFromCivil(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if (m) return daysFromCivil(+m[3], +m[2], +m[1]);
+  return null;
+}
+
+/**
+ * Resolves one cell into absolute minutes.
+ *
+ * Accepts a full datetime, or a bare time-of-day when a separate date column
+ * supplies the day. Returns null rather than guessing.
+ */
+function toMinutes(value, dateCell) {
+  const s = String(value ?? '').trim();
+  if (!s) return null;
+
+  const dt = /^(.+?)[T\s]+(\d{1,2}:\d{2}(?::\d{2})?)$/.exec(s);
+  if (dt) {
+    const day = dayNumber(dt[1]), tod = timeOfDay(dt[2]);
+    if (day === null || tod === null) return null;
+    return day * DAY + tod;
+  }
+
+  const tod = timeOfDay(s);
+  if (tod === null) return null;
+  const day = dateCell == null ? 0 : dayNumber(dateCell);
+  return (day === null ? 0 : day) * DAY + tod;
+}
+
+/** Break cells: "30", "0:30", "30m", "1h 15m". Returns whole minutes. */
+function breakToMinutes(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return 0;
+  const hm = timeOfDay(s);
+  if (hm !== null && s.includes(':')) return hm;
+  const n = Number(s);
+  if (Number.isFinite(n)) return Math.round(n);
+  let total = 0, seen = false;
+  for (const m of s.matchAll(/(\d+(?:\.\d+)?)\s*([hm])/gi)) {
+    total += Math.round(Number(m[1]) * (m[2].toLowerCase() === 'h' ? 60 : 1));
+    seen = true;
+  }
+  return seen ? total : 0;
+}
+
+const q = (minutes) => minutes * Q;
+
+/**
+ * Evaluates one rota.
+ *
+ * @param {{staff:string, start:*, end:*, break?:*, date?:*, row?:number}[]} rows
+ * @param {{maxPeople?:number, rules?:object}} [opts]
+ */
+function evaluateRota(rows, opts = {}) {
+  const rules = { ...RULES, ...(opts.rules || {}) };
+  const cap = opts.maxPeople ?? Infinity;
+
+  const byStaff = new Map();
+  const rejected = [];
+
+  rows.forEach((r, i) => {
+    const staff = String(r.staff ?? '').trim();
+    if (!staff) return;
+    const start = toMinutes(r.start, r.date);
+    let end = toMinutes(r.end, r.date);
+    if (start === null || end === null) {
+      rejected.push({ row: r.row ?? i + 2, staff,
+        why: `could not read "${r.start}" / "${r.end}" as a time` });
+      return;
+    }
+    // A shift ending at or before it starts has crossed midnight. This is the
+    // normal night-shift case and mishandling it invents an 18-hour rest gap
+    // where there is none.
+    let crossedMidnight = false;
+    if (end <= start) { end += DAY; crossedMidnight = true; }
+
+    if (!byStaff.has(staff)) byStaff.set(staff, []);
+    byStaff.get(staff).push({
+      start, end, crossedMidnight,
+      breakMins: breakToMinutes(r.break),
+      label: String(r.date ?? '').trim() || null,
+      row: r.row ?? i + 2,
+    });
+  });
+
+  const people = [], verdict = [], breaches = [];
+  let checked = 0, capped = 0;
+
+  for (const [staff, shifts] of byStaff) {
+    // The cap is applied where shifts are evaluated, not by hiding rows after.
+    if (checked >= cap) { capped++; continue; }
+    checked++;
+    shifts.sort((a, b) => a.start - b.start || a.end - b.end);
+
+    const mine = [];
+
+    for (let i = 0; i < shifts.length; i++) {
+      const s = shifts[i];
+      const duration = s.end - s.start;
+
+      if (duration > rules.longShiftMinutes && s.breakMins < rules.breakMinutes) {
+        mine.push({
+          kind: 'break', staff, row: s.row, label: s.label,
+          shiftMinutes: duration, actual: s.breakMins,
+          expected: rules.breakMinutes,
+          shortfall: rules.breakMinutes - s.breakMins,
+          q: { actual: q(s.breakMins), expected: q(rules.breakMinutes),
+               shortfall: q(rules.breakMinutes - s.breakMins) },
+        });
+      }
+
+      if (i + 1 < shifts.length) {
+        const n = shifts[i + 1];
+        const gap = n.start - s.end;
+        if (gap < 0) {
+          mine.push({
+            kind: 'overlap', staff, row: n.row, label: n.label,
+            actual: gap, expected: rules.restMinutes, shortfall: -gap,
+            q: { actual: q(gap), expected: q(rules.restMinutes),
+                 shortfall: q(-gap) },
+          });
+        } else if (gap < rules.restMinutes) {
+          mine.push({
+            kind: 'rest', staff, row: n.row, label: n.label,
+            actual: gap, expected: rules.restMinutes,
+            shortfall: rules.restMinutes - gap,
+            q: { actual: q(gap), expected: q(rules.restMinutes),
+                 shortfall: q(rules.restMinutes - gap) },
+          });
+        }
+      }
+    }
+
+    people.push({ id: staff, shifts });
+    verdict.push({ id: staff, ok: mine.length === 0, breaches: mine });
+    breaches.push(...mine);
+  }
+
+  return {
+    checked, capped, totalPeople: byStaff.size,
+    clear: verdict.filter((v) => v.ok).length,
+    people, verdict, breaches, rejected, rules,
+  };
+}
+
+/** "9h 20m" from 560. Display only — never fed to the digest. */
+function humanMinutes(m) {
+  const neg = m < 0; const a = Math.abs(m);
+  const h = Math.floor(a / 60), mm = a % 60;
+  return (neg ? '-' : '') + (h ? `${h}h ${mm}m` : `${mm}m`);
+}
+
+return { RULES, DISCLAIMER, toMinutes, breakToMinutes, evaluateRota, humanMinutes };
+})();
+
+/* ---- L117_LICENCE ---- */
+const L117_LICENCE = (function(){
+/**
+ * Licence verification — the public half. Safe to ship and to read.
+ *
+ * ECDSA P-256 / SHA-256 via WebCrypto, which every current browser and the
+ * Excel task-pane webview support. The private key that signs licences is not
+ * here and never will be.
+ *
+ * Deliberately honest about what this is: a lock on an honest door. The code
+ * is open, so anyone determined can patch the check out. That is an accepted
+ * trade, because the alternative is accounts, a server, and a database of
+ * customer schedules — which would destroy the one property that makes this
+ * product sellable, namely that nothing ever leaves the machine.
+ *
+ * Commercial use is actually governed by the AGPL and the commercial licence,
+ * not by this file.
+ */
+
+const PUBLIC_JWK = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: 'bMDjl_8U9_4dqVifNUhDPSKGdOo1bZyA4_e_wevdyXI',
+  y: 's1axx-laaFeKaaplhhm8L2sWd3NsIA3ZHqbJ167SafA',
+};
+
+const ALG = { name: 'ECDSA', namedCurve: 'P-256' };
+const SIG = { name: 'ECDSA', hash: 'SHA-256' };
+
+/** Free tier: enough to prove the tool works on your own data, not to run on it. */
+const FREE_TIER = Object.freeze({
+  tier: 'free',
+  maxRounds: 1,
+  certificate: false,
+  label: 'Free',
+});
+
+/**
+ * What each paid tier grants.
+ *
+ * The split is deliberate: Standard removes the cap, Pro adds the
+ * digest-sealed certificate. The certificate is the part with durable value —
+ * a feasibility check is a moment, a reproducible record of it is something a
+ * customer keeps in a compliance folder — so it is what the higher price buys.
+ *
+ * An unrecognised tier degrades to Standard rather than Pro. A key that was
+ * mis-issued should under-deliver and get reported, not silently hand out the
+ * paid feature.
+ */
+const TIERS = Object.freeze({
+  standard: { maxRounds: Infinity, certificate: false, label: 'Standard' },
+  pro:      { maxRounds: Infinity, certificate: true,  label: 'Pro' },
+  team:     { maxRounds: Infinity, certificate: true,  label: 'Team' },
+});
+
+const unb64u = (s) => {
+  const pad = s.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(pad + '='.repeat((4 - (pad.length % 4)) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+};
+
+let _key = null;
+async function publicKey() {
+  if (!_key) _key = await crypto.subtle.importKey('jwk', PUBLIC_JWK, ALG, false, ['verify']);
+  return _key;
+}
+
+/**
+ * Verifies a licence key and returns the entitlement it grants.
+ * Any failure — malformed, bad signature, expired — degrades to FREE_TIER
+ * with a reason. It never throws, because a broken licence must not take the
+ * product down; it must quietly become the free product.
+ *
+ * @param {string} licence
+ * @returns {Promise<{tier:string,maxRounds:number,certificate:boolean,label:string,email?:string,expires?:Date,reason?:string}>}
+ */
+async function verifyLicence(licence) {
+  if (!licence || typeof licence !== 'string' || !licence.includes('.')) {
+    return { ...FREE_TIER, reason: 'no licence key' };
+  }
+  try {
+    const [body, sig] = licence.trim().split('.');
+    const ok = await crypto.subtle.verify(
+      SIG, await publicKey(), unb64u(sig), new TextEncoder().encode(body)
+    );
+    if (!ok) return { ...FREE_TIER, reason: 'signature does not verify' };
+
+    const p = JSON.parse(new TextDecoder().decode(unb64u(body)));
+    if (p.exp * 1000 < Date.now()) {
+      return { ...FREE_TIER, reason: `expired ${new Date(p.exp * 1000).toISOString().slice(0, 10)}` };
+    }
+    const grant = TIERS[p.tier] ?? TIERS.standard;
+    return {
+      tier: p.tier,
+      maxRounds: grant.maxRounds,
+      certificate: grant.certificate,
+      label: grant.label,
+      email: p.sub,
+      expires: new Date(p.exp * 1000),
+    };
+  } catch (e) {
+    return { ...FREE_TIER, reason: 'licence key is malformed' };
+  }
+}
+
+/**
+ * Reads a saved licence from localStorage and verifies it.
+ * Storage may throw in a private window or with site data blocked, so every
+ * access is guarded — a browser that refuses storage still gets the free tier
+ * rather than an error page.
+ */
+async function currentEntitlement(storageKey = 'lattice117.licence') {
+  let saved = null;
+  try { saved = localStorage.getItem(storageKey); } catch { /* blocked */ }
+  return verifyLicence(saved);
+}
+
+function saveLicence(licence, storageKey = 'lattice117.licence') {
+  try { localStorage.setItem(storageKey, licence.trim()); return true; } catch { return false; }
+}
+
+function clearLicence(storageKey = 'lattice117.licence') {
+  try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+}
+
+return { FREE_TIER, verifyLicence, currentEntitlement, saveLicence, clearLicence };
+})();
+
+/* ---- L117_FREETIER ---- */
+const L117_FREETIER = (function(){
+/**
+ * Free-tier limits for CUSTOM uploads.
+ *
+ * The free tier already caps evaluation to one round or one person. That cap
+ * is trivially sidestepped by slicing a twenty-van fleet into twenty one-van
+ * files and running them one after another, so the cap needs depth as well as
+ * breadth, and repeated custom imports need a ceiling.
+ *
+ * ## What this is, and is not
+ *
+ * The DEPTH CAPS are real. They are applied to the data before evaluation, so
+ * a free user genuinely does not receive verdicts for the rows beyond them —
+ * the same discipline the round cap already follows.
+ *
+ * The IMPORT QUOTA is friction, not enforcement. It lives in the visitor's own
+ * browser, and a private window, cleared site data or devtools defeats it in
+ * seconds. Mirroring it across localStorage AND IndexedDB means clearing one
+ * alone does not reset it, which stops the casual case; it stops nothing else,
+ * and it is not meant to. What actually governs commercial use is the licence
+ * and the AGPL, exactly as with the key check. Anything stronger would need an
+ * account and a server, which would cost the product the one property it is
+ * sold on.
+ *
+ * Built-in examples are never counted and never capped. A visitor who cannot
+ * see the thing work will not buy it, and the demo is the marketing.
+ */
+
+const LIMITS = Object.freeze({
+  /** Free + custom, fleet mode: one round, and only its first few stops. */
+  routeRounds: 1,
+  routeStops: 6,
+  /** Free + custom, rota mode: one person, and only their first few shifts. */
+  rotaPeople: 1,
+  rotaShifts: 4,
+  /** Custom imports allowed per rolling window. */
+  imports: 3,
+  windowMs: 24 * 60 * 60 * 1000,
+});
+
+const UPSELL =
+  'Free tier checks 1 round (up to 6 stops). Subscribe to Standard (£29/mo) ' +
+  'to verify full rounds and entire fleets.';
+const UPSELL_ROTA =
+  'Free tier checks 1 staff member (up to 4 shifts). Subscribe to Standard ' +
+  '(£29/mo) to verify your whole rota.';
+
+/* ---- quota storage ------------------------------------------------------- */
+
+const LS_KEY = 'lattice117.customImports';
+const DB_NAME = 'lattice117', STORE = 'quota', DB_KEY = 'customImports';
+
+const prune = (list, now) =>
+  (Array.isArray(list) ? list : [])
+    .filter((t) => Number.isFinite(t) && now - t < LIMITS.windowMs)
+    .sort((a, b) => a - b);
+
+function lsRead() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+function lsWrite(list) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch { /* blocked */ }
+}
+
+function idbOpen() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+
+async function idbRead() {
+  const db = await idbOpen();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const r = db.transaction(STORE, 'readonly').objectStore(STORE).get(DB_KEY);
+      r.onsuccess = () => resolve(Array.isArray(r.result) ? r.result : []);
+      r.onerror = () => resolve([]);
+    } catch { resolve([]); }
+  });
+}
+
+async function idbWrite(list) {
+  const db = await idbOpen();
+  if (!db) return;
+  try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(list, DB_KEY); } catch { /* ignore */ }
+}
+
+/**
+ * Current usage, as the union of both stores.
+ *
+ * The union is the point: clearing localStorage alone leaves the IndexedDB
+ * copy, and the higher of the two wins.
+ */
+async function importsUsed(now = Date.now()) {
+  const merged = new Set([...prune(lsRead(), now), ...prune(await idbRead(), now)]);
+  return [...merged].sort((a, b) => a - b);
+}
+
+async function importsLeft(now = Date.now()) {
+  return Math.max(0, LIMITS.imports - (await importsUsed(now)).length);
+}
+
+/** Records one custom import in both stores. Returns how many remain after it. */
+async function recordImport(now = Date.now()) {
+  const list = [...(await importsUsed(now)), now];
+  lsWrite(list);
+  await idbWrite(list);
+  return Math.max(0, LIMITS.imports - list.length);
+}
+
+/* ---- depth caps ---------------------------------------------------------- */
+
+/**
+ * Trims a fleet to the free-tier depth. Applied before evaluation, so the
+ * rows beyond the cap are genuinely not checked.
+ *
+ * @param {{vehicle:string, stops:any[]}[]} routes
+ * @returns {{routes:any[], hidden:{rounds:number, stops:number}}}
+ */
+function capRoutes(routes) {
+  const kept = routes.slice(0, LIMITS.routeRounds).map((r) => ({
+    ...r, stops: r.stops.slice(0, LIMITS.routeStops),
+  }));
+  const stopsDropped = routes
+    .slice(0, LIMITS.routeRounds)
+    .reduce((n, r) => n + Math.max(0, r.stops.length - LIMITS.routeStops), 0);
+  return {
+    routes: kept,
+    hidden: { rounds: Math.max(0, routes.length - LIMITS.routeRounds), stops: stopsDropped },
+  };
+}
+
+/**
+ * Trims rota rows to one person and their first few shifts, preserving the
+ * original row order within that person so sheet row numbers stay meaningful.
+ *
+ * @param {{staff:string}[]} rows
+ */
+function capRotaRows(rows) {
+  const order = [];
+  for (const r of rows) {
+    const s = String(r.staff ?? '').trim();
+    if (s && !order.includes(s)) order.push(s);
+  }
+  const keepStaff = new Set(order.slice(0, LIMITS.rotaPeople));
+  const seen = new Map();
+  const kept = [];
+  let shiftsDropped = 0;
+  for (const r of rows) {
+    const s = String(r.staff ?? '').trim();
+    if (!keepStaff.has(s)) continue;
+    const n = (seen.get(s) ?? 0) + 1;
+    seen.set(s, n);
+    if (n <= LIMITS.rotaShifts) kept.push(r); else shiftsDropped++;
+  }
+  return {
+    rows: kept,
+    hidden: { people: Math.max(0, order.length - LIMITS.rotaPeople), shifts: shiftsDropped },
+  };
+}
+
+/**
+ * How many breaches to show in full on a capped custom run.
+ *
+ * One is deliberate. A single complete diagnostic proves the tool does the
+ * thing; a count of the rest proves there is more to buy. Showing none would
+ * read as broken, and showing all of them is the product.
+ */
+function splitBreaches(breaches) {
+  return { shown: breaches.slice(0, 1), hiddenCount: Math.max(0, breaches.length - 1) };
+}
+
+return { LIMITS, UPSELL, UPSELL_ROTA, importsUsed, importsLeft, recordImport, capRoutes, capRotaRows, splitBreaches };
+})();
+
+
+/* ---- the engine, inlined ------------------------------------------------
+   Apps Script will not serve a .wasm sibling to the sidebar, so the 21 KB
+   module travels as base64 inside this file. Decoding is local; nothing is
+   fetched. ---------------------------------------------------------------- */
+const WASM_B64 = "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isCAAEEAQQAoAoSLwIAAIgAgAmoiBzYChIvAgAAgByABQQFyNgIEIAAgAkEDcjYCBCAAQQhqIQAMAwtBACgCgIvAgAAhAQJAAkAgACACayIHQQ9LDQBBAEEANgKAi8CAAEEAQQA2AviKwIAAIAEgAEEDcjYCBCABIABqIgAgACgCBEEBcjYCBAwBC0EAIAc2AviKwIAAQQAgASACaiIFNgKAi8CAACAFIAdBAXI2AgQgASAAaiAHNgIAIAEgAkEDcjYCBAsgAUEIag8LAkAgAEEQdkAAIgdBf0cNAEEADwtBACEAIAdBEHQiBUUNASABQXBqIAEgBUEAIAFrRhshCAtBAEEAKAKIi8CAACAIaiIANgKIi8CAAEEAIABBACgCjIvAgAAiASAAIAFLGzYCjIvAgAACQAJAAkACQAJAAkACQAJAQQAoAoSLwIAAIgFFDQBB2IjAgAAhAANAIAUgACgCACIHIAAoAgQiBmpGDQIgACgCCCIADQAMAwsLAkACQEEAKAKUi8CAACIARQ0AIAUgAE8NAQtBACAFNgKUi8CAAAtBAEH/HzYCmIvAgABBACAINgLciMCAAEEAIAU2AtiIwIAAQQBB6IjAgAA2AvSIwIAAQQBB8IjAgAA2AvyIwIAAQQBB6IjAgAA2AvCIwIAAQQBB+IjAgAA2AoSJwIAAQQBB8IjAgAA2AviIwIAAQQBBgInAgAA2AoyJwIAAQQBB+IjAgAA2AoCJwIAAQQBBiInAgAA2ApSJwIAAQQBBgInAgAA2AoiJwIAAQQBBkInAgAA2ApyJwIAAQQBBiInAgAA2ApCJwIAAQQBBmInAgAA2AqSJwIAAQQBBkInAgAA2ApiJwIAAQQBBoInAgAA2AqyJwIAAQQBBmInAgAA2AqCJwIAAQQBBADYC5IjAgABBAEGoicCAADYCtInAgABBAEGgicCAADYCqInAgABBAEGoicCAADYCsInAgABBAEGwicCAADYCvInAgABBAEGwicCAADYCuInAgABBAEG4icCAADYCxInAgABBAEG4icCAADYCwInAgABBAEHAicCAADYCzInAgABBAEHAicCAADYCyInAgABBAEHIicCAADYC1InAgABBAEHIicCAADYC0InAgABBAEHQicCAADYC3InAgABBAEHQicCAADYC2InAgABBAEHYicCAADYC5InAgABBAEHYicCAADYC4InAgABBAEHgicCAADYC7InAgABBAEHgicCAADYC6InAgABBAEHoicCAADYC9InAgABBAEHwicCAADYC/InAgABBAEHoicCAADYC8InAgABBAEH4icCAADYChIrAgABBAEHwicCAADYC+InAgABBAEGAisCAADYCjIrAgABBAEH4icCAADYCgIrAgABBAEGIisCAADYClIrAgABBAEGAisCAADYCiIrAgABBAEGQisCAADYCnIrAgABBAEGIisCAADYCkIrAgABBAEGYisCAADYCpIrAgABBAEGQisCAADYCmIrAgABBAEGgisCAADYCrIrAgABBAEGYisCAADYCoIrAgABBAEGoisCAADYCtIrAgABBAEGgisCAADYCqIrAgABBAEGwisCAADYCvIrAgABBAEGoisCAADYCsIrAgABBAEG4isCAADYCxIrAgABBAEGwisCAADYCuIrAgABBAEHAisCAADYCzIrAgABBAEG4isCAADYCwIrAgABBAEHIisCAADYC1IrAgABBAEHAisCAADYCyIrAgABBAEHQisCAADYC3IrAgABBAEHIisCAADYC0IrAgABBAEHYisCAADYC5IrAgABBAEHQisCAADYC2IrAgABBAEHgisCAADYC7IrAgABBAEHYisCAADYC4IrAgABBACAFQQ9qQXhxIgBBeGoiATYChIvAgABBAEHgisCAADYC6IrAgABBACAFIABrIAhBWGoiAGpBCGoiBzYC/IrAgAAgASAHQQFyNgIEIAUgAGpBKDYCBEEAQYCAgAE2ApCLwIAADAYLIAEgBU8NACAHIAFLDQAgACgCDEUNAQtBAEEAKAKUi8CAACIAIAUgACAFSRs2ApSLwIAAIAUgCGohB0HYiMCAACEAAkACQAJAA0AgACgCACIGIAdGDQEgACgCCCIADQAMAgsLIAAoAgxFDQELQdiIwIAAIQACQANAAkAgACgCACIHIAFLDQAgASAHIAAoAgRqIgdJDQILIAAoAgghAAwACwtBACAFQQ9qQXhxIgBBeGoiBjYChIvAgABBACAFIABrIAhBWGoiAGpBCGoiBDYC/IrAgAAgBiAEQQFyNgIEIAUgAGpBKDYCBEEAQYCAgAE2ApCLwIAAIAEgB0FgakF4cUF4aiIAIAAgAUEQakkbIgZBGzYCBEEAKQLYiMCAACEJ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DHEhBkEAIQpBACEFA0AgCiADIAVqIgAsAABBv39KaiAAQQFqLAAAQb9/SmogAEECaiwAAEG/f0pqIABBA2osAABBv39KaiEKIAYgBUEEaiIFRw0ACyALRQ0CCyADIAVqIQADQCAKIAAsAABBv39KaiEKIABBAWohACALQX9qIgsNAAwCCwsCQAJAAkAgAS8BDiIKDQBBACECDAELIAMgAmohBkEAIQIgAyELIAohBQNAIAsiACAGRg0CAkACQCAALAAAIgtBf0wNACAAQQFqIQsMAQsCQCALQWBPDQAgAEECaiELDAELIABBBEEDIAtBb0sbaiELCyALIABrIAJqIQIgBUF/aiIFDQALC0EAIQULIAogBWshCgsgCiABLwEMIgBJDQELIAEoAgAgAyACIAEoAgQoAgwRgICAgACAgICAAA8LIAAgCmshCUEAIQBBACEIAkACQAJAIARBHXZBA3EOBAIAAQICCyAJIQgMAQsgCUH+/wNxQQF2IQgLIARB////AHEhCiABKAIEIQsgASgCACEFAkACQANAIABB//8DcSAIQf//A3FPDQFBASEGIABBAWohACAFIAogCygCEBGBgICAAICAgIAARQ0ADAILC0EBIQYgBSADIAIgCygCDBGAgICAAICAgIAADQAgCSAIa0H//wNxIQhBACEAA0ACQCAAQf//A3EgCEkNAEEADwtBASEGIABBAWohACAFIAogCygCEBGBgICAAICAgIAARQ0ACwsgBgs4AgF/AX4jgICAgABBEGsiASSAgICAACAAKQIAIQIgASAANgIMIAEgAjcCBCABQQRqEJeAgIAAAAv0BAEIfyOAgICAAEEQayIEJICAgIAAAkACQAJAIANBAXENACACLQAAIgUNAUEAIQUMAgsgACACIANBAXYgASgCDBGAgICAAICAgIAAIQUMAQsgASgCDCEGQQAhBwNAIAJBAWohCAJAAkACQAJAAkAgBcBBf0oNACAFQf8BcSIJQYABRg0BIAlBwAFHDQMgBCABNgIEIAQgADYCACAEQqCAgIAGNwIIIAMgB0EDdGoiBSgCACAEIAUoAgQRgYCAgACAgICAAEUNAkEBIQUMBgsCQCAAIAggBUH/AXEiBSAGEYCAgIAAgICAgAANACAIIAVqIQIMBAtBASEFDAULAkAgACACQQNqIgUgAi8AASICIAYRgICAgACAgICAAA0AIAUgAmohAgwDC0EBIQUMBAsgB0EBaiEHIAghAgwBC0GggICABiEKAkAgBUEBcUUNACACQQVqIQggAigAASEKC0EAIQkCQAJAIAVBAnENAEEAIQsgCCECDAELIAhBAmohAiAILwAAIQsLAkACQCAFQQRxDQAgAiEIDAELIAJBAmohCCACLwAAIQkLAkACQCAFQQhxDQAgCCECDAELIAhBAmohAiAILwAAIQcLAkAgBUEQcUUNACADIAtB//8DcUEDdGovAQQhCwsCQCAFQSBxRQ0AIAMgCUH//wNxQQN0ai8BBCEJCyAEIAk7AQ4gBCALOwEMIAQgCjYCCCAEIAE2AgQgBCAANgIAAkAgAyAHQQN0aiIFKAIAIAQgBSgCBBGBgICAAICAgIAARQ0AQQEhBQwDCyAHQQFqIQcLIAItAAAiBQ0AC0EAIQULIARBEGokgICAgAAgBQvfBgILfwF+I4CAgIAAQRBrIgIkgICAgABBCiEDIAAoAgAiBCEFAkAgBEHoB0kNAEEKIQMgBCEFA0AgAkEGaiADaiIGQXxqIAUiACAAQZDOAG4iBUGQzgBsayIHQf//A3FB5ABuIghBAXQvANiCwIAAOwAAIAZBfmogByAIQeQAbGtB//8DcUEBdC8A2ILAgAA7AAAgA0F8aiEDIABB/6ziBEsNAAsLAkACQCAFQQlLDQAgBSEADAELIAJBBmogA0F+aiIDaiAFIAVB//8DcUHkAG4iAEHkAGxrQf//A3FBAXQvANiCwIAAOwAACwJAAkAgBEUNACAARQ0BCyACQQZqIANBf2oiA2ogAEEBdC0A2YLAgAA6AAALQStBfyABKAIIIgBBgICAAXEiBRshBCAAQYCAgARxQRd2IQkgAkEGaiADaiEKAkACQCAFQRV2QQogA2siC2oiByABLwEMIghPDQACQAJAAkAgAEGAgIAIcQ0AIAggB2shDEEAIQNBACEIAkACQAJAIABBHXZBA3EOBAIAAQACCyAMIQgMAQsgDEH+/wNxQQF2IQgLIABB////AHEhByABKAIEIQYgASgCACEFA0AgA0H//wNxIAhB//8DcU8NAkEBIQAgA0EBaiEDIAUgByAGKAIQEYGAgIAAgICAgABFDQAMBQsLIAEgASkCCCINp0GAgID/eXFBsICAgAJyNgIIQQEhACABKAIAIgUgASgCBCIGIAQgCRCQgICAAA0DQQAhAyAIIAdrQf//A3EhBwNAIANB//8DcSAHTw0CQQEhACADQQFqIQMgBUEwIAYoAhARgYCAgACAgICAAEUNAAwECwtBASEAIAUgBiAEIAkQkICAgAANAiAFIAogCyAGKAIMEYCAgIAAgICAgAANAiAMIAhrQf//A3EhCEEAIQMDQAJAIANB//8DcSAISQ0AQQAhAAwEC0EBIQAgA0EBaiEDIAUgByAGKAIQEYGAgIAAgICAgABFDQAMAwsLQQEhACAFIAogCyAGKAIMEYCAgIAAgICAgAANASABIA03AghBACEADAELQQEhACABKAIAIgMgASgCBCIFIAQgCRCQgICAAA0AIAMgCiALIAUoAgwRgICAgACAgICAACEACyACQRBqJICAgIAAIAALRgACQCACQX9GDQAgACACIAEoAhARgYCAgACAgICAAEUNAEEBDwsCQCADDQBBAA8LIAAgA0EAIAEoAgwRgICAgACAgICAAAtSAQF/I4CAgIAAQRBrIgAkgICAgAAgAEEcNgIEIABBwIbAgAA2AgAgAEGCgICAAK1CIIYgAK2ENwMIQbWAwIAAIABBCGpB3IbAgAAQi4CAgAAAC+oBAQJ/I4CAgIAAQRBrIgQkgICAgABBAEEAKALUh8CAACIFQQFqNgLUh8CAAAJAAkACQCAFQQBIDQACQAJAQQAtAMyHwIAADQBBAEEBOgDMh8CAAEEAQQAoAsiHwIAAQQFqNgLIh8CAAEEAKALQh8CAACIFQX9MDQIgBUEBaiIBIAVODQEQkYCAgAAACyAEQQhqIAAgASgCGBGCgICAAICAgIAAAAtBACABQX9qNgLQh8CAACABQQBMDQFBAEEAOgDMh8CAACACDQILAAtBjIfAgABBzQBBtIfAgAAQi4CAgAAACxCTgICAAAALAwAACwkAIABBADYCAAseACAAQQApAqiFwIAANwIIIABBACkCoIXAgAA3AgALDgBBAEEBOgCci8CAAAALCwAgABCYgICAAAALjAEBA38jgICAgABBEGsiASSAgICAAAJAIAAoAgAiAigCBCIDQQFxRQ0AIAIoAgAhAiABIANBAXY2AgQgASACNgIAIAFB6ITAgAAgACgCCCIALQAIIAAtAAkQkoCAgAAACyABQX82AgAgASAANgIMIAFBhIXA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ODU5NjA2MTYyNjM2NDY1NjY2NzY4Njk3MDcxNzI3Mzc0NzU3Njc3Nzg3OTgwODE4MjgzODQ4NTg2ODc4ODg5OTA5MTkyOTM5NDk1OTY5Nzk4OTmVABAAIgAAAI0AAAAcAAAAlQAQACIAAACpAAAAGwAAAJUAEAAiAAAAqgAAABwAAAADAAAADAAAAAQAAAAEAAAABQAAAAYAAAAAAAAACAAAAAQAAAAHAAAACAAAAAkAAAAKAAAACwAAABAAAAAEAAAADAAAAA0AAAAOAAAADwAAAFz26V/cAva58cFwbPJhwSSLxuONScB+/2OOfffX5KQwYXNzZXJ0aW9uIGZhaWxlZDogcHNpemUgPj0gc2l6ZSArIG1pbl9vdmVyaGVhZAAACQEQACoAAACxBAAACQAAAGFzc2VydGlvbiBmYWlsZWQ6IHBzaXplIDw9IHNpemUgKyBtYXhfb3ZlcmhlYWQAAAkBEAAqAAAAtwQAAA0AAAByd2xvY2sgb3ZlcmZsb3dlZCByZWFkIGxvY2tzNwAQAF0AAAAVAAAALAAAAAAAAAAIAAAABAAAABAAAAADAAAADAAAAAQAAAARAAAAcndsb2NrIGhhcyBub3QgYmVlbiBsb2NrZWQgZm9yIHJlYWRpbmcAADcAEABdAAAAPgAAAAkAAAAA6RwEbmFtZQAVFGxhdHRpY2UxMTdfd2FzbS53YXNtAaocLAANbGF0dGljZV9hbGxvYwFlX1JOdk1zMF9OdENzaTZXQnJMRkx1TEJfOGRsbWFsbG9jOGRsbWFsbG9jSU50QjVfOERsbWFsbG9jTnROdEI3XzNzeXM2U3lzdGVtRTZtYWxsb2NDczdMNzc0VVB6RjBmXzNzdGQCNV9STnZOdENzNlVOaEVjRTJDb05fNWFsbG9jN3Jhd192ZWMxN2NhcGFjaXR5X292ZXJmbG93AzBfUk52TnRDczZVTmhFY0UyQ29OXzVhbGxvYzdyYXdfdmVjMTJoYW5kbGVfZXJyb3IEDGxhdHRpY2VfZnJlZQVjX1JOdk1zMF9OdENzaTZXQnJMRkx1TEJfOGRsbWFsbG9jOGRsbWFsbG9jSU50QjVfOERsbWFsbG9jTnROdEI3XzNzeXM2U3lzdGVtRTRmcmVlQ3M3TDc3NFVQekYwZl8zc3RkBilfUk52TnRDc2tuVWNpa0l5eUJtXzRjb3JlOXBhbmlja2luZzVwYW5pYwcObGF0dGljZV92ZXJpZnkIN19STnZOdENza25VY2lrSXl5Qm1fNGNvcmU5cGFuaWNraW5nMThwYW5pY19ib3VuZHNfY2hlY2sJNF9STnZOdENzNlVOaEVjRTJDb05fNWFsbG9jNWFsbG9jMThoYW5kbGVfYWxsb2NfZXJyb3IKOF9STnZDczFuaktHNEw5YUIzXzdfX19ydXN0YzI2X19fcnVzdF9hbGxvY19lcnJvcl9oYW5kbGVyCy1fUk52TnRDc2tuVWNpa0l5eUJtXzRjb3JlOXBhbmlja2luZzlwYW5pY19mbXQMOF9STnZYczFpX050Q3NrblVjaWtJeXlCbV80Y29yZTNmbXRSZU50QjZfN0Rpc3BsYXkzZm10QjhfDS5fUk52Q3MxbmpLRzRMOWFCM183X19fcnVzdGMxN3J1c3RfYmVnaW5fdW53aW5kDiNfUk52TnRDc2tuVWNpa0l5eUJtXzRjb3JlM2ZtdDV3cml0ZQ8/X1JOdlhzaV9OdE50TnRDc2tuVWNpa0l5eUJtXzRjb3JlM2ZtdDNudW0zaW1wak50QjlfN0Rpc3BsYXkzZm10EE5fUk52TnZNc2FfTnRDc2tuVWNpa0l5eUJtXzRjb3JlM2ZtdE50QjdfOUZvcm1hdHRlcjEycGFkX2ludGVncmFsMTJ3cml0ZV9wcmVmaXgRL19STnZOdENza25VY2lrSXl5Qm1fNGNvcmU2b3B0aW9uMTNleHBlY3RfZmFpbGVkEjNfUk52TnRDczdMNzc0VVB6RjBmXzNzdGQ5cGFuaWNraW5nMTVwYW5pY193aXRoX2hvb2sTJ19STnZDczFuaktHNEw5YUIzXzdfX19ydXN0YzEwcnVzdF9wYW5pYxR1X1JOdllJTnROdk50Q3M3TDc3NFVQekYwZl8zc3RkOXBhbmlja2luZzExYmVnaW5fcGFuaWM3UGF5bG9hZFJlRU50TnRDc2tuVWNpa0l5eUJtXzRjb3JlNXBhbmljMTJQYW5pY1BheWxvYWQ2YXNfc3RyQjlfFUNfUk52WE50Q3NrblVjaWtJeXlCbV80Y29yZTNhbnlSZU50QjJfM0FueTd0eXBlX2lkQ3M3TDc3NFVQekYwZl8zc3RkFmRfUklOdk50TnRDczdMNzc0VVB6RjBmXzNzdGQzc3lzOWJhY2t0cmFjZTI2X19fcnVzdF9lbmRfc2hvcnRfYmFja3RyYWNlTkNOdk50QjZfNWFsbG9jOHJ1c3Rfb29tMHpFQjZfF25fUklOdk50TnRDczdMNzc0VVB6RjBmXzNzdGQzc3lzOWJhY2t0cmFjZTI2X19fcnVzdF9lbmRfc2hvcnRfYmFja3RyYWNlTkNOdk50QjZfOXBhbmlja2luZzEzcGFuaWNfaGFuZGxlcjB6RUI2Xxg3X1JOQ052TnRDczdMNzc0VVB6RjBmXzNzdGQ5cGFuaWNraW5nMTNwYW5pY19oYW5kbGVyMEI1XxlyX1JJTnZOdENza25VY2lrSXl5Qm1fNGNvcmUzcHRyOWRyb3BfZ2x1ZU50TnZOdENzN0w3NzRVUHpGMGZfM3N0ZDlwYW5pY2tpbmcxM3BhbmljX2hhbmRsZXIxOUZvcm1hdFN0cmluZ1BheWxvYWRFQkhfGnhfUk52WHMwX052TnRDczdMNzc0VVB6RjBmXzNzdGQ5cGFuaWNraW5nMTNwYW5pY19oYW5kbGVyTnRCNV8xOUZvcm1hdFN0cmluZ1BheWxvYWROdE50Q3NrblVjaWtJeXlCbV80Y29yZTNmbXQ3RGlzcGxheTNmbXQbhAFfUk52WHNfTnZOdENzN0w3NzRVUHpGMGZfM3N0ZDlwYW5pY2tpbmcxM3BhbmljX2hhbmRsZXJOdEI0XzE5Rm9ybWF0U3RyaW5nUGF5bG9hZE50TnRDc2tuVWNpa0l5eUJtXzRjb3JlNXBhbmljMTJQYW5pY1BheWxvYWQ4dGFrZV9ib3gcf19STnZYc19Odk50Q3M3TDc3NFVQekYwZl8zc3RkOXBhbmlja2luZzEzcGFuaWNfaGFuZGxlck50QjRfMTlGb3JtYXRTdHJpbmdQYXlsb2FkTnROdENza25VY2lrSXl5Qm1fNGNvcmU1cGFuaWMxMlBhbmljUGF5bG9hZDNnZXQdhAFfUklOdk52TXMyX050Q3M2VU5oRWNFMkNvTl81YWxsb2M3cmF3X3ZlY0lOdEI4XzExUmF3VmVjSW5uZXJwRTdyZXNlcnZlMjFkb19yZXNlcnZlX2FuZF9oYW5kbGVOdE50QmFfNWFsbG9jNkdsb2JhbEVDczdMNzc0VVB6RjBmXzNzdGQeV19STnZNczVfTnRDczZVTmhFY0UyQ29OXzVhbGxvYzdyYXdfdmVjTnRCNV8xMVJhd1ZlY0lubmVyMTFmaW5pc2hfZ3Jvd0NzN0w3NzRVUHpGMGZfM3N0ZB9hX1JJTnZOdENza25VY2lrSXl5Qm1fNGNvcmUzcHRyOWRyb3BfZ2x1ZU50TnRDczZVTmhFY0UyQ29OXzVhbGxvYzZzdHJpbmc2U3RyaW5nRUNzN0w3NzRVUHpGMGZfM3N0ZCBnX1JOdlhOdENza25VY2lrSXl5Qm1fNGNvcmUzYW55TnROdENzNlVOaEVjRTJDb05fNWFsbG9jNnN0cmluZzZTdHJpbmdOdEIyXzNBbnk3dHlwZV9pZENzN0w3NzRVUHpGMGZfM3N0ZCFgX1JOdlhzWl9OdENzNlVOaEVjRTJDb05fNWFsbG9jNnN0cmluZ050QjVfNlN0cmluZ050TnRDc2tuVWNpa0l5eUJtXzRjb3JlM2ZtdDVXcml0ZTl3cml0ZV9zdHIuMTEzImJfUk52WHNaX050Q3M2VU5oRWNFMkNvTl81YWxsb2M2c3RyaW5nTnRCNV82U3RyaW5nTnROdENza25VY2lrSXl5Qm1fNGNvcmUzZm10NVdyaXRlMTB3cml0ZV9jaGFyLjExNCNoX1JOdllOdE50Q3M2VU5oRWNFMkNvTl81YWxsb2M2c3RyaW5nNlN0cmluZ050TnRDc2tuVWNpa0l5eUJtXzRjb3JlM2ZtdDVXcml0ZTl3cml0ZV9mbXRDczdMNzc0VVB6RjBmXzNzdGQkbF9STnZNczBfTnRDc2k2V0JyTEZMdUxCXzhkbG1hbGxvYzhkbG1hbGxvY0lOdEI1XzhEbG1hbGxvY050TnRCN18zc3lzNlN5c3RlbUUxMnVubGlua19jaHVua0NzN0w3NzRVUHpGMGZfM3N0ZCVtX1JOdk1zMF9OdENzaTZXQnJMRkx1TEJfOGRsbWFsbG9jOGRsbWFsbG9jSU50QjVfOERsbWFsbG9jTnROdEI3XzNzeXM2U3lzdGVtRTEzZGlzcG9zZV9jaHVua0NzN0w3NzRVUHpGMGZfM3N0ZCZ1X1JOdlhzMl9Odk50Q3M3TDc3NFVQekYwZl8zc3RkOXBhbmlja2luZzEzcGFuaWNfaGFuZGxlck50QjVfMTZTdGF0aWNTdHJQYXlsb2FkTnROdENza25VY2lrSXl5Qm1fNGNvcmUzZm10N0Rpc3BsYXkzZm10J4IBX1JOdlhzMV9Odk50Q3M3TDc3NFVQekYwZl8zc3RkOXBhbmlja2luZzEzcGFuaWNfaGFuZGxlck50QjVfMTZTdGF0aWNTdHJQYXlsb2FkTnROdENza25VY2lrSXl5Qm1fNGNvcmU1cGFuaWMxMlBhbmljUGF5bG9hZDh0YWtlX2JveCh9X1JOdlhzMV9Odk50Q3M3TDc3NFVQekYwZl8zc3RkOXBhbmlja2luZzEzcGFuaWNfaGFuZGxlck50QjVfMTZTdGF0aWNTdHJQYXlsb2FkTnROdENza25VY2lrSXl5Qm1fNGNvcmU1cGFuaWMxMlBhbmljUGF5bG9hZDNnZXQpgAFfUk52WHMxX052TnRDczdMNzc0VVB6RjBmXzNzdGQ5cGFuaWNraW5nMTNwYW5pY19oYW5kbGVyTnRCNV8xNlN0YXRpY1N0clBheWxvYWROdE50Q3NrblVjaWtJeXlCbV80Y29yZTVwYW5pYzEyUGFuaWNQYXlsb2FkNmFzX3N0cipyX1JOdk1zMF9OdENzaTZXQnJMRkx1TEJfOGRsbWFsbG9jOGRsbWFsbG9jSU50QjVfOERsbWFsbG9jTnROdEI3XzNzeXM2U3lzdGVtRTE4aW5zZXJ0X2xhcmdlX2NodW5rQ3M3TDc3NFVQekYwZl8zc3RkKydfUk52TnRDczdMNzc0VVB6RjBmXzNzdGQ1YWxsb2M4cnVzdF9vb20HEgEAD19fc3RhY2tfcG9pbnRlcgkKAQAHLnJvZGF0YQBNCXByb2R1Y2VycwIIbGFuZ3VhZ2UBBFJ1c3QADHByb2Nlc3NlZC1ieQEFcnVzdGMdMS45OC4xICg0OGEyMjljZWEgMjAyNi0wOS0wMSkAlAEPdGFyZ2V0X2ZlYXR1cmVzCCsLYnVsay1tZW1vcnkrD2J1bGstbWVtb3J5LW9wdCsWY2FsbC1pbmRpcmVjdC1vdmVybG9uZysKbXVsdGl2YWx1ZSsPbXV0YWJsZS1nbG9iYWxzKxNub250cmFwcGluZy1mcHRvaW50Kw9yZWZlcmVuY2UtdHlwZXMrCHNpZ24tZXh0";
+
+const $ = (id) => document.getElementById(id);
+const { verdictDigest, rotaDigest } = L117_DIGEST;
+const { evaluateRota, humanMinutes, DISCLAIMER } = L117_ROTA;
+const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
+const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
+
+const Q = 65536, QMAX = 32767, QMIN = -32768;
+let wasm = null, MODE = 'route', ent = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
+let lastRows = [];
+
+async function loadWasm(){
+  const bin = atob(WASM_B64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  wasm = instance.exports;
+  $('engine').textContent = `engine: WebAssembly, ${(bytes.length/1024).toFixed(1)} KB`;
+}
+
+const mem = () => new DataView(wasm.memory.buffer);
+function put(a){
+  const bytes = a.length*4, ptr = wasm.lattice_alloc(bytes), dv = mem();
+  for (let i=0;i<a.length;i++) dv.setInt32(ptr+i*4, a[i], true);
+  return { ptr, bytes };
+}
+const toQ = (v, what) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`${what}: "${v}" is not a number`);
+  if (n < QMIN || n > QMAX) throw new Error(`${what}: ${n} is outside the representable range (${QMIN}..${QMAX}). Use minutes rather than seconds.`);
+  return Math.round(n*Q);
+};
+const fmt = (v) => (v/Q).toFixed(4);
+
+function verifyRoute(stops){
+  const k = stops.length;
+  const dist = new Array(k*k).fill(0);
+  for (let i=1;i<k;i++) dist[(i-1)*k+i] = toQ(stops[i].travel, `${stops[i].id} travel`);
+  const wins = [];
+  for (const s of stops) wins.push(toQ(s.open,`${s.id} opens`), toQ(s.close,`${s.id} closes`));
+  const db=put(dist), wb=put(wins), rb=put(stops.map((_,i)=>i)), ob=put([0,0,0,0,0,0]);
+  wasm.lattice_verify(rb.ptr, k, db.ptr, k, wb.ptr, ob.ptr);
+  const dv = mem(), o = [];
+  for (let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4, true));
+  [db,wb,rb,ob].forEach(x=>wasm.lattice_free(x.ptr,x.bytes));
+  return o;
+}
+
+/* ---- column matching (same vocabulary as the other surfaces) ------------- */
+const FIELDS=[
+  {key:'vehicle',hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'],avoid:[]},
+  {key:'stop',   hints:['stop','location','site','customer','drop','address','name','point','deliverypoint','premises'],avoid:['no','num','seq','order','index','count']},
+  {key:'open',   hints:['open','ready','earliest','from','start','windowopen','twstart','earliestarrival'],avoid:[]},
+  {key:'close',  hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'],avoid:[]},
+  {key:'travel', hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'],avoid:[]},
+  {key:'seq',    hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'],avoid:[]},
+];
+const ROTA_FIELDS=[
+  {key:'staff',hints:['staff','name','employee','worker','person','operative','carer','colleague','id','payroll'],avoid:['shift','site','ward','team','role']},
+  {key:'date', hints:['date','day','rotadate','shiftdate','when'],avoid:['time','start','end']},
+  {key:'start',hints:['start','shiftstart','on','from','begin','starttime','timein','in'],avoid:['end','break']},
+  {key:'end',  hints:['end','shiftend','off','to','finish','endtime','timeout','out'],avoid:['start','break']},
+  {key:'break',hints:['break','rest','unpaidbreak','breakmins','breakminutes','lunch','meal'],avoid:['between']},
+];
+const activeFields = () => MODE==='rota' ? ROTA_FIELDS : FIELDS;
+const norm = (h) => String(h).toLowerCase().replace(/[^a-z]/g,'');
+function score(f,h){
+  const n = norm(h); let best = 0;
+  for (const hint of f.hints){ const x = norm(hint); if(!x) continue;
+    if (n===x) best=Math.max(best,4);
+    else if (n.startsWith(x)||n.endsWith(x)) best=Math.max(best,3);
+    else if (n.includes(x)) best=Math.max(best,2); }
+  if (best>0) for (const bad of f.avoid) if (n.includes(norm(bad))) best -= 3;
+  return best;
+}
+function mapColumns(headers){
+  const F = activeFields(), pairs = [];
+  F.forEach((f,fi)=>headers.forEach((h,hi)=>{ const s=score(f,h); if(s>0) pairs.push({fi,hi,s}); }));
+  pairs.sort((a,b)=>b.s-a.s);
+  const map={}, uf=new Set(), uh=new Set();
+  for (const {fi,hi} of pairs){ if(uf.has(fi)||uh.has(hi)) continue;
+    map[F[fi].key]=hi; uf.add(fi); uh.add(hi); }
+  return map;
+}
+
+/* ---- host bridge --------------------------------------------------------
+   Code.gs hands back getDisplayValues(): strings exactly as the user sees
+   them. Apps Script cannot serialise a Date across the sidebar boundary, and
+   getValues() on a time-formatted cell returns one - so display values are
+   the only shape that survives the trip AND parses the same way a CSV does.
+-------------------------------------------------------------------------- */
+const host = {
+  read(){
+    return new Promise((res, rej) => {
+      if (!window.google || !google.script || !google.script.run)
+        return rej(new Error('This sidebar must be opened from inside Google Sheets.'));
+      google.script.run.withSuccessHandler(res)
+        .withFailureHandler(e => rej(new Error(e && e.message ? e.message : String(e))))
+        .readSelection();
+    });
+  },
+  highlight(rows){
+    try{ google.script.run.withSuccessHandler(()=>{}).withFailureHandler(()=>{}).highlightRows(rows); }
+    catch(e){ /* highlighting is a convenience, never a failure path */ }
+  },
+  clear(){
+    try{ google.script.run.withSuccessHandler(()=>{}).withFailureHandler(()=>{}).clearHighlighting(); }
+    catch(e){}
+  },
+};
+
+/* ---- licence ------------------------------------------------------------- */
+async function refreshTier(){
+  ent = await currentEntitlement();
+  const t = $('tier');
+  t.textContent = 'tier: ' + ent.label.toLowerCase();
+  t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
+  $('licState').innerHTML = ent.tier !== 'free'
+    ? `<b style="color:var(--ok)">${ent.label}</b> — ${ent.email}<br>` +
+      `<span style="color:var(--ink-dim)">expires ${ent.expires.toISOString().slice(0,10)}</span>`
+    : `<b>Free</b> — one round or one person, no digest.` +
+      (ent.reason && ent.reason !== 'no licence key'
+        ? `<br><span style="color:var(--bad)">licence rejected: ${ent.reason}</span>` : '');
+}
+
+/* ---- run ----------------------------------------------------------------- */
+function setMode(m){
+  MODE = m;
+  $('modeRoute').classList.toggle('on', m === 'route');
+  $('modeRota').classList.toggle('on', m === 'rota');
+  $('routeNote').style.display = m === 'rota' ? 'none' : '';
+  $('rotaNote').style.display  = m === 'rota' ? '' : 'none';
+  $('run').textContent = m === 'rota' ? 'Check selected shifts' : 'Check selected rows';
+  $('out').innerHTML = ''; $('err').textContent = '';
+}
+
+async function run(){
+  $('err').textContent = ''; $('out').innerHTML = '';
+  try{
+    const grid = await host.read();
+    if (!grid || grid.length < 2) throw new Error('Select the header row and at least one data row.');
+    const headers = grid[0].map(String);
+    const map = mapColumns(headers);
+    lastRows = [];
+    if (MODE === 'rota') await runRota(grid, headers, map);
+    else                 await runRoutes(grid, headers, map);
+    if (lastRows.length) host.highlight(lastRows);
+  }catch(e){ $('err').textContent = e.message; }
+}
+
+async function runRoutes(grid, headers, map){
+  const missing = ['vehicle','stop','open','close','travel'].filter(k => map[k] === undefined);
+  if (missing.length) throw new Error(
+    'Could not find these columns in your header row: ' + missing.join(', ') +
+    '\nHeaders seen: ' + headers.filter(h => h !== '').join(', '));
+
+  const rounds = new Map();
+  for (let r = 1; r < grid.length; r++){
+    const row = grid[r];
+    const veh = String(row[map.vehicle] ?? '').trim();
+    if (!veh) continue;
+    if (!rounds.has(veh)) rounds.set(veh, []);
+    rounds.get(veh).push({
+      id: String(row[map.stop] ?? `row${r+1}`).trim(),
+      open: row[map.open] ?? 0, close: row[map.close] ?? 0, travel: row[map.travel] ?? 0,
+      seq: map.seq !== undefined ? Number(row[map.seq]) : r,
+      sheetRow: r + 1,
+    });
+  }
+  if (!rounds.size) throw new Error('No rounds found — the round column was empty on every row.');
+
+  let routes = [...rounds.entries()].map(([vehicle, stops]) => {
+    stops.sort((a,b) => a.seq - b.seq);
+    stops[0].travel = 0;
+    return { vehicle, stops };
+  });
+  const total = routes.length;
+  let cap = null;
+  if (ent.tier === 'free'){ const c = capRoutes(routes); cap = c.hidden; routes = c.routes; }
+
+  let feasible = 0; const fails = [], canonRoutes = [], canonVerdict = [];
+  for (const r of routes){
+    if (r.stops.length < 2){ fails.push({ veh: r.vehicle, msg: 'only one stop' }); continue; }
+    const o = verifyRoute(r.stops);
+    canonRoutes.push({ id: r.vehicle, stops: r.stops.map(s => ({ id: s.id, open: s.open, close: s.close, travel: s.travel })) });
+    if (o[0] === 0){ feasible++; canonVerdict.push({ id: r.vehicle, feasible: true, violation: null }); }
+    else if (o[0] === 1){
+      const s = r.stops[o[1]];
+      fails.push({ veh: r.vehicle, stop: s?.id ?? '?', arrival: o[2], close: o[3], deficit: o[4] });
+      canonVerdict.push({ id: r.vehicle, feasible: false,
+        violation: { stop: s?.id ?? String(o[1]), raw: { arrival: o[2], windowClose: o[3], deficit: o[4] } } });
+      if (s) lastRows.push(s.sheetRow);
+    } else fails.push({ veh: r.vehicle, msg: 'rejected before evaluation' });
+  }
+
+  const checked = routes.length, bad = checked - feasible;
+  const pct = checked ? Math.round(100*feasible/checked) : 0;
+  const shown = ent.tier === 'free' ? splitBreaches(fails) : { shown: fails, hiddenCount: 0 };
+  let html = `<div class="card"><div class="rate ${bad?'bad':'ok'}">${pct}%<small>rounds achievable</small></div>
+    <div style="margin-top:9px;font-size:12.5px">${bad
+      ? `<b>${bad} of ${checked}</b> cannot be run as scheduled.`
+      : checked === 1 ? 'The round checked is <b>achievable</b>.' : `All <b>${checked}</b> rounds are achievable.`}</div>`;
+  if (cap && (cap.rounds || cap.stops))
+    html += `<div class="lock">${UPSELL}${cap.stops ? ` ${cap.stops} further stop(s) were not checked.` : ''}</div>`;
+  else if (total > checked)
+    html += `<div class="lock">Free tier: checked ${checked} of ${total} rounds.</div>`;
+  html += '</div>';
+  for (const f of shown.shown){
+    html += f.msg
+      ? `<div class="flag"><span class="who">${f.veh}</span> — ${f.msg}</div>`
+      : `<div class="flag"><span class="who">${f.veh}</span> misses <b>${f.stop}</b><br>
+           arrives ${fmt(f.arrival)}<br>shuts &nbsp;&nbsp;${fmt(f.close)}<br>
+           <b>late by ${fmt(f.deficit)}</b></div>`;
+  }
+  if (shown.hiddenCount)
+    html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
+  $('out').innerHTML = html;
+  await emitDigest(() => verdictDigest(canonRoutes, canonVerdict), 'verdict digest');
+}
+
+async function runRota(grid, headers, map){
+  const missing = ['staff','start','end'].filter(k => map[k] === undefined);
+  if (missing.length) throw new Error(
+    'Could not find these columns in your header row: ' + missing.join(', ') +
+    '\nHeaders seen: ' + headers.filter(h => h !== '').join(', '));
+
+  let rows = [];
+  for (let r = 1; r < grid.length; r++){
+    const row = grid[r];
+    rows.push({
+      staff: String(row[map.staff] ?? '').trim(),
+      date : map.date  !== undefined ? row[map.date]  : null,
+      start: row[map.start], end: row[map.end],
+      break: map.break !== undefined ? row[map.break] : 0,
+      row: r + 1, sheetRow: r + 1,
+    });
+  }
+  let cap = null;
+  if (ent.tier === 'free'){ const c = capRotaRows(rows); cap = c.hidden; rows = c.rows; }
+
+  const rep = evaluateRota(rows, { maxPeople: ent.maxRounds });
+  if (!rep.checked) throw new Error('No staff found — the staff column was empty on every row.');
+
+  const byRow = new Map(rows.map(r => [r.row, r.sheetRow]));
+  for (const b of rep.breaches){ const sr = byRow.get(b.row); if (sr !== undefined) lastRows.push(sr); }
+
+  const KIND = { rest:'rest between shifts', break:'break on a long shift', overlap:'overlapping shifts' };
+  const pct = rep.checked ? Math.round(100*rep.clear/rep.checked) : 0;
+  const shown = ent.tier === 'free' ? splitBreaches(rep.breaches) : { shown: rep.breaches, hiddenCount: 0 };
+  let html = `<div class="card"><div class="rate ${rep.breaches.length?'bad':'ok'}">${pct}%<small>staff with no flags</small></div>
+    <div style="margin-top:9px;font-size:12.5px">${rep.breaches.length
+      ? `<b>${rep.breaches.length} issue(s)</b> across ${rep.checked} person(s).`
+      : '<b>No flags</b> against the configured rules.'}</div>`;
+  if (cap && (cap.people || cap.shifts))
+    html += `<div class="lock">${UPSELL_ROTA}${cap.shifts ? ` ${cap.shifts} further shift(s) were not checked.` : ''}</div>`;
+  else if (rep.totalPeople > rep.checked)
+    html += `<div class="lock">Free tier: checked ${rep.checked} of ${rep.totalPeople} people.</div>`;
+  html += '</div>';
+  for (const b of shown.shown){
+    html += `<div class="flag"><span class="who">${b.staff}</span> — ${KIND[b.kind]}` +
+      `${b.label ? ` (${b.label})` : ''}, row ${b.row}<br>` +
+      `achieved ${humanMinutes(b.actual)}<br>expected ${humanMinutes(b.expected)}<br>` +
+      `<b>short by ${humanMinutes(b.shortfall)}</b></div>`;
+  }
+  if (shown.hiddenCount)
+    html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
+  if (rep.rejected.length)
+    html += `<div class="note">${rep.rejected.length} row(s) skipped — times could not be read.</div>`;
+  $('out').innerHTML = html;
+  await emitDigest(() => rotaDigest(rep.people, rep.verdict, rep.rules), 'rota digest');
+  $('out').insertAdjacentHTML('beforeend', `<div class="note"><b>${DISCLAIMER}</b></div>`);
+}
+
+async function emitDigest(compute, label){
+  if (!ent.certificate){
+    $('out').insertAdjacentHTML('beforeend',
+      '<div class="note">The reproducible SHA-256 over these inputs and this ' +
+      'result — the number a third party re-computes to confirm it — is part of Pro.</div>');
+    return;
+  }
+  const dg = await compute();
+  $('out').insertAdjacentHTML('beforeend', `<div class="digest"><b>${label}</b><br>${dg}</div>`);
+}
+
+/* ---- wiring -------------------------------------------------------------- */
+$('modeRoute').addEventListener('click', () => setMode('route'));
+$('modeRota') .addEventListener('click', () => setMode('rota'));
+$('run')      .addEventListener('click', run);
+$('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
+$('licApply').addEventListener('click', async () => {
+  const k = $('licKey').value.trim();
+  const probe = await verifyLicence(k);
+  if (probe.tier === 'free'){
+    $('licState').innerHTML = `<span style="color:var(--bad)">Not applied: ${probe.reason}</span>`;
+    return;
+  }
+  saveLicence(k); $('licKey').value = ''; await refreshTier();
+});
+$('licRemove').addEventListener('click', async () => { clearLicence(); await refreshTier(); });
+
+refreshTier();
+loadWasm().then(() => { $('run').disabled = false; })
+  .catch(e => { $('engine').textContent = 'engine: failed'; $('err').textContent = e.message; });
+
+/* Exposed for the headless parity harness, which drives this file directly
+   rather than through Apps Script. */
+window.__L117 = { verdictDigest, rotaDigest, evaluateRota, setMode, get wasmReady(){ return !!wasm; } };
+</script>
+</body>
+</html>

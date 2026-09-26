@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<title>Lattice117 Schedule Check</title>
+<style>
+  :root{
+    --bg:#07090e; --ink:#e8eef6; --ink-dim:#94a3b8; --ink-faint:#64748b;
+    --ok:#10b981; --bad:#f43f5e; --warn:#f59e0b; --accent:#0ea5e9; --indigo:#6366f1;
+    --glass:rgba(17,24,39,.65); --glass-2:rgba(23,32,48,.58);
+    --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+    --rim:inset 0 1px 0 rgba(255,255,255,.07);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg)}
+  body{
+    margin:0;padding:13px;color:var(--ink);font:13.5px/1.5 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(420px 300px at 10% -6%, rgba(16,185,129,.11), transparent 62%),
+      radial-gradient(380px 280px at 96% 3%, rgba(14,165,233,.10), transparent 60%),
+      radial-gradient(360px 340px at 50% 106%, rgba(99,102,241,.09), transparent 60%);
+    background-attachment:fixed;
+  }
+  h1{font:700 15px/1.25 var(--sans);margin:0 0 3px;letter-spacing:-.01em}
+  .sub{color:var(--ink-dim);font-size:11.5px;margin:0 0 11px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+  .tag{font:600 9.5px/1 var(--mono);padding:5px 7px;border-radius:7px;
+       background:var(--glass-2);border:1px solid var(--line);color:var(--ink-dim);
+       box-shadow:var(--rim)}
+  .tag.live{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 38%,transparent)}
+  .modes{display:flex;gap:4px;padding:4px;margin-bottom:10px;border-radius:999px;
+         background:var(--glass-2);border:1px solid var(--line);box-shadow:var(--rim)}
+  .modes button{flex:1;margin:0;padding:7px 4px;border-radius:999px;font:600 11.5px var(--sans);
+                background:transparent;border:1px solid transparent;color:var(--ink-dim);cursor:pointer}
+  .modes button.on{color:#06251a;border-color:color-mix(in srgb,var(--ok) 60%,transparent);
+    background:linear-gradient(180deg,color-mix(in srgb,var(--ok) 95%,#fff),var(--ok))}
+  button{width:100%;font:600 13px var(--sans);padding:10px;border-radius:10px;cursor:pointer;
+         border:1px solid var(--line-2);background:var(--glass-2);color:var(--ink);margin-bottom:7px}
+  button.primary{border-color:color-mix(in srgb,var(--accent) 70%,transparent);color:#fff;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 96%,#fff),var(--accent))}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:9px;
+        background:var(--glass);box-shadow:var(--rim);
+        -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .rate{font:800 30px/1 var(--mono);letter-spacing:-.025em}
+  .rate.ok{color:var(--ok)} .rate.bad{color:var(--bad)}
+  .rate small{display:block;font:600 9px/1.3 var(--sans);letter-spacing:.08em;
+              text-transform:uppercase;color:var(--ink-faint);margin-top:5px}
+  .flag{border-left:3px solid var(--bad);padding:8px 10px;margin-top:7px;border-radius:0 8px 8px 0;
+        background:rgba(8,11,18,.5);font:11.5px var(--mono);line-height:1.55}
+  .flag .who{color:var(--ink);font-weight:700} .flag b{color:var(--bad)}
+  .digest{font:9.5px var(--mono);color:var(--ink-faint);word-break:break-all;margin-top:9px;
+          background:rgba(8,11,18,.5);border:1px solid var(--line);border-radius:9px;padding:8px}
+  .note{font-size:11px;color:var(--ink-faint);margin-top:9px;line-height:1.5}
+  .err{color:var(--bad);font:11.5px var(--mono);white-space:pre-wrap;margin-top:8px}
+  .lock{margin-top:9px;padding:9px 10px;border-radius:9px;font-size:11.5px;line-height:1.45;
+        border:1px solid color-mix(in srgb,var(--warn) 42%,transparent);
+        background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--ink)}
+  details{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--glass-2)}
+  summary{cursor:pointer;font:600 11.5px var(--sans);color:var(--ink-dim)}
+  #licKey{width:100%;font:10.5px var(--mono);padding:7px;border-radius:8px;margin:7px 0;
+          border:1px solid var(--line);background:rgba(8,11,18,.55);color:var(--ink)}
+  .row{display:flex;gap:6px} .row button{margin-bottom:0}
+</style>
+</head>
+<body>
+
+<h1>Lattice117 Schedule Check</h1>
+<p class="sub">Select your rows, including the header.</p>
+<div class="tags">
+  <span class="tag live" id="engine">engine: loading…</span>
+  <span class="tag" id="tier">tier: …</span>
+  <span class="tag">never uploaded</span>
+</div>
+
+<div class="modes">
+  <button id="modeRoute" class="on" type="button">Routes</button>
+  <button id="modeRota" type="button">UK rota rest</button>
+</div>
+
+<button id="run" class="primary" disabled>Check selected rows</button>
+<button id="clear">Clear highlighting</button>
+
+<div id="out"></div>
+<div class="err" id="err"></div>
+
+<p class="note" id="routeNote">Columns are matched from your header row: the
+round, the stop, when its window opens and closes, and the travel time from the
+previous stop. Names can be anything.</p>
+
+<p class="note" id="rotaNote" style="display:none"><b>Indicative mathematical
+check against configured rest and break rules (11h inter-shift rest, 20m break
+over 6h) — not legal advice.</b> It knows nothing of opt-outs, young workers,
+compensatory rest or any collective agreement.</p>
+
+<details id="licBox" style="margin-top:10px">
+  <summary>Licence</summary>
+  <div id="licState"></div>
+  <input id="licKey" placeholder="paste licence key" spellcheck="false">
+  <div class="row">
+    <button id="licApply">Apply</button>
+    <button id="licRemove">Remove</button>
+  </div>
+  <p class="note">Verified here, in this sidebar, by public-key signature. It is
+  not sent anywhere, and neither is your sheet.</p>
+</details>
+
+<script>
+/*__MODULES__*/
+
+/* ---- the engine, inlined ------------------------------------------------
+   Apps Script will not serve a .wasm sibling to the sidebar, so the 21 KB
+   module travels as base64 inside this file. Decoding is local; nothing is
+   fetched. ---------------------------------------------------------------- */
+const WASM_B64 = "__WASM_B64__";
+
+const $ = (id) => document.getElementById(id);
+const { verdictDigest, rotaDigest } = L117_DIGEST;
+const { evaluateRota, humanMinutes, DISCLAIMER } = L117_ROTA;
+const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
+const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
+
+const Q = 65536, QMAX = 32767, QMIN = -32768;
+let wasm = null, MODE = 'route', ent = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
+let lastRows = [];
+
+async function loadWasm(){
+  const bin = atob(WASM_B64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  wasm = instance.exports;
+  $('engine').textContent = `engine: WebAssembly, ${(bytes.length/1024).toFixed(1)} KB`;
+}
+
+const mem = () => new DataView(wasm.memory.buffer);
+function put(a){
+  const bytes = a.length*4, ptr = wasm.lattice_alloc(bytes), dv = mem();
+  for (let i=0;i<a.length;i++) dv.setInt32(ptr+i*4, a[i], true);
+  return { ptr, bytes };
+}
+const toQ = (v, what) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`${what}: "${v}" is not a number`);
+  if (n < QMIN || n > QMAX) throw new Error(`${what}: ${n} is outside the representable range (${QMIN}..${QMAX}). Use minutes rather than seconds.`);
+  return Math.round(n*Q);
+};
+const fmt = (v) => (v/Q).toFixed(4);
+
+function verifyRoute(stops){
+  const k = stops.length;
+  const dist = new Array(k*k).fill(0);
+  for (let i=1;i<k;i++) dist[(i-1)*k+i] = toQ(stops[i].travel, `${stops[i].id} travel`);
+  const wins = [];
+  for (const s of stops) wins.push(toQ(s.open,`${s.id} opens`), toQ(s.close,`${s.id} closes`));
+  const db=put(dist), wb=put(wins), rb=put(stops.map((_,i)=>i)), ob=put([0,0,0,0,0,0]);
+  wasm.lattice_verify(rb.ptr, k, db.ptr, k, wb.ptr, ob.ptr);
+  const dv = mem(), o = [];
+  for (let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4, true));
+  [db,wb,rb,ob].forEach(x=>wasm.lattice_free(x.ptr,x.bytes));
+  return o;
+}
+
+/* ---- column matching (same vocabulary as the other surfaces) ------------- */
+const FIELDS=[
+  {key:'vehicle',hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'],avoid:[]},
+  {key:'stop',   hints:['stop','location','site','customer','drop','address','name','point','deliverypoint','premises'],avoid:['no','num','seq','order','index','count']},
+  {key:'open',   hints:['open','ready','earliest','from','start','windowopen','twstart','earliestarrival'],avoid:[]},
+  {key:'close',  hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'],avoid:[]},
+  {key:'travel', hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'],avoid:[]},
+  {key:'seq',    hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'],avoid:[]},
+];
+const ROTA_FIELDS=[
+  {key:'staff',hints:['staff','name','employee','worker','person','operative','carer','colleague','id','payroll'],avoid:['shift','site','ward','team','role']},
+  {key:'date', hints:['date','day','rotadate','shiftdate','when'],avoid:['time','start','end']},
+  {key:'start',hints:['start','shiftstart','on','from','begin','starttime','timein','in'],avoid:['end','break']},
+  {key:'end',  hints:['end','shiftend','off','to','finish','endtime','timeout','out'],avoid:['start','break']},
+  {key:'break',hints:['break','rest','unpaidbreak','breakmins','breakminutes','lunch','meal'],avoid:['between']},
+];
+const activeFields = () => MODE==='rota' ? ROTA_FIELDS : FIELDS;
+const norm = (h) => String(h).toLowerCase().replace(/[^a-z]/g,'');
+function score(f,h){
+  const n = norm(h); let best = 0;
+  for (const hint of f.hints){ const x = norm(hint); if(!x) continue;
+    if (n===x) best=Math.max(best,4);
+    else if (n.startsWith(x)||n.endsWith(x)) best=Math.max(best,3);
+    else if (n.includes(x)) best=Math.max(best,2); }
+  if (best>0) for (const bad of f.avoid) if (n.includes(norm(bad))) best -= 3;
+  return best;
+}
+function mapColumns(headers){
+  const F = activeFields(), pairs = [];
+  F.forEach((f,fi)=>headers.forEach((h,hi)=>{ const s=score(f,h); if(s>0) pairs.push({fi,hi,s}); }));
+  pairs.sort((a,b)=>b.s-a.s);
+  const map={}, uf=new Set(), uh=new Set();
+  for (const {fi,hi} of pairs){ if(uf.has(fi)||uh.has(hi)) continue;
+    map[F[fi].key]=hi; uf.add(fi); uh.add(hi); }
+  return map;
+}
+
+/* ---- host bridge --------------------------------------------------------
+   Code.gs hands back getDisplayValues(): strings exactly as the user sees
+   them. Apps Script cannot serialise a Date across the sidebar boundary, and
+   getValues() on a time-formatted cell returns one - so display values are
+   the only shape that survives the trip AND parses the same way a CSV does.
+-------------------------------------------------------------------------- */
+const host = {
+  read(){
+    return new Promise((res, rej) => {
+      if (!window.google || !google.script || !google.script.run)
+        return rej(new Error('This sidebar must be opened from inside Google Sheets.'));
+      google.script.run.withSuccessHandler(res)
+        .withFailureHandler(e => rej(new Error(e && e.message ? e.message : String(e))))
+        .readSelection();
+    });
+  },
+  highlight(rows){
+    try{ google.script.run.withSuccessHandler(()=>{}).withFailureHandler(()=>{}).highlightRows(rows); }
+    catch(e){ /* highlighting is a convenience, never a failure path */ }
+  },
+  clear(){
+    try{ google.script.run.withSuccessHandler(()=>{}).withFailureHandler(()=>{}).clearHighlighting(); }
+    catch(e){}
+  },
+};
+
+/* ---- licence ------------------------------------------------------------- */
+async function refreshTier(){
+  ent = await currentEntitlement();
+  const t = $('tier');
+  t.textContent = 'tier: ' + ent.label.toLowerCase();
+  t.className = 'tag' + (ent.tier !== 'free' ? ' live' : '');
+  $('licState').innerHTML = ent.tier !== 'free'
+    ? `<b style="color:var(--ok)">${ent.label}</b> — ${ent.email}<br>` +
+      `<span style="color:var(--ink-dim)">expires ${ent.expires.toISOString().slice(0,10)}</span>`
+    : `<b>Free</b> — one round or one person, no digest.` +
+      (ent.reason && ent.reason !== 'no licence key'
+        ? `<br><span style="color:var(--bad)">licence rejected: ${ent.reason}</span>` : '');
+}
+
+/* ---- run ----------------------------------------------------------------- */
+function setMode(m){
+  MODE = m;
+  $('modeRoute').classList.toggle('on', m === 'route');
+  $('modeRota').classList.toggle('on', m === 'rota');
+  $('routeNote').style.display = m === 'rota' ? 'none' : '';
+  $('rotaNote').style.display  = m === 'rota' ? '' : 'none';
+  $('run').textContent = m === 'rota' ? 'Check selected shifts' : 'Check selected rows';
+  $('out').innerHTML = ''; $('err').textContent = '';
+}
+
+async function run(){
+  $('err').textContent = ''; $('out').innerHTML = '';
+  try{
+    const grid = await host.read();
+    if (!grid || grid.length < 2) throw new Error('Select the header row and at least one data row.');
+    const headers = grid[0].map(String);
+    const map = mapColumns(headers);
+    lastRows = [];
+    if (MODE === 'rota') await runRota(grid, headers, map);
+    else                 await runRoutes(grid, headers, map);
+    if (lastRows.length) host.highlight(lastRows);
+  }catch(e){ $('err').textContent = e.message; }
+}
+
+async function runRoutes(grid, headers, map){
+  const missing = ['vehicle','stop','open','close','travel'].filter(k => map[k] === undefined);
+  if (missing.length) throw new Error(
+    'Could not find these columns in your header row: ' + missing.join(', ') +
+    '\nHeaders seen: ' + headers.filter(h => h !== '').join(', '));
+
+  const rounds = new Map();
+  for (let r = 1; r < grid.length; r++){
+    const row = grid[r];
+    const veh = String(row[map.vehicle] ?? '').trim();
+    if (!veh) continue;
+    if (!rounds.has(veh)) rounds.set(veh, []);
+    rounds.get(veh).push({
+      id: String(row[map.stop] ?? `row${r+1}`).trim(),
+      open: row[map.open] ?? 0, close: row[map.close] ?? 0, travel: row[map.travel] ?? 0,
+      seq: map.seq !== undefined ? Number(row[map.seq]) : r,
+      sheetRow: r + 1,
+    });
+  }
+  if (!rounds.size) throw new Error('No rounds found — the round column was empty on every row.');
+
+  let routes = [...rounds.entries()].map(([vehicle, stops]) => {
+    stops.sort((a,b) => a.seq - b.seq);
+    stops[0].travel = 0;
+    return { vehicle, stops };
+  });
+  const total = routes.length;
+  let cap = null;
+  if (ent.tier === 'free'){ const c = capRoutes(routes); cap = c.hidden; routes = c.routes; }
+
+  let feasible = 0; const fails = [], canonRoutes = [], canonVerdict = [];
+  for (const r of routes){
+    if (r.stops.length < 2){ fails.push({ veh: r.vehicle, msg: 'only one stop' }); continue; }
+    const o = verifyRoute(r.stops);
+    canonRoutes.push({ id: r.vehicle, stops: r.stops.map(s => ({ id: s.id, open: s.open, close: s.close, travel: s.travel })) });
+    if (o[0] === 0){ feasible++; canonVerdict.push({ id: r.vehicle, feasible: true, violation: null }); }
+    else if (o[0] === 1){
+      const s = r.stops[o[1]];
+      fails.push({ veh: r.vehicle, stop: s?.id ?? '?', arrival: o[2], close: o[3], deficit: o[4] });
+      canonVerdict.push({ id: r.vehicle, feasible: false,
+        violation: { stop: s?.id ?? String(o[1]), raw: { arrival: o[2], windowClose: o[3], deficit: o[4] } } });
+      if (s) lastRows.push(s.sheetRow);
+    } else fails.push({ veh: r.vehicle, msg: 'rejected before evaluation' });
+  }
+
+  const checked = routes.length, bad = checked - feasible;
+  const pct = checked ? Math.round(100*feasible/checked) : 0;
+  const shown = ent.tier === 'free' ? splitBreaches(fails) : { shown: fails, hiddenCount: 0 };
+  let html = `<div class="card"><div class="rate ${bad?'bad':'ok'}">${pct}%<small>rounds achievable</small></div>
+    <div style="margin-top:9px;font-size:12.5px">${bad
+      ? `<b>${bad} of ${checked}</b> cannot be run as scheduled.`
+      : checked === 1 ? 'The round checked is <b>achievable</b>.' : `All <b>${checked}</b> rounds are achievable.`}</div>`;
+  if (cap && (cap.rounds || cap.stops))
+    html += `<div class="lock">${UPSELL}${cap.stops ? ` ${cap.stops} further stop(s) were not checked.` : ''}</div>`;
+  else if (total > checked)
+    html += `<div class="lock">Free tier: checked ${checked} of ${total} rounds.</div>`;
+  html += '</div>';
+  for (const f of shown.shown){
+    html += f.msg
+      ? `<div class="flag"><span class="who">${f.veh}</span> — ${f.msg}</div>`
+      : `<div class="flag"><span class="who">${f.veh}</span> misses <b>${f.stop}</b><br>
+           arrives ${fmt(f.arrival)}<br>shuts &nbsp;&nbsp;${fmt(f.close)}<br>
+           <b>late by ${fmt(f.deficit)}</b></div>`;
+  }
+  if (shown.hiddenCount)
+    html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
+  $('out').innerHTML = html;
+  await emitDigest(() => verdictDigest(canonRoutes, canonVerdict), 'verdict digest');
+}
+
+async function runRota(grid, headers, map){
+  const missing = ['staff','start','end'].filter(k => map[k] === undefined);
+  if (missing.length) throw new Error(
+    'Could not find these columns in your header row: ' + missing.join(', ') +
+    '\nHeaders seen: ' + headers.filter(h => h !== '').join(', '));
+
+  let rows = [];
+  for (let r = 1; r < grid.length; r++){
+    const row = grid[r];
+    rows.push({
+      staff: String(row[map.staff] ?? '').trim(),
+      date : map.date  !== undefined ? row[map.date]  : null,
+      start: row[map.start], end: row[map.end],
+      break: map.break !== undefined ? row[map.break] : 0,
+      row: r + 1, sheetRow: r + 1,
+    });
+  }
+  let cap = null;
+  if (ent.tier === 'free'){ const c = capRotaRows(rows); cap = c.hidden; rows = c.rows; }
+
+  const rep = evaluateRota(rows, { maxPeople: ent.maxRounds });
+  if (!rep.checked) throw new Error('No staff found — the staff column was empty on every row.');
+
+  const byRow = new Map(rows.map(r => [r.row, r.sheetRow]));
+  for (const b of rep.breaches){ const sr = byRow.get(b.row); if (sr !== undefined) lastRows.push(sr); }
+
+  const KIND = { rest:'rest between shifts', break:'break on a long shift', overlap:'overlapping shifts' };
+  const pct = rep.checked ? Math.round(100*rep.clear/rep.checked) : 0;
+  const shown = ent.tier === 'free' ? splitBreaches(rep.breaches) : { shown: rep.breaches, hiddenCount: 0 };
+  let html = `<div class="card"><div class="rate ${rep.breaches.length?'bad':'ok'}">${pct}%<small>staff with no flags</small></div>
+    <div style="margin-top:9px;font-size:12.5px">${rep.breaches.length
+      ? `<b>${rep.breaches.length} issue(s)</b> across ${rep.checked} person(s).`
+      : '<b>No flags</b> against the configured rules.'}</div>`;
+  if (cap && (cap.people || cap.shifts))
+    html += `<div class="lock">${UPSELL_ROTA}${cap.shifts ? ` ${cap.shifts} further shift(s) were not checked.` : ''}</div>`;
+  else if (rep.totalPeople > rep.checked)
+    html += `<div class="lock">Free tier: checked ${rep.checked} of ${rep.totalPeople} people.</div>`;
+  html += '</div>';
+  for (const b of shown.shown){
+    html += `<div class="flag"><span class="who">${b.staff}</span> — ${KIND[b.kind]}` +
+      `${b.label ? ` (${b.label})` : ''}, row ${b.row}<br>` +
+      `achieved ${humanMinutes(b.actual)}<br>expected ${humanMinutes(b.expected)}<br>` +
+      `<b>short by ${humanMinutes(b.shortfall)}</b></div>`;
+  }
+  if (shown.hiddenCount)
+    html += `<div class="lock">+ ${shown.hiddenCount} more breach(es) — unlock Standard (£29/mo) for full diagnostics.</div>`;
+  if (rep.rejected.length)
+    html += `<div class="note">${rep.rejected.length} row(s) skipped — times could not be read.</div>`;
+  $('out').innerHTML = html;
+  await emitDigest(() => rotaDigest(rep.people, rep.verdict, rep.rules), 'rota digest');
+  $('out').insertAdjacentHTML('beforeend', `<div class="note"><b>${DISCLAIMER}</b></div>`);
+}
+
+async function emitDigest(compute, label){
+  if (!ent.certificate){
+    $('out').insertAdjacentHTML('beforeend',
+      '<div class="note">The reproducible SHA-256 over these inputs and this ' +
+      'result — the number a third party re-computes to confirm it — is part of Pro.</div>');
+    return;
+  }
+  const dg = await compute();
+  $('out').insertAdjacentHTML('beforeend', `<div class="digest"><b>${label}</b><br>${dg}</div>`);
+}
+
+/* ---- wiring -------------------------------------------------------------- */
+$('modeRoute').addEventListener('click', () => setMode('route'));
+$('modeRota') .addEventListener('click', () => setMode('rota'));
+$('run')      .addEventListener('click', run);
+$('clear')    .addEventListener('click', () => { host.clear(); $('err').textContent=''; });
+$('licApply').addEventListener('click', async () => {
+  const k = $('licKey').value.trim();
+  const probe = await verifyLicence(k);
+  if (probe.tier === 'free'){
+    $('licState').innerHTML = `<span style="color:var(--bad)">Not applied: ${probe.reason}</span>`;
+    return;
+  }
+  saveLicence(k); $('licKey').value = ''; await refreshTier();
+});
+$('licRemove').addEventListener('click', async () => { clearLicence(); await refreshTier(); });
+
+refreshTier();
+loadWasm().then(() => { $('run').disabled = false; })
+  .catch(e => { $('engine').textContent = 'engine: failed'; $('err').textContent = e.message; });
+
+/* Exposed for the headless parity harness, which drives this file directly
+   rather than through Apps Script. */
+window.__L117 = { verdictDigest, rotaDigest, evaluateRota, setMode, get wasmReady(){ return !!wasm; } };
+</script>
+</body>
+</html>

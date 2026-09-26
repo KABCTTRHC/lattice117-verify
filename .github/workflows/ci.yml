@@ -142,3 +142,9 @@ jobs:
         run: node tests/rota.test.mjs
       - name: Free-tier depth caps
         run: node tests/freetier.test.mjs
+      # The Sheets sidebar is a BUNDLE of the shared modules. A stale bundle is
+      # a surface that silently disagrees with the other three about what a
+      # breach is and what the digest should be, which is the one thing the
+      # product cannot survive. This rebuilds and diffs.
+      - name: Sheets bundle is current, scoped and self-contained
+        run: node tests/sheets.test.mjs
