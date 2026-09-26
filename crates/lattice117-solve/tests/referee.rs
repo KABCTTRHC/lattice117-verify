@@ -424,3 +424,253 @@ fn real_geometry_does_not_reproduce_the_van_14_breach() {
     assert!(referee_grades(&[depot, arnold, other, depot], &matrix, n, &windows, 0).is_ok());
     assert!(referee_grades(&[depot, other, arnold, depot], &matrix, n, &windows, 0).is_ok());
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Fixture B — the convex-position benchmark
+//
+// Fixture A shows the product claim on realistic geography. This one tests the
+// solver against an answer someone other than us settled: for points in convex
+// position the optimal tour is the convex-hull order, so on a regular polygon
+// the optimum is the perimeter, n * 2R * sin(pi/n).
+//
+// It is a theorem rather than a downloaded instance because the downloadable
+// ones cannot be vendored here — TSPLIB's licence is non-commercial and forbids
+// redistribution, Solomon's set carries no licence at all. See
+// docs/FIXTURE-B-BENCHMARK.md. tools/benchmark/ runs the real published
+// instances against a copy the user supplies themselves.
+// ═══════════════════════════════════════════════════════════════════════════
+
+use lattice117_solve::global;
+use lattice117_solve::resequence::EXACT_LIMIT;
+
+/// The convex fixture: 9 nodes on a circle, read from the generated file.
+fn convex_matrix() -> (Vec<Q16>, usize) {
+    let text = std::fs::read_to_string(repo_root().join("tests/fixtures/convex-9.txt"))
+        .expect("convex fixture is missing — run node tools/fixture/convex.mjs");
+    let rows: Vec<Vec<Q16>> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| l.split_whitespace().map(q_decimal).collect())
+        .collect();
+    let n = rows.len();
+    assert!(rows.iter().all(|r| r.len() == n), "matrix must be square");
+    (rows.concat(), n)
+}
+
+/// The tour `0 -> 1 -> ... -> n-1 -> 0`, which is the perimeter.
+fn perimeter(n: usize) -> Vec<usize> {
+    (0..n).chain(core::iter::once(0)).collect()
+}
+
+/// True when `ids` walks the circle, in either direction.
+///
+/// Direction is deliberately not pinned. A symmetric matrix cannot tell a tour
+/// from its reverse — they cost the same to the last bit — so the theorem names
+/// the hull ORDER, not a heading. Which of the two comes back depends on the
+/// order the stops were listed in, because the tie-break compares positions in
+/// the supplied round; pinning one would be pinning an artefact of the input.
+fn is_hull_order(ids: &[usize], n: usize) -> bool {
+    let forward = perimeter(n);
+    let mut backward: Vec<usize> = (1..n).rev().collect();
+    backward.insert(0, 0);
+    backward.push(0);
+    ids == forward.as_slice() || ids == backward.as_slice()
+}
+
+fn tour_cost(tour: &[usize], matrix: &[Q16], n: usize) -> i64 {
+    tour.windows(2)
+        .map(|w| matrix[w[0] * n + w[1]] as i64)
+        .sum()
+}
+
+/// Standard lexicographic next permutation. Returns false on the last one.
+fn next_permutation(a: &mut [usize]) -> bool {
+    if a.len() < 2 {
+        return false;
+    }
+    let mut i = a.len() - 1;
+    while i > 0 && a[i - 1] >= a[i] {
+        i -= 1;
+    }
+    if i == 0 {
+        return false;
+    }
+    let mut j = a.len() - 1;
+    while a[j] <= a[i - 1] {
+        j -= 1;
+    }
+    a.swap(i - 1, j);
+    a[i..].reverse();
+    true
+}
+
+/// A round with no binding windows, so only distance decides — which is what
+/// makes this a TSP and therefore comparable to the theorem.
+fn convex_round(n: usize) -> Round {
+    let open = 0;
+    let close = q_decimal("1440.0");
+    let mut stops: Vec<Stop> = (0..n)
+        .map(|id| Stop {
+            id,
+            open_q16: open,
+            close_q16: close,
+            travel_q16: 0,
+        })
+        .collect();
+    stops.push(Stop {
+        id: 0,
+        open_q16: open,
+        close_q16: close,
+        travel_q16: 0,
+    });
+    Round {
+        id: 1,
+        depart_q16: 0,
+        stops,
+    }
+}
+
+/// The headline: at exactly `EXACT_LIMIT` interior stops, the exhaustive path
+/// returns the tour the theorem names, from whatever order it is handed.
+#[test]
+fn the_exact_path_finds_the_convex_hull_order_at_the_search_limit() {
+    let (matrix, n) = convex_matrix();
+    assert_eq!(
+        n - 1,
+        EXACT_LIMIT,
+        "the fixture must sit exactly on the search bound"
+    );
+
+    // Handed the worst order this instance has, not a nearly-sorted one.
+    let mut stops: Vec<Stop> = convex_round(n).stops;
+    let scrambled: Vec<usize> = vec![0, 4, 8, 3, 7, 2, 6, 1, 5, 0];
+    for (slot, &id) in stops.iter_mut().zip(scrambled.iter()) {
+        slot.id = id;
+    }
+    let round = Round {
+        id: 1,
+        depart_q16: 0,
+        stops,
+    };
+
+    let out = resequence_round(&round, &matrix, n);
+    assert!(
+        out.searched,
+        "8 interior stops is exactly EXACT_LIMIT, so it must be searched"
+    );
+    let found = out.best_ids(&round);
+    assert!(
+        is_hull_order(&found, n),
+        "the optimum for points in convex position is the hull order; got {found:?}"
+    );
+
+    // n * 2R * sin(pi/n) is 123.127 min exactly; 123.3 once each leg is rounded
+    // to 1 dp, which is the number this matrix actually holds.
+    assert_eq!(out.best_cost_q16, 8_080_587);
+    assert_eq!(out.best_cost_q16, tour_cost(&perimeter(n), &matrix, n));
+
+    // ...and the referee agrees the result is feasible.
+    let windows = windows_of(&round, n);
+    assert!(referee_grades(&out.best_ids(&round), &matrix, n, &windows, 0).is_ok());
+}
+
+/// Rounding could in principle break the theorem: a matrix rounded to 1 dp is
+/// not exactly Euclidean, so "an optimal tour has no crossings" no longer
+/// follows for free. Rather than assume it survives, this checks it — the
+/// perimeter must beat every one of the 40,320 orders, and by a real margin
+/// rather than a last-bit one.
+#[test]
+fn rounding_does_not_break_the_theorem_on_this_instance() {
+    let (matrix, n) = convex_matrix();
+    let round = convex_round(n);
+    let out = resequence_round(&round, &matrix, n);
+
+    let best = out.best_cost_q16;
+    let mut second = i64::MAX;
+    let mut ties = 0usize;
+
+    // Every interior ordering, scored directly rather than through the solver,
+    // so this is an independent check and not the search grading itself. Walked
+    // in lexicographic order by next_permutation rather than collected, so the
+    // 40,320 orders cost one Vec rather than forty thousand.
+    let mut perm: Vec<usize> = (1..n).collect();
+    let mut counted = 0usize;
+    loop {
+        let mut tour: Vec<usize> = Vec::with_capacity(n + 1);
+        tour.push(0);
+        tour.extend_from_slice(&perm);
+        tour.push(0);
+        let cost = tour_cost(&tour, &matrix, n);
+        assert!(
+            cost >= best,
+            "found an order cheaper than the hull order: {tour:?}"
+        );
+        if cost == best {
+            ties += 1;
+        } else if cost < second {
+            second = cost;
+        }
+        counted += 1;
+        if !next_permutation(&mut perm) {
+            break;
+        }
+    }
+    assert_eq!(counted, 40_320, "8! orderings, all of them");
+
+    // Exactly two: the perimeter and its reverse. A symmetric matrix cannot
+    // distinguish them, and the tie-break returns the forward one.
+    assert_eq!(ties, 2);
+    // 24.0 minutes clear of second place — not a rounding-width margin.
+    assert_eq!(second - best, q_decimal("24.0") as i64);
+}
+
+/// The heuristic path, measured rather than advertised.
+///
+/// `global` is the unassigned-instance path and never claims optimality. On an
+/// instance whose optimum is known exactly, the useful thing is to report the
+/// gap — which is what a customer weighing £499 actually wants to know, and
+/// what a benchmark is for. Pinned so a regression in either direction shows up.
+#[test]
+fn the_heuristic_path_reports_its_true_gap_to_the_known_optimum() {
+    let (matrix, n) = convex_matrix();
+    let optimum = tour_cost(&perimeter(n), &matrix, n);
+
+    let out = global::solve_unassigned_default(&matrix, n);
+    assert!(out.visits_every_node_once(n), "tour was {:?}", out.tour);
+    assert!(
+        !out.exact,
+        "the global path is a heuristic and must not claim otherwise"
+    );
+    assert!(
+        out.cost_q16 >= optimum,
+        "a heuristic cannot beat the proven optimum; got {} against {optimum}",
+        out.cost_q16
+    );
+
+    // The gap, in tenths of a percent, integer arithmetic only. Pinned because
+    // it is a published number about the product and must not drift silently in
+    // either direction.
+    //
+    // It is 83.9%, and that is the finding rather than an embarrassment to be
+    // hidden. On a nine-node circle — about the easiest non-trivial instance
+    // there is — the Kondo pipeline returns 0 -> 8 -> 1 -> 6 -> 7 -> 4 -> 3 ->
+    // 5 -> 2 -> 0, which crosses the circle repeatedly, against a perimeter that
+    // crosses it never. The cause is structural: K_CLUSTERS is 5, so nine nodes
+    // land in clusters of about two, and on points in convex position the
+    // clustering carries almost no signal for the inter-cluster QUBO to use.
+    //
+    // What this licenses, and what it does not: `resequence` is exactly optimal
+    // here and is what Tier 5 is sold on. `global` is the unassigned-instance
+    // path, it reports `exact: false`, and a number like this is why that flag
+    // is not decoration. It must not be marketed as an optimiser on this
+    // evidence. docs/FIXTURE-B-BENCHMARK.md says so in those words.
+    let gap_tenths = (out.cost_q16 - optimum) * 1000 / optimum;
+    assert_eq!(
+        gap_tenths, 839,
+        "global path cost {} against optimum {optimum}",
+        out.cost_q16
+    );
+    assert_eq!(out.tour, vec![0, 8, 1, 6, 7, 4, 3, 5, 2, 0]);
+    assert_eq!(out.clusters, 5);
+}

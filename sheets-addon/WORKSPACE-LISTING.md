@@ -54,19 +54,26 @@ audit, offline
 
 ## 2. For Google's OAuth review team
 
-**Requested scope, in full:**
+**Requested scopes, in full:**
 
 ```
 https://www.googleapis.com/auth/spreadsheets.currentonly
+https://www.googleapis.com/auth/script.container.ui
 ```
 
-That is the entire list. There is no second scope.
+That is the entire list. Both are non-sensitive.
 
-**Why this scope and not `spreadsheets`.** The add-on only ever reads the
-sheet the user has open and writes a background colour back to rows in that
-same sheet. `spreadsheets.currentonly` grants exactly that and nothing more —
-it cannot open, list or read any other file in the user's Drive. We ask for the
-narrowest scope that lets the feature work.
+**Why `spreadsheets.currentonly` and not `spreadsheets`.** The add-on only ever
+reads the sheet the user has open and writes a background colour back to rows in
+that same sheet. `spreadsheets.currentonly` grants exactly that and nothing
+more — it cannot open, list or read any other file in the user's Drive. We ask
+for the narrowest scope that lets the feature work.
+
+**Why `script.container.ui`.** It is the permission to draw the add-on's own
+sidebar. Apps Script refuses `Ui.showSidebar` without it — a live install threw
+*"Specified permissions are not sufficient to call `Ui.showSidebar`"* before it
+was added. It grants user-interface access inside the host document, not data
+access, and the add-on uses it for nothing but opening the sidebar.
 
 **Why there is no `script.external_request` scope and no `urlFetchWhitelist`.**
 The add-on makes no network requests at all. `Code.gs` contains no

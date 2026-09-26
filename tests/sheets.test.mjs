@@ -48,9 +48,23 @@ console.log('\nCode.gs calls no network or cross-file service');
 console.log('\nappsscript.json is scoped as narrowly as it claims');
 {
   const m = JSON.parse(read('sheets-addon/appsscript.json'));
-  ok('exactly one OAuth scope', m.oauthScopes.length === 1, JSON.stringify(m.oauthScopes));
-  ok('and it is spreadsheets.currentonly',
-     m.oauthScopes[0] === 'https://www.googleapis.com/auth/spreadsheets.currentonly');
+  /* Exactly two scopes, and which two is the whole privacy claim.
+     It was one until a live install threw
+     "Specified permissions are not sufficient to call Ui.showSidebar" —
+     script.container.ui is what lets an add-on draw its own sidebar, and
+     without it the add-on cannot open at all. It grants UI, not data.
+     Both are asserted by name, and the count is asserted too, so a third
+     scope cannot be added without this test being edited deliberately. */
+  const SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets.currentonly',
+    'https://www.googleapis.com/auth/script.container.ui',
+  ];
+  ok('exactly two OAuth scopes', m.oauthScopes.length === 2, JSON.stringify(m.oauthScopes));
+  for (const s of SCOPES) ok(`  requests ${s.split('/auth/')[1]}`, m.oauthScopes.includes(s));
+  ok('and nothing beyond those two',
+     m.oauthScopes.every((s) => SCOPES.includes(s)), JSON.stringify(m.oauthScopes));
+  ok('spreadsheets.currentonly, not the full spreadsheets scope',
+     !m.oauthScopes.includes('https://www.googleapis.com/auth/spreadsheets'));
   ok('no urlFetchWhitelist', !('urlFetchWhitelist' in m));
   ok('no drive or userinfo scope', !m.oauthScopes.some((s) => /drive|userinfo|script\.external/.test(s)));
 }

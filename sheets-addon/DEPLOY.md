@@ -66,10 +66,17 @@ Google Sheet, and find the add-on under **Extensions**. Test with
 
 ## Marketplace submission
 
-The add-on requests exactly one scope, `spreadsheets.currentonly`, which is a
-**non-sensitive** scope — it grants access only to the spreadsheet the user has
-open, never to their Drive. That is the whole reason the OAuth review is short:
-there is no restricted-scope security assessment to pass.
+The add-on requests exactly two scopes, and both are **non-sensitive**:
+
+* `spreadsheets.currentonly` — the spreadsheet the user has open, never their
+  Drive.
+* `script.container.ui` — permission to draw the sidebar. Apps Script refuses
+  `Ui.showSidebar` without it; a live install failed with *"Specified
+  permissions are not sufficient to call Ui.showSidebar"* before it was added.
+  It grants UI, not data.
+
+Neither is restricted, so there is no security assessment to pass and the OAuth
+review is short.
 
 Order of operations:
 

@@ -223,17 +223,19 @@ Arnold   @581.2   Carlton  @590.9   DEPOT   @600.2
 
 ---
 
-## 6. Fixture B, and why it is not here yet
+## 6. Fixture B
 
-A published benchmark instance — Solomon VRPTW (`C101`, `R101`) or a TSPLIB
-case — is the right second fixture, because its optimum is a number other
-people have already agreed on, so it tests the solver against the literature
-rather than against itself.
+Built, and not in the shape this section originally planned.
 
-It is not in this commit because it needs the licence position established
-first. Solomon's instances are widely redistributed but the canonical set comes
-with terms worth reading rather than assuming, and TSPLIB's are distributed
-under terms that permit research use with attribution. Vendoring someone else's
-data into an AGPL repository under a commercial dual licence is a decision to
-make deliberately. The test harness that Fixture A now uses is instance-shaped
-and will take a Solomon file unchanged.
+The plan was to vendor a published instance — Solomon VRPTW or TSPLIB — so the
+solver could be measured against an optimum other people had already agreed on.
+Reading the terms ruled that out: TSPLIB's licence permits non-commercial use
+only and forbids redistribution without written permission, and Solomon's
+instances carry no licence statement at all.
+
+So Fixture B's external standard is a **theorem** instead of a dataset — for
+points in convex position the optimal tour is the convex-hull order — and the
+real published instances are supported by a harness that reads a file the user
+supplies. `docs/FIXTURE-B-BENCHMARK.md` has the licence research and the
+results, including the one that matters commercially: `resequence` is exact on
+it and `global` is 83.9% above optimum.
