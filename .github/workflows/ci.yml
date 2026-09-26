@@ -251,3 +251,8 @@ jobs:
       # product cannot survive. This rebuilds and diffs.
       - name: Sheets bundle is current, scoped and self-contained
         run: node tests/sheets.test.mjs
+      # The ask we make of outside engineers to close §8 of the paper. It runs
+      # here on every push because it is the one command a stranger will judge
+      # the whole project by, and it must never be broken in main.
+      - name: The published digests still reproduce end to end
+        run: node npm/bin/lattice117-verify.mjs

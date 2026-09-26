@@ -1,0 +1,87 @@
+name: Digest reproduction report
+description: You ran the reproduction command on your own machine. Tell us what came out.
+title: "Digest reproduction: <your OS / CPU>"
+labels: ["reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you — this is the single most useful thing anyone outside this
+        project can do for it.
+
+        §8 of the white paper records an open gap: **every digest in it was
+        produced by us.** Nine device captures across three phones are still
+        nine captures on hardware we held. The claim the product rests on —
+        same schedule, same verdict, same digest, anywhere — is not something
+        we can close by running it again ourselves.
+
+        One person who is not us, on a machine we have never touched, closes it.
+
+        **A non-match is the more useful result.** If your output differs, that
+        is a defect in a claim we are selling, and we would rather learn it from
+        you than from a customer. Please file it either way.
+
+  - type: input
+    id: command
+    attributes:
+      label: What did you run?
+      placeholder: npx lattice117-verify reproduce
+      value: npx lattice117-verify reproduce
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Paste the entire output
+      description: >
+        All of it, including the environment block. The environment is the
+        point — a digest with no machine attached proves nothing about
+        portability.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did all three digests match?
+      options:
+        - "Yes — all three matched"
+        - "No — at least one did not match"
+        - "It did not run (error before any digest)"
+    validations:
+      required: true
+
+  - type: input
+    id: attribution
+    attributes:
+      label: How should we credit you?
+      description: >
+        Optional. If you are happy to be named in the white paper's §8 as an
+        independent reproduction, give the name or handle you want used. Leave
+        blank to stay anonymous — the report is just as valuable either way, and
+        we will not name you without this field filled in.
+      placeholder: "Jane Doe (@janedoe), or leave blank"
+
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: One confirmation
+      options:
+        - label: >
+            This output came from a real run on my own machine, and I have not
+            edited it.
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### What we will do with it
+
+        A matching report gets added to §8 of the white paper as an independent
+        reproduction, with the machine and OS and — if you filled in the
+        attribution field — your name.
+
+        A non-matching report gets investigated before anything else in the
+        queue, and you will get told what it turned out to be.

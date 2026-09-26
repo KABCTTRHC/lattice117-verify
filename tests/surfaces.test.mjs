@@ -181,5 +181,62 @@ console.log('\nBoth spreadsheet surfaces onboard and upsell');
   }
 }
 
+/* ── the reproduction pack ───────────────────────────────────────────────── */
+/* `npx lattice117-verify reproduce` is the ask we make of outside engineers to
+   close §8 of the white paper. It has to work on a clean machine with nothing
+   installed, which means every file it touches must be in the package's `files`
+   list — a CLI that is published without its fixtures fails on the first
+   stranger who tries it, and that is the one audience with no patience for it. */
+console.log('\nThe reproduction pack is publishable and complete');
+{
+  const pkg = JSON.parse(read('npm/package.json'));
+  ok('npm package exposes the lattice117-verify binary',
+     pkg.bin?.['lattice117-verify'] === './bin/lattice117-verify.mjs');
+  ok('and the binary exists', here('npm/bin/lattice117-verify.mjs'));
+  ok('the package still declares no dependencies',
+     !pkg.dependencies || Object.keys(pkg.dependencies).length === 0);
+
+  /* Everything the CLI reads at run time, by name. */
+  const needed = [
+    'bin/lattice117-verify.mjs', 'index.js', 'digest.js', 'resequence.js',
+    'lattice117_wasm.wasm', 'example-route-sheet.csv',
+    'example-fleet-nottingham.csv', 'example-fleet-nottingham-matrix.txt',
+  ];
+  for (const f of needed) {
+    ok(`  files[] ships ${f}`, (pkg.files ?? []).includes(f));
+    ok(`  and npm/${f} exists`, here(`npm/${f}`));
+  }
+
+  /* The copies under npm/ must be the same bytes as demo/, or a stranger
+     reproduces a digest from a fixture that is not the documented one. */
+  for (const f of ['resequence.js', 'example-route-sheet.csv',
+                   'example-fleet-nottingham.csv',
+                   'example-fleet-nottingham-matrix.txt']) {
+    ok(`  npm/${f} matches demo/${f}`, read(`npm/${f}`) === read(`demo/${f}`));
+  }
+
+  /* The three strings the CLI checks are the three the docs quote. A CLI that
+     drifted from REPRODUCE.md would send a stranger chasing a value nobody
+     publishes. */
+  const cli = read('npm/bin/lattice117-verify.mjs');
+  const doc = read('REPRODUCE.md');
+  for (const [name, d] of [
+    ['fleet v1', 'e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d'],
+    ['nottingham before', 'da1650fc0e63e26eba33913f25f24fb9fbdc78ce4c55549279cb9582d3119993'],
+    ['nottingham after', '2b9d863c5ab89a90a2416a9a708ce09fa8876b6d8d91e58199696181e7da7b15'],
+  ]) {
+    ok(`  CLI expects the published ${name} digest`, cli.includes(d));
+    ok(`  and REPRODUCE.md quotes its prefix`, doc.includes(d.slice(0, 8)));
+  }
+
+  ok('REPRODUCE.md gives the one-line command', /npx lattice117-verify reproduce/.test(doc));
+  ok('and says plainly that the digest is not a signature',
+     /not a signature/i.test(doc));
+  ok('an issue template exists for the report',
+     here('.github/ISSUE_TEMPLATE/digest-reproduction.yml'));
+  ok('and the CLI points at it',
+     cli.includes('digest-reproduction.yml'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

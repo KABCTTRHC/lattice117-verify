@@ -7,6 +7,12 @@ missed.
 
 It does not build schedules. It checks one somebody else built.
 
+> **Can you reproduce our numbers?** One command, thirty seconds, no account:
+> `npx lattice117-verify reproduce`. Every digest we publish was produced by
+> us, which is a gap only someone else can close — see
+> **[REPRODUCE.md](REPRODUCE.md)**. A non-match is the more useful result and we
+> want to hear it.
+
 ```
   FAIL  0 of 1 routes feasible · 1 violation(s)
 
