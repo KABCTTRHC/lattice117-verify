@@ -116,82 +116,200 @@ Fleet repair does not carry this gate and can proceed independently.
 
 ---
 
-## 2. What already exists, and what does not
+## 2. What already exists — audited in `sovereign_api`
 
-Checked, not assumed:
+**Correction to the first draft of this spec.** `lattice117-verify` is a minimal
+verification-only extraction; only the branchless evaluator came across. The full
+optimization engine lives in the `sovereign_api` repository, which is a single
+crate — `lattice117_core` v1.0.0, 82 Rust files, ~24,800 lines. There is no
+separate `lattice117-engine` crate; the engine is `src/engine/` inside that one.
 
-| Claim in the plan | Reality |
-|---|---|
-| "Wire the deterministic Rust VRPTW local-search and DP pass (`dp.rs`)" | The **DP pass exists**: `solve_intra_cluster_branchless` evaluates a *given* order against windows, branchlessly, in `i32`. The **local search does not exist** — there is no 2-opt, Or-opt or move generator anywhere in the crate. The name is misleading; it is an evaluator, not a solver. |
-| "CI enforcement against f32/f64 in the evaluation path" | **Already live** — added at `9b24983`, guards `lattice117-verify` and `lattice117-wasm`. A new `lattice117-solve` crate must be added to that step or it is unguarded. |
-| "`tier: 'enterprise'` needs no new licensing infrastructure" | **Correct.** `issue.mjs` signs an arbitrary `tier` string and `licence.js` exposes it. Gating is a UI condition. |
-| "Q16.16 / sparse Q40.24 under 15 MB for 100–1,000 stops" | **Correct.** Dense `i32` at 1,000 stops is 1000² × 4 B = 4 MB; `i64` is 8 MB. Comfortable on the 4 GB Galaxy Tab A11 already in the determinism matrix. |
-| "before-and-after SHA-256 verification digest" | Sound, but call it a **digest**, not a seal. §8 of the white paper says explicitly it is not a signature, and a repair tier is exactly where that distinction will be tested. |
+Audited directly. The first draft said "the local search does not exist". **That
+was wrong.** It exists, it is integer, and it is more determinism-ready than the
+plan assumed.
 
-One documented gap that repair will hit immediately, from `dp.rs`'s own comment:
-**`service_time` is not threaded into the arrival-time computation at all.** For
-detection on a sheet that bakes service into `travel_mins_from_previous`, that is
-survivable. For repair it is not — you cannot move a stop without knowing how
-long it takes to serve. This must be fixed before any re-sequencing work.
+### 2.1 Move generation and construction — present, and in Q16 integers
+
+| Module | Lines | What it is |
+|---|---|---|
+| `engine/construction.rs` | 223 | `build_insertion_heuristic_fleet`, `find_cheapest_feasible_insertion` — a cheapest-feasible-insertion constructor |
+| `engine/recombination.rs` | 620 | `try_cross_exchange`, `splice_at_seam`, `try_recombine_pair`, `validate_candidate`, `route_distance_q16(&[i32]) -> i64` |
+| `engine/topological_dp.rs` | 204 | `solve_intra_cluster_branchless` — the same evaluator extracted into `lattice117-verify`'s `dp.rs` |
+| `engine/capacity.rs` | 53 | capacity feasibility, zero floats |
+| `engine/mod.rs` | 4,575 | orchestration: `compute_cluster_route`, `evaluate_order_with_dp`, all on `distances_q16: &[i32]` |
+
+**Cross-exchange is a real local-search move operator.** There is no 2-opt or
+Or-opt by name, but a cross-exchange plus a cheapest-insertion constructor is a
+working neighbourhood. November is an *extraction and hardening* job, not a
+greenfield solver build.
+
+### 2.2 Determinism posture — stronger than the plan assumed
+
+Three things the plan proposed to build are already true:
+
+- **No wall-clock termination anywhere in the solve path.** `Instant::now()`
+  appears only in `sentinel_qbn.rs` phase telemetry and as `_`-prefixed unused
+  bindings in `mod.rs`. Nothing branches on elapsed time. The engine is already
+  step-bounded rather than time-bounded, which is the single most important
+  property in the plan and it is a head start, not a task.
+- **The PRNG is a fixed-seed inline LCG.** `seed = 117u32`, then
+  `wrapping_mul(1664525).wrapping_add(1013904223)`. No `thread_rng`, no system
+  entropy. `recombination.rs` documents itself as seedless by construction —
+  "same two routes in, same seam out, always".
+- **No `HashMap`/`HashSet` in the VRPTW move path.** `construction.rs`,
+  `recombination.rs`, `topological_dp.rs` and `capacity.rs` are all clean.
+  `HashMap` appears only in `regression.rs` and as a `[u8; 32]`-keyed cache in
+  `sentinel_qbn.rs`, neither of which is on the route path.
+
+### 2.3 Floats — concentrated, and mostly not on the route path
+
+`engine/mod.rs` carries 57 `f32`/`f64` mentions, but they are **other verticals**,
+not VRPTW: `origin_lat_lon`, `nominal_viscosity_cst`, `input_flow_rate_m3_hr`,
+`pressure_threshold_psi`, `node_congestion_matrix`, `obstacle_coordinates`,
+`target_frequency_hz`, `material_density_kg_m3` — the hydro, telecom, drone-swarm
+and wafer-fab request types, plus a `total_cost: f64` reporting field. The route
+evaluation itself runs on `distances_q16: &[i32]`.
+
+**One real float defect, and it is exactly the paper's §5 class.**
+`src/modules.rs:217`, in a function whose own doc comment reads *"Uses Q16
+fixed-point math to exactly calculate travel time"*:
+
+```rust
+let out_arrival_time = ((arr_d + wait_d + (to_node.service_time as f64 / 65536.0)) * 65536.0) as i32;
+```
+
+The entire transition is computed in `f64` and cast back with `as i32` — which
+truncates rather than rounds. The comment asserts a representation the code does
+not honour. This is a **parallel legacy path**: the live engine uses the integer
+route, and `modules.rs` is still compiled (`pub mod modules;` at `lib.rs:15`).
+It must not be carried into `lattice117-solve`, and the doc comment should be
+corrected in place so nobody trusts it in the meantime.
+
+### 2.4 `service_time` — modelled, not wired
+
+The precise answer, because the first draft under-described it:
+
+- **Declared** as `pub service_time: i32, // Q16.16` at `lib.rs:274` and
+  `modules.rs:164`. The Q16.16 representation is already chosen.
+- **Used** only in the `f64` legacy path above.
+- **Never threaded** into the engine's `time_windows` or the DP — confirmed
+  independently by `topological_dp.rs:99` and `bin/lattice117_tournament.rs:221`.
+
+So it is a plumbing job, not a design job: the field, the type and the scale all
+exist. That is a smaller November task than the first draft assumed.
+
+### 2.5 What actually blocks the WASM target
+
+This is where the real porting cost sits, and none of it is solver work.
+
+- **`rayon` cannot compile to WASM without threads.** `Cargo.toml:59` pulls it
+  in, and `mod.rs:2329` runs `swept_clusters.par_iter()`. `wasm-bindgen-rayon`
+  needs `SharedArrayBuffer`, which needs COOP/COEP headers, which **GitHub Pages
+  cannot set** and which would end the no-server model. The parallel path must
+  compile out to a sequential fallback behind a feature flag.
+- **The crate's dependency set is server-shaped.** `actix-web`, `tokio`,
+  `reqwest`, `libloading` — none of them reach WASM. `lattice117-solve` must be a
+  *thin extraction* of `engine/{construction, recombination, topological_dp,
+  capacity}` and their integer helpers, not a compile of `lattice117_core`.
+- **One comment gives false comfort and should be fixed now.** `mod.rs:2319`
+  justifies bit-identical output on the grounds that `par_iter` is an
+  `IndexedParallelIterator`. The conclusion is right — rayon's `collect()` into a
+  `Vec` preserves input order — but the reasoning is not: `filter_map` yields an
+  *unindexed* iterator, so indexedness is not what is saving it. The distinction
+  matters because a later refactor to `reduce` or `fold` would silently lose the
+  guarantee while the comment still claims it.
+- `tests/golden_vrptw.rs` already exists and should be ported alongside the
+  engine as the regression anchor.
+
+### 2.6 What this does *not* change
+
+**Gate A stands exactly as written.** `route_distance_q16` takes
+`distance_matrix: &[i32]`, and `find_cheapest_feasible_insertion` needs the same.
+A better solver does not conjure `d(i,j)` out of a CSV that only carries
+`travel_mins_from_previous`. The engine being ready makes the JSON/TMS path
+(A1/A3) much cheaper to ship; it does nothing for the single-sheet path, where
+A4 remains the answer.
+
+**Gate C stands unchanged**, and the engine's readiness makes it *more* urgent,
+not less: the sooner fleet repair can ship, the sooner the temptation arrives to
+ship rota repair beside it before `lattice117.rota.v2` lands.
+
+### 2.7 Carried over from the first draft, still true
+
+- The `f32`/`f64` CI guard is live in `lattice117-verify` and covers only
+  `lattice117-verify` and `lattice117-wasm`. `lattice117-solve` must be added to
+  that step or it ships unguarded.
+- `tier: 'enterprise'` needs no new licensing infrastructure.
+- Q16.16 memory at 1,000 stops is 4 MB dense `i32`, 8 MB `i64` — comfortable on
+  the 4 GB tablet already in the determinism matrix.
+- Call it a **digest**, not a seal.
 
 ---
 
 ## 3. Determinism design
 
-The step-bounded approach is right, and it is the correct application of §5.6.
-Wall-clock budgets are non-determinism by construction, and the plan is correct
-to reject them.
-
-Four additions the plan does not cover, each a category from the taxonomy:
+The step-bounded approach is right, and §2.2 shows it is largely how the engine
+already behaves. Four requirements, each a category from the taxonomy:
 
 1. **Total ordering on ties (structural).** When two moves score equally the
    winner must be chosen by a defined rule — lowest `(i, j)` index pair — not by
-   whichever the iterator reached first. Any iteration over a hash map anywhere
-   in the move loop breaks determinism regardless of the seed.
-2. **Single-threaded, or deterministic reduction (structural).** Web Workers are
-   fine as *one* background thread. The moment work is split across several, the
-   order in which improvements are applied varies and the result diverges.
-   Prohibit this in the crate, and assert it.
+   whichever the iterator reached first. Audit `try_cross_exchange` and
+   `find_cheapest_feasible_insertion` for this specifically; a `>` where a `>=`
+   belongs is enough to make the result depend on visit order.
+2. **Single-threaded, or provably order-preserving (structural).** Per §2.5 the
+   WASM build is single-threaded by necessity. The native build may keep rayon
+   only while every parallel stage ends in an order-preserving `collect()`.
+   Assert it rather than comment it.
 3. **The canonical form must pin the whole search, not just the input
    (semantic).** `lattice117.solve.v1` has to cover: input schedule, ruleset,
    PRNG seed, step budget, **the move set and its order**, the tie-break rule,
    and the engine version. Omit any one and two builds reproduce different
    repairs from identical inputs — §5.4's failure, one level up.
-4. **The repaired schedule must be re-verified by the untouched verifier.** The
-   plan already says this and it is the single best decision in it. Keep
+4. **`digest_after` must come from the untouched verifier.** Keep
    `lattice117-verify` as an independent referee that knows nothing about the
-   solver, and make `digest_after` come from the referee, never the solver.
+   solver. This was the best decision in the original plan.
 
 ---
 
 ## 4. Revised phasing
 
-The original four-month shape survives; the gates change what lands when.
+The audit moves work earlier and changes its character: November is extraction
+and hardening, not construction.
 
-**October 2026 — distribution, and one decision.**
+**October 2026 — distribution, and one question.**
 Clear AppSource and Workspace review; onboard Free/Pro/Fleet users; collect real
-breach shapes. Add one question to every onboarding: *can you export a distance
-matrix from your TMS?* That answer decides Gate A, and it costs nothing to ask
-now rather than in December.
+breach shapes. Add one question to onboarding: *can you export a distance matrix
+from your TMS?* That answer decides Gate A, and asking now costs nothing.
 
-**November 2026 — fleet repair, A4 scope.**
-New crate `lattice117-solve`, added to the f32/f64 CI guard. Departure-time,
-slack and waiting repairs on the existing schema. Fix the `service_time` gap.
-No re-sequencing, because Gate A is unresolved until October's answer.
+In parallel, two small jobs in `sovereign_api` that are cheap today and expensive
+later: correct the `modules.rs:217` doc comment so it stops claiming fixed-point
+maths it does not do, and fix the `mod.rs:2319` rayon-ordering rationale.
+
+**November 2026 — extract `lattice117-solve`.**
+Lift `engine/{construction, recombination, topological_dp, capacity}` into a new
+crate with no `actix-web`/`tokio`/`reqwest`/`libloading`, and rayon behind a
+feature that is off for `wasm32`. Add the crate to the `f32`/`f64` CI guard. Port
+`tests/golden_vrptw.rs`. Thread `service_time` into `time_windows` and the DP —
+the field and scale already exist. Audit tie-breaks per §3.1. Ship A4
+timing/slack/wait repair on the existing single-sheet schema.
 
 **December 2026 — canonicalisation, and the rota blocker.**
-Define `lattice117.solve.v1` per §3 above. Re-run the device harness across all
-five platforms for bit-identical repairs. **In parallel, ship
-`lattice117.rota.v2`** — the elapsed-time fix — because rota repair cannot launch
-without it and it moves every rota digest, so it needs its own release and its
-own re-verification.
+Define `lattice117.solve.v1` per §3.3. Re-run the device harness across Linux,
+Windows, macOS, Android V8 and iOS JavaScriptCore for bit-identical *repairs*,
+not just verdicts. **In parallel ship `lattice117.rota.v2`** — the elapsed-time
+fix — because rota repair cannot launch without it and it moves every rota
+digest, so it needs its own release and re-verification.
 
 **January 2027 — launch what is ready.**
-Fleet repair (A4) to Enterprise licence holders across all three surfaces. Rota
-repair **only if** `rota.v2` shipped and Gate B is scoped to break placement and
-shift-time adjustment. If either slipped, launch fleet-only at the lower price
-point and hold rota repair. A tier that launches on time with one working half
-beats a tier that launches with a rota optimizer nobody should run.
+Fleet repair (A4) to Enterprise licence holders on all three surfaces. If
+October's answer to the matrix question was yes for a meaningful share of
+customers, A1 re-sequencing ships here too — the engine for it already exists,
+which is the main thing this audit changes. Rota repair **only if** `rota.v2`
+shipped and Gate B is scoped to break placement and shift-time adjustment.
+
+If anything slips, launch fleet-only at the lower price point. A tier that ships
+on time with one working half beats a tier that ships with a rota optimizer
+nobody should run.
 
 ---
 
