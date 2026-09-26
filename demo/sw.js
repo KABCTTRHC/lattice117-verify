@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v13';
+const CACHE = 'lattice117-v14';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -31,12 +31,18 @@ const SHELL = [
   './digest.js',
   './rota.js',
   './repair.js',
-  './example-route-sheet-timed.csv',
+  './resequence.js',
   './freetier.js',
   './lattice117_wasm.wasm',
+  // Fixtures. Story mode loads all four, so leaving one out makes a tier's
+  // demonstration fail silently for a visitor who reloaded offline — which is
+  // exactly the visitor the offline claim is aimed at.
   './example-fleet.json',
   './example-route-sheet.csv',
+  './example-route-sheet-timed.csv',
   './example-rota.csv',
+  './example-fleet-nottingham.csv',
+  './example-fleet-nottingham-matrix.txt',
 ];
 
 self.addEventListener('install', (e) => {

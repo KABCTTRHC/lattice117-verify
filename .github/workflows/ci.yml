@@ -131,23 +131,14 @@ jobs:
           cmp demo/rota.js npm/rota.js
           cmp demo/freetier.js excel-addin/freetier.js
           cmp demo/freetier.js npm/freetier.js
-      # The Enterprise solvers, same discipline. This step exists because the
-      # commit that wired Tier 5 into the Excel pane added the import and forgot
-      # the file: taskpane.html asked for ./resequence.js and excel-addin/ did
-      # not have one. It was invisible in a harness that served demo/ as a
-      # fallback, and would have been a broken pane in a real sideload. repair.js
-      # had the same exposure and no check either.
-      - name: Enterprise solvers are identical on every surface
-        run: |
-          cmp demo/repair.js excel-addin/repair.js
-          cmp demo/resequence.js excel-addin/resequence.js
-          test -f excel-addin/lattice117_wasm.wasm
-          # Every ./module.js the Excel pane imports must exist beside it.
-          for m in $(grep -oE "from '\./[a-z0-9_-]+\.js'" excel-addin/taskpane.html \
-                     | sed -E "s|from '\./||; s|'||"); do
-            test -f "excel-addin/$m" || { echo "::error::excel-addin/$m is imported but missing"; exit 1; }
-          done
-          echo "every module the Excel pane imports is present
+      # Every module a page imports exists beside it, every shared module is
+      # byte-identical across surfaces, and the service worker's SHELL covers
+      # everything audit.html needs. Two bugs of this shape got through in one
+      # day: taskpane.html imported a ./resequence.js excel-addin/ did not have,
+      # and sw.js's cache-first SHELL did not list it either — which offline is
+      # not a slow load but a page that does not run at all.
+      - name: Every surface is complete on its own
+        run: node tests/surfaces.test.mjs
       - name: WASM is identical on every surface
         run: |
           cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
