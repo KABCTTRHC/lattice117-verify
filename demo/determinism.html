@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Determinism Evidence Capture</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2307090e'/%3E%3Cpath d='M3.5 8.5l2.8 2.8 6.2-6.2' stroke='%2310b981' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#07090e;--ink:#e8eef6;--ink-dim:#94a3b8;--ink-faint:#64748b;
+    --ok:#10b981;--bad:#f43f5e;--warn:#f59e0b;--accent:#0ea5e9;
+    --glass:rgba(17,24,39,.65);--glass-2:rgba(23,32,48,.58);
+    --line:rgba(255,255,255,.08);--rim:inset 0 1px 0 rgba(255,255,255,.07);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg)}
+  body{margin:0;padding:18px 14px 60px;color:var(--ink);font:15px/1.55 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(600px 400px at 8% -6%,rgba(16,185,129,.10),transparent 62%),
+      radial-gradient(520px 380px at 96% 4%,rgba(14,165,233,.09),transparent 60%);
+    background-attachment:fixed}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font:800 clamp(19px,5vw,26px)/1.2 var(--sans);margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--ink-dim);font-size:13.5px;margin:0 0 18px}
+  .panel{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:16px;
+    margin-bottom:14px;box-shadow:var(--rim);
+    -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+  h2{font:700 11px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;
+     color:var(--ink-faint);margin:0 0 12px}
+  button{width:100%;font:700 15px var(--sans);padding:15px;border-radius:12px;cursor:pointer;
+    border:1px solid color-mix(in srgb,var(--ok) 60%,transparent);color:#06251a;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--ok) 95%,#fff),var(--ok));
+    box-shadow:var(--rim),0 8px 22px -10px color-mix(in srgb,var(--ok) 90%,transparent)}
+  button.sec{background:var(--glass-2);color:var(--ink);
+    border-color:rgba(255,255,255,.14);box-shadow:var(--rim);margin-top:9px;font-weight:600}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  pre{font:11.5px/1.65 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0;
+    background:rgba(8,11,18,.55);border:1px solid var(--line);border-radius:11px;padding:13px}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;
+       border-bottom:1px solid var(--line);font-size:13.5px}
+  .row:last-child{border-bottom:0}
+  .row .k{color:var(--ink-dim)}
+  .row .v{font:600 12.5px var(--mono);text-align:right;word-break:break-all}
+  .v.ok{color:var(--ok)} .v.bad{color:var(--bad)}
+  .pill{display:inline-block;font:700 10.5px/1 var(--mono);letter-spacing:.06em;
+        padding:6px 10px;border-radius:999px;border:1px solid transparent}
+  .pill.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,transparent);
+    border-color:color-mix(in srgb,var(--ok) 38%,transparent)}
+  .pill.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,transparent);
+    border-color:color-mix(in srgb,var(--bad) 38%,transparent)}
+  .note{font-size:12.5px;color:var(--ink-faint);margin:12px 0 0;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Determinism evidence capture</h1>
+<p class="sub">Runs the reference fixtures on <i>this</i> device and prints a block
+you can paste into the record. Everything computes locally; nothing is sent anywhere.</p>
+
+<div class="panel">
+  <button id="run">Run the evidence capture</button>
+  <button id="copy" class="sec" disabled>Copy evidence block</button>
+  <p class="note" id="status">Ready. On a phone this takes a few seconds.</p>
+</div>
+
+<div class="panel" id="summaryPanel" style="display:none">
+  <h2>Result</h2>
+  <div id="summary"></div>
+</div>
+
+<div class="panel" id="blockPanel" style="display:none">
+  <h2>Evidence block</h2>
+  <pre id="block"></pre>
+  <p class="note">Paste this verbatim. The expected values are compiled in, so a
+  mismatch shows as FAIL here rather than needing to be checked by eye later.</p>
+</div>
+
+</div>
+
+<script type="module">
+import { verdictDigest, rotaDigest, toQ, Q } from './digest.js';
+import { evaluateRota } from './rota.js';
+
+/* The values every conforming device must reproduce. They are the same
+   constants CI pins and the same ones the npm package, the Excel pane and the
+   Google Sheets sidebar produce. */
+const EXPECT = {
+  fleet: 'e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d',
+  rota : '83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf',
+};
+
+const $ = (id) => document.getElementById(id);
+const csv = async (f) => (await (await fetch(f)).text()).trim().split(/\r?\n/).map((l) => l.split(','));
+
+/** Exact decimal -> Q16.16 with integer arithmetic, as the control for toQ(). */
+function exactQ(s){
+  const m = /^\s*(-?)(\d*)(?:\.(\d*))?\s*$/.exec(String(s));
+  if (!m) return null;
+  const [, sign, ip, fp = ''] = m;
+  const frac = (fp + '0'.repeat(20)).slice(0, 20);
+  const den = 10n ** BigInt(frac.length);
+  const v = BigInt(ip || '0') * BigInt(Q) + (BigInt(frac) * BigInt(Q) * 2n + den) / (den * 2n);
+  return Number(sign === '-' ? -v : v);
+}
+
+async function fleetDigest(){
+  const r = await csv('example-route-sheet.csv');
+  const h = r[0].map((x) => x.trim()), ix = (n) => h.indexOf(n);
+  const m = new Map();
+  for (const row of r.slice(1)){
+    const v = row[ix('vehicle')].trim();
+    if (!m.has(v)) m.set(v, []);
+    m.get(v).push({ id: row[ix('stop')].trim(), open: row[ix('window_open')],
+      close: row[ix('window_close')], travel: row[ix('travel_mins_from_previous')],
+      seq: Number(row[ix('seq')]) });
+  }
+  const routes = [...m].map(([id, stops]) => ({ id, stops: stops.sort((a,b)=>a.seq-b.seq) }));
+
+  // The engine, loaded exactly as every other surface loads it.
+  const bytes = await (await fetch('lattice117_wasm.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const ex = instance.exports;
+  const put = (a) => { const b = a.length*4, p = ex.lattice_alloc(b),
+    dv = new DataView(ex.memory.buffer);
+    for (let i=0;i<a.length;i++) dv.setInt32(p+i*4, a[i], true); return { p, b }; };
+  const verdict = [];
+  for (const r0 of routes){
+    const st = r0.stops, k = st.length;
+    st[0] = { ...st[0], travel: 0 };
+    const dist = new Array(k*k).fill(0);
+    for (let i=1;i<k;i++) dist[(i-1)*k+i] = toQ(st[i].travel, 'travel');
+    const wins = []; for (const s of st) wins.push(toQ(s.open ?? 0,'o'), toQ(s.close ?? 0,'c'));
+    const db=put(dist), wb=put(wins), rb=put(st.map((_,i)=>i)), ob=put([0,0,0,0,0,0]);
+    ex.lattice_verify(rb.p, k, db.p, k, wb.p, ob.p);
+    const dv = new DataView(ex.memory.buffer), o = [];
+    for (let i=0;i<6;i++) o.push(dv.getInt32(ob.p+i*4, true));
+    [db,wb,rb,ob].forEach(x=>ex.lattice_free(x.p,x.b));
+    verdict.push(o[0]===0
+      ? { id:r0.id, feasible:true, violation:null }
+      : { id:r0.id, feasible:false, violation:{ stop: st[o[1]]?.id ?? String(o[1]),
+          raw:{ arrival:o[2], windowClose:o[3], deficit:o[4] } } });
+  }
+  return { digest: await verdictDigest(routes, verdict), wasmBytes: bytes.byteLength,
+           feasible: verdict.filter(v=>v.feasible).length, checked: verdict.length };
+}
+
+async function rotaResult(){
+  const r = await csv('example-rota.csv');
+  const rows = r.slice(1).map((c,i)=>({ staff:c[0], date:c[1], start:c[2], end:c[3], break:c[4], row:i+2 }));
+  const rep = evaluateRota(rows);
+  return { digest: await rotaDigest(rep.people, rep.verdict, rep.rules),
+           checked: rep.checked, clear: rep.clear, breaches: rep.breaches.length };
+}
+
+/** The JS boundary is the only arithmetic outside WASM. Sweep it. */
+function floatSweep(){
+  let n = 0, diverged = 0, first = null;
+  const push = (s) => { n++;
+    const a = toQ(s, 'x'), b = exactQ(s);
+    if (a !== b && !first) first = { input: s, toQ: a, exact: b };
+    if (a !== b) diverged++; };
+  for (let i=0;i<=6000;i++) push((i/10).toFixed(1));
+  for (let i=0;i<=6000;i++) push((i/100).toFixed(2));
+  for (let i=0;i<=20000;i++) push((i/1000).toFixed(3));
+  for (let i=0;i<4000;i++)   push((i + 0.5/Q).toFixed(10));
+  return { n, diverged, first };
+}
+
+function env(){
+  const nav = navigator;
+  const gl = (() => { try {
+    const c = document.createElement('canvas').getContext('webgl');
+    const d = c && c.getExtension('WEBGL_debug_renderer_info');
+    return d ? c.getParameter(d.UNMASKED_RENDERER_WEBGL) : null;
+  } catch { return null; } })();
+  /* Hand-rolled feature probes were reporting bulk-memory=no on an engine that
+     plainly supports it — the probe bytes were wrong. A false line in an
+     evidence block is worse than a missing one, so this reports only what can
+     be stated without a guess: which WebAssembly surfaces exist here. Whether
+     the ENGINE behaves correctly is not a claim this line has to carry; the
+     fleet digest below either matches or it does not. */
+  const feat = ['Memory','Global','Table','instantiateStreaming']
+    .map((k) => k + '=' + (typeof WebAssembly[k] !== 'undefined' ? 'yes' : 'no'));
+  return {
+    ua: nav.userAgent,
+    platform: nav.platform || '(none)',
+    cores: nav.hardwareConcurrency ?? '?',
+    memoryGB: nav.deviceMemory ?? '?',
+    dpr: window.devicePixelRatio,
+    screen: `${screen.width}x${screen.height}`,
+    renderer: gl || '(unavailable)',
+    wasm: feat.join(' '),
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
+function row(k, v, cls){ return `<div class="row"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`; }
+
+$('run').addEventListener('click', async () => {
+  $('run').disabled = true;
+  $('status').textContent = 'Running…';
+  try{
+    const t0 = performance.now();
+    const f = await fleetDigest();
+    const r = await rotaResult();
+    const sweep = floatSweep();
+    const ms = Math.round(performance.now() - t0);
+    const e = env();
+
+    const fOk = f.digest === EXPECT.fleet;
+    const rOk = r.digest === EXPECT.rota;
+    const sOk = sweep.diverged === 0;
+    const allOk = fOk && rOk && sOk;
+
+    $('summary').innerHTML =
+      `<p style="margin:0 0 12px"><span class="pill ${allOk?'ok':'bad'}">` +
+      `${allOk ? 'DETERMINISTIC — ALL MATCH' : 'MISMATCH — SEE BELOW'}</span></p>` +
+      row('Fleet digest', fOk ? 'MATCH' : 'MISMATCH', fOk?'ok':'bad') +
+      row('Rota digest',  rOk ? 'MATCH' : 'MISMATCH', rOk?'ok':'bad') +
+      row('Q16.16 boundary sweep', sOk ? `${sweep.n.toLocaleString()} values, 0 divergences` :
+          `${sweep.diverged} divergences`, sOk?'ok':'bad') +
+      row('Engine', `${f.wasmBytes} bytes WASM`) +
+      row('Elapsed', `${ms} ms`);
+    $('summaryPanel').style.display='';
+
+    const L = [];
+    L.push('LATTICE117 DETERMINISM EVIDENCE');
+    L.push('captured ' + new Date().toISOString());
+    L.push('');
+    L.push('DEVICE');
+    L.push('  user agent   ' + e.ua);
+    L.push('  platform     ' + e.platform);
+    L.push('  cores        ' + e.cores + '   memory ' + e.memoryGB + ' GB');
+    L.push('  screen       ' + e.screen + ' @ dpr ' + e.dpr);
+    L.push('  gpu          ' + e.renderer);
+    L.push('  wasm         ' + e.wasm);
+    L.push('  timezone     ' + e.tz);
+    L.push('');
+    L.push('FLEET FIXTURE  example-route-sheet.csv');
+    L.push('  rounds       ' + f.checked + ' checked, ' + f.feasible + ' achievable');
+    L.push('  engine       ' + f.wasmBytes + ' bytes');
+    L.push('  digest       ' + f.digest);
+    L.push('  expected     ' + EXPECT.fleet);
+    L.push('  result       ' + (fOk ? 'MATCH' : '*** MISMATCH ***'));
+    L.push('');
+    L.push('ROTA FIXTURE  example-rota.csv');
+    L.push('  staff        ' + r.checked + ' checked, ' + r.clear + ' clear, ' + r.breaches + ' flagged');
+    L.push('  digest       ' + r.digest);
+    L.push('  expected     ' + EXPECT.rota);
+    L.push('  result       ' + (rOk ? 'MATCH' : '*** MISMATCH ***'));
+    L.push('');
+    L.push('Q16.16 BOUNDARY SWEEP  toQ() against exact BigInt decimal');
+    L.push('  values       ' + sweep.n);
+    L.push('  divergences  ' + sweep.diverged);
+    if (sweep.first) L.push('  first        ' + JSON.stringify(sweep.first));
+    L.push('  result       ' + (sOk ? 'MATCH' : '*** MISMATCH ***'));
+    L.push('');
+    L.push('ELAPSED ' + ms + ' ms');
+    L.push('OVERALL ' + (allOk ? 'DETERMINISTIC' : '*** DIVERGENCE DETECTED ***'));
+    $('block').textContent = L.join('\n');
+    $('blockPanel').style.display='';
+    $('copy').disabled = false;
+    $('status').textContent = allOk
+      ? 'Complete. Every value matches the reference.'
+      : 'Complete — a divergence was detected. That is a finding; keep the block.';
+  }catch(err){
+    $('status').textContent = 'Failed: ' + err.message;
+  }
+  $('run').disabled = false;
+});
+
+$('copy').addEventListener('click', async () => {
+  const t = $('block').textContent;
+  try{ await navigator.clipboard.writeText(t); $('copy').textContent = 'Copied'; }
+  catch{
+    // Clipboard API needs a secure context and a permission some mobile
+    // browsers withhold. Selecting the text is the fallback that always works.
+    const rng = document.createRange(); rng.selectNodeContents($('block'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+    $('copy').textContent = 'Selected — copy with your keyboard or long-press';
+  }
+  setTimeout(()=>{ $('copy').textContent='Copy evidence block'; }, 2600);
+});
+</script>
+</body>
+</html>
