@@ -142,6 +142,13 @@ jobs:
         run: node tests/rota.test.mjs
       - name: Free-tier depth caps
         run: node tests/freetier.test.mjs
+      # The rota parser refuses to construct a Date so that a laptop's clock
+      # settings cannot change a compliance verdict. This re-derives the fixture
+      # digest in nine host zones and asserts the source never reaches for the
+      # host clock or locale, because that property is invisible on a green
+      # single-zone run and the device captures were all taken in Europe/London.
+      - name: Rota digest is identical in nine host timezones
+        run: node tests/timezone.test.mjs
       # The Sheets sidebar is a BUNDLE of the shared modules. A stale bundle is
       # a surface that silently disagrees with the other three about what a
       # breach is and what the digest should be, which is the one thing the
