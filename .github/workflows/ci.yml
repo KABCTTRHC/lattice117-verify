@@ -144,14 +144,23 @@ jobs:
       # in the CLI, Math.round(Number(v) * 65536) in JS — and that boundary is
       # what the 36,003-value BigInt sweep exists to check. They are not allowed
       # where the verdict is decided.
+      # Both guards below strip #[cfg(test)] blocks and comment lines first.
+      # A guard that fires on the word "f64" inside a doc comment explaining
+      # why there is no f64 is a guard someone eventually switches off.
       - name: No floating point in the evaluation path
         run: |
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
-          # crates/lattice117-solve joins this list when it lands.
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
           FOUND=0
           for d in $CRATES; do
-            if grep -rnE '\bf(32|64)\b' "$d" --include='*.rs'; then FOUND=1; fi
+            [ -d "$d" ] || continue
+            for f in $(find "$d" -name '*.rs'); do
+              if sed '/#\[cfg(test)\]/,$d' "$f" \
+                 | sed -E 's|//.*$||' \
+                 | grep -nE '\bf(32|64)\b'; then
+                echo "  ^ in $f"; FOUND=1
+              fi
+            done
           done
           [ "$FOUND" = 1 ] && { echo "::error::f32/f64 found in the evaluation path"; exit 1; }
           echo "evaluation path is integer-only"
@@ -172,6 +181,7 @@ jobs:
             # to end of file, which is where every one of ours sits.
             for f in $(find "$d" -name '*.rs'); do
               if sed '/#\[cfg(test)\]/,$d' "$f" \
+                 | sed -E 's|//.*$||' \
                  | grep -nE '\.(exp|exp2|ln|log|log2|log10|powf|powi|sin|cos|tan|asin|acos|atan|atan2|sqrt|cbrt|hypot)\(' ; then
                 echo "  ^ in $f"; FOUND=1
               fi

@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v10';
+const CACHE = 'lattice117-v11';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.

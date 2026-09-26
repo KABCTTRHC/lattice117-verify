@@ -182,6 +182,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice117-solve"
+version = "0.1.0"
+
+[[package]]
 name = "lattice117-verify"
 version = "0.1.0"
 

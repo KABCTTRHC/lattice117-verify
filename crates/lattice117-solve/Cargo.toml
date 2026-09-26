@@ -1,0 +1,18 @@
+[package]
+name = "lattice117-solve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Deterministic schedule repair and VRPTW optimisation. Integer-only, dependency-free, WASM-ready."
+
+[lib]
+name = "lattice117_solve"
+
+# Intentionally empty, and it must stay that way. This crate is compiled to
+# wasm32 and shipped inside a browser page, an Excel task pane and a Google
+# Sheets sidebar. Every dependency is a new way for the "opens no sockets,
+# 21 KB, nothing leaves your machine" claim to become false.
+[dependencies]

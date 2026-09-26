@@ -610,8 +610,21 @@ const PRO_STRIPE_URL      = 'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h';
    Tier 5 additionally needs a distance matrix the single-sheet CSV schema does
    not carry (Gate A in the spec) — do not make it purchasable to spreadsheet
    customers until matrix ingestion is live for them. */
-const TIER4_STRIPE_URL    = null;   // Enterprise Repair, £249/month
-const TIER5_STRIPE_URL    = null;   // Enterprise Matrix Optimizer, £499/month
+const TIER4_STRIPE_URL    = 'https://buy.stripe.com/eVq00i6lJ3Rx6ID5LfgEg0i';
+const TIER5_STRIPE_URL    = 'https://buy.stripe.com/14AfZg5hF87Nc2Xb5zgEg0j';
+
+/* The two links above are live Stripe Payment Links. This flag, not the URLs,
+   is what decides whether the cards are purchasable.
+
+   It is false because crates/lattice117-solve is an extraction, not yet a
+   product: kondo_router, the MIQUBO builder and the fixed-point layer compile
+   to wasm32 and pass 28 tests, but the A4 repair loop and the referee pipeline
+   are not written, so neither tier grants a capability a Pro licence does not
+   already give. Charging £249/month for that is not a pricing decision.
+
+   Flip to true in the same commit that lands the repair loop and wires it into
+   this page — not before, and not separately. */
+const ENTERPRISE_PURCHASABLE = false;
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
@@ -1298,9 +1311,11 @@ function paintPlans(){
                               ['buyTier5',TIER5_STRIPE_URL,'tier5']]){
     const a=$(id);
     if(!a) continue;
-    // A tier whose Stripe link is not set yet is not for sale. Say that,
-    // rather than showing a Subscribe button that goes nowhere.
-    if(url===null){
+    // An Enterprise tier is for sale only when the engine behind it runs.
+    // Until then say so, rather than taking money for a button that does
+    // nothing the buyer's existing plan does not already do.
+    const gated = (name==='tier4'||name==='tier5') && !ENTERPRISE_PURCHASABLE;
+    if(url===null || gated){
       a.replaceWith(Object.assign(document.createElement('div'),
         {className:'current', id, textContent:'Not yet available'}));
       continue;
