@@ -1,0 +1,8 @@
+{
+  "scriptId": "PASTE_YOUR_SCRIPT_ID_HERE",
+  "rootDir": ".",
+  "scriptExtensions": [".js", ".gs"],
+  "htmlExtensions": [".html"],
+  "filePushOrder": ["appsscript.json", "Code.gs", "Sidebar.html"],
+  "skipSubdirectories": true
+}

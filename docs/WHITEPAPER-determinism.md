@@ -441,11 +441,12 @@ core count and memory.
 pinned by test, not fixed.
 
 **And the larger exposure runs the other way.** WTR regs. 21, 22 and 24 disapply
-the daily rest entitlement for whole categories of worker. Reg. 22(a) removes it
+the daily rest entitlement for whole categories of worker. Reg. 22(1)(a) removes it
 outright when a shift worker changes shift — precisely the changeover a rota tool
-flags most often — and reg. 21 covers security and surveillance work, continuity
-of service "as in hospitals", and foreseeable surges in agriculture, tourism and
-postal services. So a *flagged* breach may be perfectly lawful, all year round,
+flags most often, though only for a "shift worker" as reg. 22(2) defines one and
+only "[s]ubject to regulation 24" — and reg. 21 covers security and surveillance
+work, continuity of service "as in hospitals", and foreseeable surges in
+agriculture, tourism and postal services. So a *flagged* breach may be perfectly lawful, all year round,
 and the facts that decide it are not in the spreadsheet. No amount of determinism
 touches this. The tool is an indicative mathematical check, and this paper's
 determinism claims should never be read as compliance claims.

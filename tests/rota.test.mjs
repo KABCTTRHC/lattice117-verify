@@ -139,7 +139,7 @@ for (const [surface, file] of [
   const flat = (t) => t.replace(/\s+/g, ' ');
   const clockSentence = flat(CLOCK_NOTE.slice(0, CLOCK_NOTE.indexOf('. ') + 1));
   const legalSentence = flat(RULES_NOTE);
-  // Reg. 22(a) disapplies reg. 10(1) on a shift change, and reg. 23(a) lets an
+  // Reg. 22(1)(a) disapplies reg. 10(1) on a shift change, and reg. 23(a) lets an
   // agreement modify it outright — see docs/WTR-EXCEPTIONS-REG21-24.md. A user
   // reading a flagged breach needs to know the check has not considered either.
   const scopeTerms = ['opt-outs', 'young workers', 'shift-change exceptions',

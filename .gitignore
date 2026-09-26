@@ -11,3 +11,8 @@ licence/keypair.json
 
 # npm pack output — a build artefact, never a committed file.
 *.tgz
+
+# clasp writes the real scriptId here; it is account-specific local config.
+# The committed template is sheets-addon/.clasp.json.example
+sheets-addon/.clasp.json
+.clasprc.json

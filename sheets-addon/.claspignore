@@ -1,0 +1,9 @@
+# clasp pushes everything under rootDir unless listed here. Only three files
+# belong in the Apps Script project: the manifest, the server code, and the
+# generated sidebar. Everything else is build tooling or documentation, and
+# pushing it would put the bundler source and the listing copy into a project
+# that goes to Google for OAuth review.
+**/**
+!appsscript.json
+!Code.gs
+!Sidebar.html

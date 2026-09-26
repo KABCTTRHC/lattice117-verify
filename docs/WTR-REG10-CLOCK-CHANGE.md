@@ -24,10 +24,11 @@ So: does reg. 10 want eleven hours of clock face, or eleven hours of rest?
 
 ## What the provision says
 
-Regulation 10(1) of the Working Time Regulations 1998:
+Regulation 10(1) of the Working Time Regulations 1998, verbatim:
 
-> An adult worker is entitled to a rest period of not less than eleven
-> consecutive hours in each 24-hour period during which he works for his
+> **Daily rest**
+> **10.**—(1) An adult worker is entitled to a rest period of not less than
+> eleven consecutive hours in each 24-hour period during which he works for his
 > employer.
 
 Source: [legislation.gov.uk, WTR 1998 reg. 10](https://www.legislation.gov.uk/uksi/1998/1833/regulation/10).
@@ -139,15 +140,19 @@ Recommended shape, for when it is worth doing:
 
 ## Limits of this note
 
-- `legislation.gov.uk`, `eur-lex.europa.eu` and `en.wikipedia.org` are all
-  blocked by this container's network egress proxy. Reg. 10(1) is quoted from
-  search results that cite legislation.gov.uk rather than from the page itself.
-  **Verify the quotation against the primary source before relying on it.**
+- Reg. 10(1) above is now **verbatim from legislation.gov.uk**, supplied by the
+  author after this note was first drafted from search results. The reasoning it
+  supports is unchanged; the text is no longer second-hand.
+- `eur-lex.europa.eu` and `en.wikipedia.org` remain blocked by this container's
+  egress proxy, so **Article 3 of Directive 2003/88/EC is still cited
+  second-hand**, as are the tachograph sources. Check those before relying on
+  them.
 - No case law search was performed and none of these sources is a judgment. If
   a tribunal has considered a clock change and reg. 10, this note does not know
   about it.
 - Reg. 10 has exceptions that are not analysed here at all: reg. 21 (special
-  cases), reg. 22 (shift workers), reg. 23 (collective agreements), and the
-  compensatory rest in reg. 24. A shift-worker exception could make the whole
-  question moot for some employers.
+  cases), reg. 22(1)(a) (shift workers), reg. 23 (collective agreements), and the
+  compensatory rest in reg. 24 — all now covered in
+  `docs/WTR-EXCEPTIONS-REG21-24.md`, which concludes they narrow the question
+  rather than moot it.
 - Northern Ireland has its own regulations.

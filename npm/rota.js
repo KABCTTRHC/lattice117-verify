@@ -75,7 +75,7 @@ export const RULES_NOTE =
   'Indicative mathematical check against configured rest and break rules ' +
   '(11h inter-shift rest, 20m break over 6h) — not legal advice.';
 
-/* Reg. 22(a) disapplies the 11-hour entitlement outright when a shift worker
+/* Reg. 22(1)(a) disapplies the 11-hour entitlement outright when a shift worker
    changes shift, and reg. 23(a) lets an agreement modify it — see
    docs/WTR-EXCEPTIONS-REG21-24.md. A flagged breach may therefore be lawful,
    and the moment a user reads one flagged is exactly when they need to know

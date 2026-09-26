@@ -32,11 +32,35 @@ given as agriculture, tourism and postal services. Guidance on the surge limb
 gives harvest and lambing as examples and notes it cannot be used routinely.
 Source: [legislation.gov.uk, reg. 21](https://www.legislation.gov.uk/uksi/1998/1833/regulation/21).
 
-**Reg. 22 — shift workers.** The one that bites hardest here:
+**Reg. 22(1)(a) — shift workers.** The one that bites hardest here. Verbatim:
 
-> regulation 10(1) does not apply in relation to a shift worker when he changes
-> shift and cannot take a daily rest period between the end of one shift and the
-> start of the next one
+> **Shift workers**
+> **22.**—(1) Subject to regulation 24—
+> (a) regulation 10(1) does not apply in relation to a shift worker when he
+> changes shift and cannot take a daily rest period between the end of one shift
+> and the start of the next one;
+
+Two things in that text that a paraphrase loses.
+
+**"Subject to regulation 24."** The disapplication is expressly conditional. Even
+where reg. 22(1)(a) removes the 11-hour entitlement, reg. 24 still obliges the
+employer to allow an equivalent period of compensatory rest wherever possible.
+It is a redirection of the duty, not a hole in it.
+
+**The definitions in reg. 22(2)**, which narrow who reg. 22(1)(a) reaches:
+
+> (2) For the purposes of this regulation—
+> "shift worker" means any worker whose work schedule is part of shift work; and
+> "shift work" means any method of organizing work in shifts whereby workers
+> succeed each other at the same workstations according to a certain pattern,
+> including a rotating pattern, and which may be continuous or discontinuous,
+> entailing the need for workers to work at different times over a given period
+> of days or weeks.
+
+Note "succeed each other at the same workstations". A rota in which staff simply
+work varying hours, without succeeding one another at a workstation, may not be
+*shift work* at all — in which case reg. 22(1)(a) never engages. That is a
+question of fact about the workplace, and it is not in the spreadsheet either.
 
 Source: [legislation.gov.uk, reg. 22](https://www.legislation.gov.uk/uksi/1998/1833/regulation/22).
 
@@ -49,11 +73,17 @@ see also the [House of Commons Library research paper 98/82](https://researchbri
 **Reg. 24 — compensatory rest.** Where reg. 21, 22 or 23(a) excludes a
 provision and the worker is required to work through what would have been rest:
 
-> (a) his employer shall wherever possible allow him to take an equivalent
-> period of compensatory rest, and (b) in exceptional cases in which it is not
-> possible, for objective reasons, to grant such a period of rest, his employer
-> shall afford him such protection as may be appropriate in order to safeguard
-> the worker's health and safety.
+> **Compensatory rest**
+> **24.** Where the application of any provision of these Regulations is excluded
+> by regulation 21 or 22, or is modified or excluded by means of a collective
+> agreement or a workforce agreement under regulation 23(a), and a worker is
+> accordingly required by his employer to work during a period which would
+> otherwise be a rest period or rest break—
+> (a) his employer shall wherever possible allow him to take an equivalent period
+> of compensatory rest, and
+> (b) in exceptional cases in which it is not possible, for objective reasons, to
+> grant such a period of rest, his employer shall afford him such protection as
+> may be appropriate in order to safeguard the worker's health and safety.
 
 Source: [legislation.gov.uk, reg. 24](https://www.legislation.gov.uk/uksi/1998/1833/regulation/24).
 
@@ -64,11 +94,13 @@ compensatory rest requirement — regs. 21 and 22 do.
 
 **No. It narrows it; it does not remove it.** [REASONING]
 
-Reg. 22(a) is conditional on two things at once: the worker **changes shift**,
-*and* cannot take a daily rest period between the old shift and the new one. A
-spring-forward night in a steady rota — same shift pattern either side, just an
-hour of clock removed from the middle — is not a shift change, so reg. 22(a)
-does not reach it. The false negative survives.
+Reg. 22(1)(a) is conditional on three things now that the full text is in hand:
+the worker is a **shift worker** as reg. 22(2) defines one, they **change
+shift**, *and* they cannot take a daily rest period between the old shift and the
+new one. A spring-forward night in a steady rota — same pattern either side, just
+an hour of clock removed from the middle — is not a shift change, so
+reg. 22(1)(a) does not reach it. The false negative survives, and the reg. 22(2)
+definition narrows the exception further rather than widening it.
 
 Reg. 23(a) could remove it, but only where an agreement actually exists and
 actually modifies reg. 10(1). That is a fact about the employer, not about the
@@ -80,7 +112,7 @@ So the two findings are independent. Neither excuses the other.
 
 **1. The scope caveat now names shift changes. [DONE]** The static notice on all
 surfaces previously listed opt-outs, young workers, compensatory rest and
-collective agreements. Reg. 22(a) is the single most likely reason a flagged
+collective agreements. Reg. 22(1)(a) is the single most likely reason a flagged
 breach is lawful — a rota tool flags shift changeovers constantly — so it is now
 named explicitly. Pinned by test across every surface that carries the notice.
 
@@ -119,10 +151,14 @@ credible, not more.
 
 ## Limits of this note
 
-- `legislation.gov.uk` is blocked by this container's egress proxy. Every
-  quotation here is from search results citing it, not from the page. **Verify
-  reg. 22(a) and reg. 24 against the primary source before relying on them.**
-  Reg. 21's list is paraphrased, not quoted — read the provision itself.
+- Reg. 22(1) and (2) and reg. 24 are now **verbatim from legislation.gov.uk**,
+  supplied by the author after this note was first drafted from search results.
+  The citation was corrected at the same time: the provision is **reg. 22(1)(a)**,
+  not reg. 22(a) — reg. 22 divides into substantive exclusions in paragraph (1)
+  and definitions in paragraph (2), and tribunals commonly expect the reg. 22(2)
+  definitions cited alongside.
+- **Reg. 21's list here is still a paraphrase, not a quotation.** Read the
+  provision itself before relying on any limb of it.
 - Reg. 23 also permits a *relevant agreement* to vary some provisions, and the
   interaction between collective, workforce and relevant agreements is not
   analysed here.
