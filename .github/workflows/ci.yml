@@ -138,6 +138,19 @@ jobs:
       # Boundary cases decide whether a lawful rota gets flagged. A false
       # positive at exactly 11 hours sends someone to rewrite a compliant
       # roster; a false negative tells them an unlawful one is fine.
+      # The paper's headline claim about the evaluation path. It held when
+      # checked by hand but nothing enforced it, which is how a claim becomes
+      # false quietly. Floats ARE allowed at the I/O boundary — to_q16/from_q16
+      # in the CLI, Math.round(Number(v) * 65536) in JS — and that boundary is
+      # what the 36,003-value BigInt sweep exists to check. They are not allowed
+      # where the verdict is decided.
+      - name: No floating point in the evaluation path
+        run: |
+          if grep -nE '\bf(32|64)\b' \
+               crates/lattice117-verify/src/*.rs crates/lattice117-wasm/src/*.rs; then
+            echo "::error::f32/f64 found in the evaluation path"; exit 1
+          fi
+          echo "evaluation path is integer-only"
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
       - name: Free-tier depth caps

@@ -1,5 +1,11 @@
 # Outline — *Reproducible Verdicts: Cross-Platform Determinism in Schedule Verification*
 
+> **Superseded as the working document.** The full draft is now at
+> [`WHITEPAPER-determinism.md`](WHITEPAPER-determinism.md). This outline is kept
+> because it records *why* each section exists and which claims were marked
+> unmeasured before they were measured — useful when revising, useless as the
+> thing to publish. Edit the draft, not this.
+
 **Status: OUTLINE. Kurtis Brierley to complete and publish.**
 Everything marked **[EVIDENCE]** is already measured and cited from the
 repository. Everything marked **[TO CAPTURE]** is not yet measured — do not
