@@ -35,7 +35,7 @@
   <ProviderName>Brierley Sovereign Group Ltd</ProviderName>
   <DefaultLocale>en-GB</DefaultLocale>
   <DisplayName DefaultValue="Lattice117 Schedule Check"/>
-  <Description DefaultValue="Checks whether the rounds in your sheet can actually be run against their own time windows. Names the stop that breaks, when it arrives, when the window shuts and by how much. Runs entirely inside Excel - your schedule is never uploaded."/>
+  <Description DefaultValue="Checks whether your rounds can be run against their own time windows, and whether your rota meets 11h rest and 20m break thresholds. Names what breaks and by how much. Runs entirely inside Excel - nothing is uploaded."/>
   <IconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/assets/icon-80.png"/>
   <SupportUrl DefaultValue="https://kabcttrhc.github.io/lattice117-verify/excel-addin/support.html"/>

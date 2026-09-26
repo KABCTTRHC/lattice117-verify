@@ -256,6 +256,27 @@
   }
   .ribbon.pro{color:var(--indigo);background:color-mix(in srgb,var(--indigo) 15%,transparent);
               border-color:color-mix(in srgb,var(--indigo) 42%,transparent)}
+  .modepill{
+    display:inline-flex;align-items:center;gap:5px;margin:0 0 14px;padding:5px;
+    background:var(--glass-2);border:1px solid var(--line);border-radius:999px;
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    box-shadow:var(--rim),var(--lift);
+  }
+  .modepill .ml{
+    font:700 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);padding:0 8px 0 10px;
+  }
+  .modepill button{
+    margin:0;padding:8px 15px;border-radius:999px;font:600 13px var(--sans);
+    background:transparent;border:1px solid transparent;color:var(--ink-dim);box-shadow:none;
+  }
+  .modepill button.on{
+    color:#06251a;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--ok) 95%,#fff),var(--ok));
+    border-color:color-mix(in srgb,var(--ok) 60%,transparent);
+    box-shadow:var(--rim),0 6px 18px -9px color-mix(in srgb,var(--ok) 90%,transparent);
+  }
+  .modepill button:not(.on):hover{color:var(--ink);background:rgba(255,255,255,.05)}
   .lock{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
   td.masked{-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
   .drop{background:rgba(8,11,18,.38);border:1px dashed var(--line-2)}
@@ -270,14 +291,20 @@
 
 <p class="vp">Deterministic Route &amp; Staff Rota Verification —
   <em>100% Client-Side. Zero Data Uploaded.</em></p>
-<h1>Fleet schedule audit</h1>
-<p class="sub">How many of today's planned rounds are actually achievable? Every check runs in this browser — your schedule is never uploaded.</p>
+<h1 id="pageTitle">Fleet schedule audit</h1>
+<p class="sub" id="pageSub">How many of today's planned rounds are actually achievable? Every check runs in this browser — your schedule is never uploaded.</p>
 <div class="badges">
   <span class="badge live" id="engineBadge">engine: loading…</span>
   <span class="badge">Q16.16 fixed point</span>
   <span class="badge">no server · no upload · works offline</span>
   <span class="badge"><a href="index.html" style="text-decoration:none;color:inherit">single-round view →</a></span>
   <span class="badge" id="tierBadge">tier: …</span>
+</div>
+
+<div class="modepill" role="group" aria-label="Verification mode">
+  <span class="ml">Mode</span>
+  <button id="pillFleet" class="on" type="button">Fleet Routes</button>
+  <button id="pillRota" type="button">UK Staff Rotas</button>
 </div>
 
 <div class="proof">
@@ -298,7 +325,7 @@
       <h3>Free</h3>
       <div class="price">£0</div>
       <div class="per">no card, no account</div>
-      <ul>
+      <ul id="planFree">
         <li class="yes">One round per audit</li>
         <li class="yes">Names the stop, arrival, window and deficit</li>
         <li class="yes">Runs entirely on your machine</li>
@@ -312,7 +339,7 @@
       <h3>Standard</h3>
       <div class="price">£29</div>
       <div class="per">per month</div>
-      <ul>
+      <ul id="planStd">
         <li class="yes">Unlimited rounds, whole fleets</li>
         <li class="yes">CSV route sheets and rota presets</li>
         <li class="yes">Runs entirely on your machine</li>
@@ -326,7 +353,7 @@
       <h3>Pro</h3>
       <div class="price">£99</div>
       <div class="per">per month</div>
-      <ul>
+      <ul id="planPro">
         <li class="yes">Everything in Standard</li>
         <li class="yes"><b>Digest-sealed verdict certificate</b></li>
         <li class="yes">Reproducible SHA-256 anyone can re-check</li>
@@ -718,6 +745,17 @@ const ROTA_FIELDS=[
 let MODE='route';
 const activeFields=()=>MODE==='rota'?ROTA_FIELDS:FIELDS;
 
+/* Accepts ?mode=rota and #rota. Both exist because a link pasted into a
+   WhatsApp group survives the hash more reliably than the query string, and
+   a link in an email survives the query string more reliably than the hash. */
+function deepLinkMode(){
+  try{
+    const q=new URLSearchParams(location.search).get('mode');
+    const h=location.hash.replace(/^#/,'');
+    return (q==='rota'||h==='rota') ? 'rota' : 'route';
+  }catch{ return 'route'; }
+}
+
 function guessMapping(headers){
   const FIELDS=activeFields();
   const pairs=[];
@@ -940,10 +978,51 @@ async function go(fn){
 }
 
 /* ---------------------------- wiring ------------------------------------ */
-document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active');
-  const tab=t.dataset.tab;
+
+/* The page sells two different products to two different buyers. A depot
+   manager and a care-home rota planner should each land on a page that is
+   about them, so ?mode=rota reframes the heading, the subtitle and the plan
+   bullets rather than showing vans to someone counting night shifts. */
+const FRAMING={
+  route:{
+    h1:'Fleet schedule audit',
+    sub:"How many of today's planned rounds are actually achievable? Every check runs in this browser — your schedule is never uploaded.",
+    free:['One round per audit',
+          'Names the stop, arrival, window and deficit',
+          'Runs entirely on your machine'],
+    std :['Unlimited rounds, whole fleets',
+          'CSV route sheets and rota presets',
+          'Runs entirely on your machine'],
+  },
+  rota:{
+    h1:'UK staff rota &amp; rest window audit',
+    sub:'Which shifts breach the 11-hour rest or 20-minute break thresholds? Every check runs in this browser — staff data is never uploaded.',
+    free:['One staff member (up to 4 shifts) per audit',
+          'Names the staff member, shift pair, rest achieved and shortfall',
+          'Runs entirely on your machine'],
+    std :['Unlimited staff, full weekly and monthly rotas',
+          'CSV rota exports and route sheets',
+          'Runs entirely on your machine'],
+  },
+};
+
+function applyFraming(mode){
+  const f=FRAMING[mode]||FRAMING.route;
+  $('pageTitle').innerHTML=f.h1;
+  $('pageSub').textContent=f.sub;
+  const li=(t,cls='yes')=>`<li class="${cls}">${t}</li>`;
+  $('planFree').innerHTML=f.free.map(t=>li(t)).join('')+li('Verdict certificate','no');
+  $('planStd').innerHTML =f.std .map(t=>li(t)).join('')+li('Verdict certificate','no');
+  $('pillFleet').classList.toggle('on', mode!=='rota');
+  $('pillRota').classList.toggle('on', mode==='rota');
+  document.title = mode==='rota'
+    ? 'UK Staff Rota & Rest Window Audit' : 'Fleet Schedule Audit';
+}
+
+/* One place that changes tabs, so the pill, the tabs, the mapper state and
+   the framing can never disagree. */
+function selectTab(tab){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===tab));
   $('tab-csv').style.display = tab==='csv' ? '' : 'none';
   $('tab-rota').style.display= tab==='rota'? '' : 'none';
   $('tab-json').style.display= tab==='json'? '' : 'none';
@@ -951,7 +1030,12 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   MODE = tab==='rota' ? 'rota' : 'route';
   $('mapper').style.display='none';
   csvHeaders=[]; csvRows=[];
-}));
+  applyFraming(MODE);
+}
+document.querySelectorAll('.tab').forEach(t=>
+  t.addEventListener('click',()=>selectTab(t.dataset.tab)));
+$('pillFleet').addEventListener('click',()=>selectTab('csv'));
+$('pillRota') .addEventListener('click',()=>selectTab('rota'));
 
 /* ---- rota mode ---------------------------------------------------------- */
 $('pickRota').addEventListener('click',()=>$('fileRota').click());
@@ -1193,6 +1277,15 @@ loadWasm().then(()=>{
   // buttons enable together so the page has one ready state, not two.
   ['run','loadEx','pickCsv','loadExCsv','pickRota','loadExRota']
     .forEach(id=>$(id).disabled=false);
+  // ?mode=rota (or #rota) lands a rota buyer on a rota page with the example
+  // already checked, so the first thing above the fold is a shift breach
+  // rather than a delivery van. Runs after the engine is ready because the
+  // example has to actually evaluate.
+  if(deepLinkMode()==='rota'){
+    selectTab('rota');
+    $('loadExRota').click();
+    setTimeout(()=>{ if(!$('runCsv').disabled) $('runCsv').click(); }, 260);
+  }
 }).catch(e=>{
   $('engineBadge').textContent='engine: failed to load';
   $('err').textContent='Could not load the WebAssembly module: '+e.message+

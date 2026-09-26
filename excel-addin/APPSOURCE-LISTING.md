@@ -10,25 +10,38 @@ does today.
 
 **Name** (30 max) — `Lattice117 Schedule Check`
 
-**Short description** (100 max, 98 used)
-> Find out which of your rounds can actually be run. Nothing leaves your workbook.
+**Short description** (100 max, 99 used)
+> Check routes and staff rotas against their own limits. Nothing leaves your workbook.
 
-**Description** (matches `manifest.xml`, 237 chars)
-> Checks whether the rounds in your sheet can actually be run against their own
-> time windows. Names the stop that breaks, when it arrives, when the window
-> shuts and by how much. Runs entirely inside Excel - your schedule is never
-> uploaded.
+**Description** (matches `manifest.xml`, 235 chars)
+> Checks whether your rounds can be run against their own time windows, and
+> whether your rota meets 11h rest and 20m break thresholds. Names what breaks
+> and by how much. Runs entirely inside Excel - nothing is uploaded.
 
 **Long description**
 
-> It is easy to find out whether a planner produced a route. It is surprisingly
-> hard to find out whether the route it produced is possible.
+> It is easy to find out whether a planner produced a route, or whether a rota
+> covers every shift. It is surprisingly hard to find out whether either one is
+> actually possible.
 >
-> Schedule Check answers that. Select your rows, including the header, and it
-> reports what proportion of your rounds are actually achievable against their
-> own time windows. Where one is not, it names the stop, the arrival time, when
-> the window shuts and by how much it is missed — and colours the failing rows
-> in the sheet, where you are already looking.
+> Schedule Check answers both, in two modes.
+>
+> **Fleet routes.** Select your rows, including the header, and it reports what
+> proportion of your rounds are actually achievable against their own time
+> windows. Where one is not, it names the stop, the arrival time, when the
+> window shuts and by how much it is missed.
+>
+> **UK staff rotas.** Point it at a shift roster and it checks the gap between
+> consecutive shifts for each person against an 11-hour rest threshold, and any
+> shift over six hours against a 20-minute break. It names the staff member,
+> the shift pair, the rest actually achieved and the exact shortfall. Night
+> shifts that run past midnight are handled correctly. This is an indicative
+> mathematical check against the thresholds you configure — it is not legal
+> advice, and it knows nothing of opt-outs, young workers or compensatory rest.
+>
+> Either way, the failing rows are coloured in the sheet, where you are already
+> looking, and times written as Excel time cells are read correctly rather than
+> as raw serial numbers.
 >
 > **Nothing leaves your workbook.** The engine is a 21 KB WebAssembly module
 > that computes inside Excel's own task-pane process. There is no upload, no
@@ -46,15 +59,17 @@ does today.
 > over the inputs and the verdict, so a third party can re-compute your result
 > and confirm they got the same one.
 >
-> **What it does not do.** It verifies time windows and travel times. It does
-> not build routes, predict traffic, or judge whether a schedule is good — only
-> whether it is possible. Vehicle capacity is not yet a hard constraint. The
-> rota rest check is an indicative mathematical check against the rest windows
-> you configure, and is not legal advice.
+> **What it does not do.** It verifies time windows, travel times and rest
+> thresholds. It does not build routes, generate rotas, predict traffic, or
+> judge whether a schedule is good — only whether it is possible. Vehicle
+> capacity is not yet a hard constraint. The rota check is arithmetic against
+> configured thresholds and is not a determination of compliance with the
+> Working Time Regulations or any other law.
 
-**Categories** — Productivity · Data analytics
-**Search terms** — schedule, route, rota, logistics, feasibility, shift planning,
-time windows, offline, verification
+**Categories** — Productivity · Data analytics · Human resources
+**Search terms** — schedule, route, rota, shift planning, working time,
+rest break, 11 hour rest, logistics, fleet, feasibility, time windows,
+care home rota, hospitality rota, offline, verification, audit
 **Products** — Excel (Windows, Mac, Web)
 
 **URLs**
@@ -71,9 +86,12 @@ time windows, offline, verification
 - **Test instructions and a test account.** There is no account, so say so, and
   supply a Pro licence key plus the sample sheet for the reviewer. Without a
   key the reviewer sees the free tier and may report the cap as a fault.
-- **Screenshots**, 1366×768. Three carry the story: a sheet with failing rows
-  coloured; the pane naming the stop, arrival, close and deficit; the licence
-  panel.
+- **Screenshots**, 1366×768. Five carry the story now that there are two
+  modes: a route sheet with failing rows coloured; the pane naming the stop,
+  arrival, close and deficit; a rota with breaching shifts coloured; the pane
+  naming the staff member, rest achieved and shortfall; the licence panel.
+  Reviewers judge the listing largely on these, and a rota screenshot is what
+  a care-home or hospitality buyer searches for.
 - **Video** — optional, and the offline demonstration is the one worth filming.
 
 ## 3. Before you submit
@@ -82,7 +100,8 @@ time windows, offline, verification
 - [ ] Run Microsoft's own validator from your machine — this container cannot
       reach the hosted service: `npx office-addin-manifest validate manifest.xml`
 - [ ] `privacy.html` and `support.html` load over HTTPS from Pages
-- [ ] Sideload and run once against a real sheet
+- [ ] Sideload and run once against a real route sheet AND a real rota
+- [ ] Confirm the rota mode reads Excel time cells (serial numbers), not just text
 - [ ] Reviewer key issued: `node licence/issue.mjs issue <reviewer> pro 6`
 
 ---
