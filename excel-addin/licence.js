@@ -18,8 +18,8 @@
 const PUBLIC_JWK = {
   kty: 'EC',
   crv: 'P-256',
-  x: 'bMDjl_8U9_4dqVifNUhDPSKGdOo1bZyA4_e_wevdyXI',
-  y: 's1axx-laaFeKaaplhhm8L2sWd3NsIA3ZHqbJ167SafA',
+  x: '7neoiJMM1zUx50EfbTyMx212w9c-_Fw0_beHtFo-jGc',
+  y: 'LRZJArtMaLgDAQGx__0lygl071cevKxOS_VDutvNXns',
 };
 
 const ALG = { name: 'ECDSA', namedCurve: 'P-256' };
