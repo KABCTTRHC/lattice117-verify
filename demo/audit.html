@@ -80,6 +80,28 @@
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   button.primary:hover{filter:brightness(1.08)}
   button:disabled{opacity:.5;cursor:not-allowed}
+  /* Story mode timeline. One rail, one dot per tier, each step revealed after
+     the one before it so the page reads as a progression rather than a table. */
+  .tl{list-style:none;margin:18px 0 0;padding:0 0 0 26px;border-left:2px solid var(--line);position:relative}
+  .tl li{position:relative;padding:0 0 22px 6px;opacity:0;transform:translateY(6px);
+         transition:opacity .45s ease,transform .45s ease}
+  .tl li.in{opacity:1;transform:none}
+  .tl li::before{content:'';position:absolute;left:-34px;top:4px;width:10px;height:10px;border-radius:50%;
+                 background:var(--panel);border:2px solid var(--line)}
+  .tl li.done::before{background:var(--ok);border-color:var(--ok)}
+  .tl li.busy::before{background:var(--warn);border-color:var(--warn)}
+  .tl li.locked::before{background:var(--panel);border-color:var(--ink-faint)}
+  .tl .step{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .tl .step h4{margin:0;font-size:14px}
+  .tl .step .tag{font:11px var(--mono);color:var(--ink-faint);border:1px solid var(--line);
+                 border-radius:999px;padding:1px 8px}
+  .tl .what{font-size:12.5px;color:var(--ink-dim);margin:5px 0 0;line-height:1.55}
+  .tl .got{margin:8px 0 0;padding:9px 11px;border-left:3px solid var(--line);background:var(--panel-2);
+           border-radius:0 7px 7px 0;font-size:12.5px;line-height:1.6}
+  .tl .got.ok{border-left-color:var(--ok)}
+  .tl .got.bad{border-left-color:var(--bad)}
+  .tl .got .d{font:10.5px var(--mono);color:var(--ink-faint);word-break:break-all;margin-top:6px}
+  .tl .got b{color:var(--ink)}
   textarea{width:100%;min-height:120px;background:var(--panel-2);color:var(--ink);font:12px var(--mono);border:1px solid var(--line);border-radius:7px;padding:10px;resize:vertical}
   .drop{border:1.5px dashed var(--line);border-radius:9px;padding:22px;text-align:center;color:var(--ink-dim);font-size:13.5px;margin-bottom:12px}
   .drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
@@ -94,7 +116,10 @@
   .lock svg{flex:none;margin-top:2px;color:var(--warn)}
   td.masked{text-align:center;font-size:12.5px;color:var(--ink-dim);
             background:color-mix(in srgb,var(--warn) 7%,transparent);font-style:italic}
-  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:6px}
+  /* Five tiers. minmax(215px) fitted four across and stranded Enterprise Matrix
+     alone on a second row, which read as an afterthought rather than the top of
+     the range. 178px fits all five on a desktop and still wraps sensibly below. */
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin-top:6px}
   .tier{border:1px solid var(--line);border-radius:9px;padding:15px;background:var(--panel-2);
         display:flex;flex-direction:column}
   .tier.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
@@ -316,6 +341,22 @@
     <li class="arw">→</li>
     <li><b>3.</b> Press <b>F5</b> — it still works</li>
   </ol>
+</div>
+
+<div class="panel" id="storyPanel">
+  <h2>Story mode &mdash; every tier, on the same engine</h2>
+  <p class="note">Each step below runs for real, here, in this browser, on the
+  example sheets bundled with this page. Nothing is a screenshot and nothing is
+  a mock-up: the numbers and the digests are produced by the same 21&nbsp;KB
+  WebAssembly engine your own sheet goes through, and you can reproduce every
+  one of them from the files in the repository. Your licence is not touched
+  &mdash; this shows what each tier does, it does not grant it.</p>
+  <div class="btnrow">
+    <button class="primary" id="storyRun">Run every tier</button>
+    <button id="storyReset">Reset</button>
+  </div>
+  <ol class="tl" id="storyLine"></ol>
+  <p class="note" id="storyEnd"></p>
 </div>
 
 <div class="panel" id="pricingPanel">
@@ -712,15 +753,21 @@ function put(arr){
    is what lets a plain route sheet work, and it sidesteps the case where the
    same stop appears on two rounds with different travel times into it.
 --------------------------------------------------------------------------- */
-function runRoutes(spec){
+/* `cap` exists for Story mode, which demonstrates each tier's depth on the
+   BUNDLED FIXTURES and needs to show what Standard sees as well as what Free
+   sees. It defaults to the licence's own cap, so every caller that matters is
+   unchanged, and Story mode never passes a cap for a customer's own sheet — the
+   entitlement is still the only thing that decides what their data gets. */
+function runRoutes(spec, cap){
   if(!wasm) throw new Error('the verification engine is still loading — try again in a moment');
+  const limit = cap ?? entitlement.maxRounds;
   const results=[];
   let capped=false;
   for(const r of spec.routes){
     // Free tier checks one round. The cap is applied here, at the point of
     // evaluation, rather than by hiding rows in the UI - a limit that only
     // exists in the presentation layer is not a limit.
-    if(results.length >= entitlement.maxRounds){ capped=true; break; }
+    if(results.length >= limit){ capped=true; break; }
     const k=r.stops.length;
     if(k<2) throw new Error(`round "${r.vehicle}" has ${k} stop(s); at least 2 are needed`);
     const dist=new Array(k*k).fill(0);
@@ -1609,6 +1656,245 @@ $('json').addEventListener('click',()=>{
 /* Marks the plan you are actually on, and points the two buttons at Stripe.
    An unreplaced placeholder is shown as such: a dead link in front of someone
    holding a card is worse than an honest "not live yet". */
+/* ------------------------------ Story mode ------------------------------- */
+/* Five tiers, one engine, on the sheets bundled with this page.
+//
+   Why it runs rather than describes: a pricing table that says "repairs a
+   failing round" is a claim, and a visitor has no way to tell it from every
+   other vendor's identical claim. A step that loads a real sheet, reports the
+   real breach, applies the real fix and prints two digests the visitor can
+   reproduce from the repository is evidence. It costs nothing to offer because
+   the engine is already in the page and the fixtures are already downloaded.
+
+   It does NOT touch the licence. Story mode runs only on the bundled fixtures,
+   never on the visitor's own upload, so demonstrating what Standard sees is not
+   a way to get an uncapped check on data we were not paid to check. That is why
+   runRoutes takes an explicit `cap`: Story mode passes one for our own files
+   and nothing else in the page ever does. */
+const STORY_FIXTURES = {};
+
+/** Fetches and caches a bundled fixture. Fetched once, reused by later steps. */
+async function storyFile(name){
+  if(!STORY_FIXTURES[name]){
+    const r = await fetch(name);
+    if(!r.ok) throw new Error(`could not load ${name} (${r.status})`);
+    STORY_FIXTURES[name] = await r.text();
+  }
+  return STORY_FIXTURES[name];
+}
+
+/* A fixed-header CSV reader for the bundled files only.
+   Deliberately separate from csvToSpec, which reads the mapper UI: Story mode
+   must not depend on which columns a visitor happens to have mapped, or on
+   whether they have uploaded anything at all. */
+async function storySpec(name){
+  const lines = (await storyFile(name)).trim().split(/\r?\n/);
+  const head = lines[0].split(',').map(h=>h.trim());
+  const ix = k => head.indexOf(k);
+  const byVehicle = new Map();
+  for(const line of lines.slice(1)){
+    const c = line.split(',');
+    const v = c[ix('vehicle')].trim();
+    if(!byVehicle.has(v)) byVehicle.set(v, []);
+    byVehicle.get(v).push({
+      id: c[ix('stop')].trim(),
+      ready: c[ix('window_open')], due: c[ix('window_close')],
+      travel: c[ix('travel_mins_from_previous')],
+      seq: Number(c[ix('seq')]),
+      depart: ix('depart')>=0 ? c[ix('depart')] : undefined,
+    });
+  }
+  const routes = [...byVehicle.entries()].map(([vehicle,stops])=>{
+    stops.sort((a,b)=>a.seq-b.seq);
+    stops[0].travel = 0;
+    const depart = stops.find(x=>x.depart!==undefined&&x.depart!=='')?.depart ?? 0;
+    return {vehicle, stops, depart};
+  });
+  return {unit:'minutes', routes};
+}
+
+const FLEET_CSV = 'example-route-sheet.csv';
+const TIMED_CSV = 'example-route-sheet-timed.csv';
+const NOTT_CSV  = 'example-fleet-nottingham.csv';
+const NOTT_MTX  = 'example-fleet-nottingham-matrix.txt';
+
+const STORY = [
+  {
+    tier:'Free', price:'£0', tag:'no card, no account',
+    what:'Checks <b>one round</b> of your sheet and names exactly what breaks on '
+       + 'it. Everything runs on your machine. No digest, so there is nothing to '
+       + 'hand a client.',
+    async run(){
+      const spec = await storySpec(FLEET_CSV);
+      const rep = runRoutes(spec, 1);          // the Free cap, applied for real
+      const r = rep.results[0];
+      return {kind: r.status===0?'ok':'bad', html:
+        `Checked <b>${rep.results.length} of ${spec.routes.length}</b> rounds in `
+        + `<code>${FLEET_CSV}</code>. <b>${r.vehicle}</b> — `
+        + (r.status===0 ? 'holds.' : `<b>${r.node}</b> arrives ${fmtQ(r.arrival)}, `
+            + `window shuts ${fmtQ(r.close)}, late by <b>${fmtQ(r.deficit)}</b>.`)
+        + `<br>The other ${spec.routes.length-1} rounds were not evaluated at all. `
+        + 'The cap is applied at the engine, not by hiding rows afterwards, so '
+        + 'whether any of them hold is not something this tier can tell you '
+        + '\u2014 which is the whole problem with checking a fleet one round at '
+        + 'a time. The next step checks all eight.'};
+    },
+  },
+  {
+    tier:'Standard', price:'£29', tag:'per month',
+    what:'The whole fleet, every round, with the full breach list. Still no '
+       + 'certificate, so still nothing sealed.',
+    async run(){
+      const spec = await storySpec(FLEET_CSV);
+      const rep = runRoutes(spec, Infinity);
+      const bad = rep.results.filter(r=>r.status!==0);
+      return {kind: bad.length?'bad':'ok', html:
+        `<b>${rep.feasible} of ${rep.checked}</b> rounds achievable — `
+        + `${Math.round(100*rep.feasible/rep.checked)}%. The `
+        + `${bad.length} that fail, named: `
+        + bad.map(r=>`<b>${r.vehicle}</b> at ${r.node} (late ${fmtQ(r.deficit)})`).join(', ')
+        + `.<br>Free would have shown you one of these.`};
+    },
+  },
+  {
+    tier:'Pro', price:'£99', tag:'per month',
+    what:'Everything in Standard, plus the <b>verdict digest</b> — a '
+       + 'reproducible SHA-256 over the Q16.16 integers that were evaluated and '
+       + 'the verdict reached. It is not a signature. It is proof that two '
+       + 'parties checked the same schedule and got the same answer.',
+    async run(){
+      const spec = await storySpec(FLEET_CSV);
+      const rep = runRoutes(spec, Infinity);
+      const d = await digestOf(rep);
+      return {kind:'ok', html:
+        'Same verdict as Standard, now sealed. This exact string is cited in '
+        + 'the white paper and recorded in nine independent device captures '
+        + '\u2014 three phones, three runs each.'
+        + `<div class="d">${d}</div>`
+        + `Re-run this page on any machine and you get it back, character for character.`};
+    },
+  },
+  {
+    tier:'Enterprise Repair', price:'£249', tag:'per month · Tier 4',
+    what:'Stops flagging and starts fixing. On a fixed stop order the only lever '
+       + 'is when the vehicle leaves, and it is a real one — a round that sets '
+       + 'off too late for windows that open mid-morning is the commonest '
+       + 'repairable failure there is. Closed form, no search. Where re-timing '
+       + 'cannot help it says so and gives the exact shortfall instead of a guess.',
+    async run(){
+      const spec = await storySpec(TIMED_CSV);
+      const before = await digestOf(runRoutes(spec, Infinity));
+      const rounds = roundsFromRows(spec.routes.map(r=>({
+        id:r.vehicle, depart:r.depart ?? 0,
+        stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
+      })));
+      const fix = repairFixedSequence(rounds);
+      const shift = new Map(fix.changes.map(c=>[c.roundId, qToUnits(c.toQ)]));
+      const fixedSpec = {...spec, routes: spec.routes.map(r=>
+        shift.has(r.vehicle) ? {...r, depart:shift.get(r.vehicle)} : r)};
+      const after = await digestOf(runRoutes(fixedSpec, Infinity));
+      return {kind: fix.fullyRepaired?'ok':'bad', html:
+        `<b>${fix.feasibleBefore} of ${fix.roundsTotal}</b> rounds held before, `
+        + `<b>${fix.feasibleAfter} of ${fix.roundsTotal}</b> after. `
+        + fix.changes.map(c=>`<b>${c.roundId}</b> now leaves `
+            + `${qToUnits(c.fromQ)} → <b>${qToUnits(c.toQ)}</b>`).join('; ')
+        + (fix.residual.length
+            ? '.<br>And the honest part: ' + fix.residual.map(r=>
+                `<b>${r.roundId}</b> cannot be fixed by re-timing at all \u2014 `
+                + `${r.stopId} is short by <b>${qToUnits(r.deficitQ)}</b> at every `
+                + 'possible departure. That needs the stops re-ordered, which '
+                + 'needs a distance matrix.').join('')
+            : '.')
+        + `<div class="d">before ${before}<br>after&nbsp; ${after}</div>`};
+    },
+  },
+  {
+    tier:'Enterprise Matrix', price:'£499', tag:'per month · Tier 5',
+    what:'Re-orders the stops within a round against a distance matrix you '
+       + 'supply — the one thing a route sheet cannot express. Your vehicle '
+       + 'assignment is kept: it usually encodes driver knowledge no matrix has. '
+       + 'Up to eight interior stops every order is evaluated, so the answer is '
+       + '<b>the</b> optimum and there is no iteration budget, temperature or '
+       + 'seed to tune. Past eight it says "not searched" rather than guessing.',
+    async run(){
+      const spec = await storySpec(NOTT_CSV);
+      const {matrix, n, names} = parseMatrix(await storyFile(NOTT_MTX));
+      const before = await digestOf(runRoutes(spec, Infinity));
+      const rounds = matrixRounds(
+        spec.routes.map(r=>({id:r.vehicle, depart:r.depart ?? 0,
+          stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel}))})),
+        id=> names.has(id) ? names.get(id) : -1);
+      const fleet = resequenceFleet(rounds, matrix, n);
+      const newSpec = {...spec, routes: spec.routes.map((r,ri)=>{
+        const o = fleet.outcomes[ri];
+        if(!o || !o.changed) return r;
+        const src = rounds[ri];
+        return {...r, stops:o.best.map((pos,k)=>({...r.stops[pos],
+          travel: k===0 ? 0
+            : mToUnits(matrix[src.stops[o.best[k-1]].node*n + src.stops[pos].node])}))};
+      })};
+      const after = await digestOf(runRoutes(newSpec, Infinity));
+      const o = fleet.outcomes[0];
+      return {kind:'ok', html:
+        'A real Nottingham round, five suburbs, handed over in alphabetical '
+        + 'order \u2014 which is what you get when the stop list lives in a '
+        + 'spreadsheet sorted by name. It breaches.'
+        + `<br>Travel <b>${mToUnits(o.originalCostQ).toFixed(1)}</b> → `
+        + `<b>${mToUnits(o.bestCostQ).toFixed(1)}</b> minutes, `
+        + `<b>−${mToUnits(o.savingQ).toFixed(1)}</b> `
+        + `(${(Math.round(1000*o.savingQ/o.originalCostQ)/10).toFixed(1)}%), and `
+        + `<b>${fleet.feasibleBefore} of ${fleet.roundsTotal}</b> held before `
+        + `against <b>${fleet.feasibleAfter} of ${fleet.roundsTotal}</b> after.`
+        + `<br>New order: <b>${o.bestIds.join(' → ')}</b>`
+        + `<div class="d">before ${before}<br>after&nbsp; ${after}</div>`
+        + `The coordinates, the Haversine derivation and both digests are in `
+        + `<code>docs/FIXTURE-NOTTINGHAM.md</code>.`};
+    },
+  },
+];
+
+/** Q16.16 to the schedule's own unit, one decimal place, for Story mode. */
+const fmtQ = q => (q/Q).toFixed(1);
+
+function storyReset(){
+  $('storyLine').innerHTML = STORY.map((st,i)=>
+    `<li class="locked" id="st${i}"><div class="step"><h4>${st.tier}</h4>`
+    + `<span class="tag">${st.price} · ${st.tag}</span></div>`
+    + `<p class="what">${st.what}</p><div id="stOut${i}"></div></li>`).join('');
+  $('storyEnd').textContent = '';
+  requestAnimationFrame(()=>STORY.forEach((_,i)=>$('st'+i).classList.add('in')));
+}
+
+let storyRunning = false;
+async function storyRun(){
+  if(storyRunning) return;
+  storyRunning = true;
+  $('storyRun').disabled = true;
+  storyReset();
+  try{
+    for(let i=0;i<STORY.length;i++){
+      const li = $('st'+i);
+      li.className = 'in busy';
+      $('stOut'+i).innerHTML = '<div class="got">running…</div>';
+      // A frame's pause between steps, so the timeline reads as a progression
+      // rather than appearing all at once. The work itself is not delayed.
+      await new Promise(r=>setTimeout(r, 260));
+      const res = await STORY[i].run();
+      $('stOut'+i).innerHTML = `<div class="got ${res.kind}">${res.html}</div>`;
+      li.className = 'in done';
+    }
+    $('storyEnd').innerHTML = 'Every number above came from this page, just now. '
+      + 'The fixtures are in <code>demo/</code> and the tests that pin these exact '
+      + 'values are in <code>tests/</code> — <code>resequence.test.mjs</code> '
+      + 'asserts the last step’s two digests character for character.';
+  }catch(e){
+    $('storyEnd').innerHTML = `<span style="color:var(--bad)">Story mode stopped: ${e.message}</span>`;
+  }finally{
+    storyRunning = false;
+    $('storyRun').disabled = false;
+  }
+}
+
 function paintPlans(){
   const live = u => typeof u === 'string' && /^https:\/\//.test(u);
   const tier = entitlement.tier;
@@ -1644,6 +1930,9 @@ function paintPlans(){
   }
 }
 paintPlans();
+storyReset();
+$('storyRun').addEventListener('click', storyRun);
+$('storyReset').addEventListener('click', storyReset);
 
 $('applyLicence').addEventListener('click', async()=>{
   const k=$('licenceKey').value.trim();
