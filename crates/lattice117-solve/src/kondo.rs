@@ -63,8 +63,43 @@ fn fast_exp_negative(x: i32) -> i32 {
 
     (((Q16_ONE as i128) << 16) / denom.max(1)) as i32
 }
-pub const K_CLUSTERS: usize = 5; // 5x5=25 variables -> fits a 32-bit QUBO
-pub const MAX_NODES_PER_CLUSTER: usize = 32; // tropical DP chain limit
+/// Upper bound on clusters: `5 x 5 = 25` QUBO variables, inside a 32-bit word.
+pub const K_CLUSTERS: usize = 5;
+/// Tropical DP chain limit — a cluster may hold no more members than this.
+pub const MAX_NODES_PER_CLUSTER: usize = 32;
+
+/// How many clusters `n_nodes` should actually be split into.
+///
+/// This used to be `K_CLUSTERS`, flat, whatever `n_nodes` was — so nine nodes
+/// were cut into five clusters of about two, and the Kondo pipeline came back
+/// 83.9% above the proven optimum on the convex fixture (Fixture B). Clustering
+/// is a way of making a large instance tractable; applying it to a small one
+/// destroys the global structure and buys nothing.
+///
+/// The right count is therefore the FEWEST clusters that still respect the
+/// chain limit, capped by the QUBO width:
+///
+/// ```text
+/// k = clamp(ceil(n / MAX_NODES_PER_CLUSTER), 1, K_CLUSTERS)
+/// ```
+///
+/// Up to 32 nodes that is one cluster and no inter-cluster QUBO at all, which
+/// is the honest answer: there is nothing to decide between clusters when there
+/// is only one.
+///
+/// It is not on its own a fix. `solve_intra_cluster_chain` orders a cluster by
+/// distance to its centre and its own documentation says so — it is a filtered,
+/// pre-sorted order, not a re-optimised sequence. On points in convex position
+/// every node is equidistant from the centre, so that sort carries no
+/// information whatever the cluster count. The ordering has to come from
+/// somewhere, and `global`'s 2-opt pass is where it now comes from.
+pub fn kondo_cluster_count(n_nodes: usize) -> usize {
+    if n_nodes == 0 {
+        return 0;
+    }
+    let needed = n_nodes.div_ceil(MAX_NODES_PER_CLUSTER);
+    needed.clamp(1, K_CLUSTERS).min(n_nodes)
+}
 
 // ═══════════════════════════════════════════════════════
 // PHASE 1: KONDO CLUSTERING — O(N^2)
@@ -77,21 +112,21 @@ pub struct KondoCluster {
     pub resonance_centroid: i32, // Q16.16 — average lithic_resonance of members
 }
 
-/// Clusters `n_nodes` nodes into up to `K_CLUSTERS` groups via furthest-point
-/// seeding plus a Kondo-shielding-energy nearest-cluster assignment.
+/// Clusters `n_nodes` nodes via furthest-point seeding plus a
+/// Kondo-shielding-energy nearest-cluster assignment.
 ///
-/// `k_target` is `K_CLUSTERS` clamped to `n_nodes` (never more clusters than
-/// nodes) — the original sketch always seeded exactly `K_CLUSTERS` centers
-/// regardless of `n_nodes`; for `n_nodes < K_CLUSTERS` the seeding loop would
-/// exhaust every unclaimed node, leave `next_center` at its stale default
-/// (`0`), and push a duplicate center. Clamping avoids that instead of
-/// panicking or silently producing degenerate clusters.
+/// The count comes from [`kondo_cluster_count`], which scales it with
+/// `n_nodes` rather than always using `K_CLUSTERS`. The original sketch seeded
+/// exactly `K_CLUSTERS` centers regardless: for `n_nodes < K_CLUSTERS` the
+/// seeding loop would exhaust every unclaimed node, leave `next_center` at its
+/// stale default (`0`), and push a duplicate center; for a small-but-larger
+/// `n_nodes` it would shred the instance into clusters of two.
 pub fn kondo_cluster_nodes(
     distance_matrix: &[i32], // N x N Q16.16 — edge weights
     n_nodes: usize,
     critical_point_q16: i32, // Q16.16 — Kondo screening critical point
 ) -> Vec<KondoCluster> {
-    let k_target = K_CLUSTERS.min(n_nodes.max(1));
+    let k_target = kondo_cluster_count(n_nodes);
 
     // ── Furthest-point seeding: maximises inter-cluster separation ──
     let mut center_indices: Vec<usize> = Vec::with_capacity(k_target);
@@ -688,20 +723,59 @@ mod tests {
 
     #[test]
     fn kondo_energy_uses_correct_operator_precedence() {
-        // Regression test for the `<<`/`/` precedence bug: with dist=100 and
-        // shield_sq derived from a critical_point of ~0.858 (56229 in
-        // Q16.16), the fixed formula must produce a large positive Q16.16
-        // value (dist<<16 is huge relative to shield_sq), not the tiny value
-        // a `dist << (16 / shield_sq)` misparse would produce.
-        let n = 2;
-        let matrix = alloc::vec![0, 100 * Q16_ONE, 100 * Q16_ONE, 0];
+        // Regression test for the `<<`/`/` precedence bug: the original
+        // `(dist as i64) << 16 / shield_sq as i64` parsed as
+        // `dist << (16 / shield_sq)` — a shift by a tiny integer rather than a
+        // Q16.16 division — which made every node's energy nearly identical and
+        // the nearest-cluster assignment arbitrary.
+        //
+        // This used to assert on a two-node instance, where both nodes became
+        // centres and nothing was ever assigned, so it could only show that
+        // clustering completed. Now that the cluster count scales with n_nodes,
+        // two nodes are one cluster, and the test can do what it always meant
+        // to: put a node between two centres and check it joins the near one.
+        // That is the decision the misparse destroyed.
+        let n = MAX_NODES_PER_CLUSTER + 1; // 33 -> two clusters
+        let mut matrix = alloc::vec![0i32; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                // Nodes on a line at 0, 10, 20, ... so distances are checkable.
+                matrix[i * n + j] = (i as i32 - j as i32).abs() * 10 * Q16_ONE;
+            }
+        }
         let clusters = kondo_cluster_nodes(&matrix, n, Q16_858_MILLI);
-        // With n_nodes == k_target == 2, both nodes become centers, so this
-        // test's real value is just that clustering completes without the
-        // degenerate near-zero energy the precedence bug would have caused
-        // in the assignment loop on a larger instance — covered end-to-end
-        // by `full_pipeline_visits_every_node_exactly_once` below.
-        assert_eq!(clusters.len(), 2);
+        assert_eq!(
+            clusters.len(),
+            2,
+            "33 nodes exceed one chain, so two clusters"
+        );
+
+        // Every node is claimed exactly once.
+        let mut seen = alloc::vec![0u32; n];
+        for c in &clusters {
+            for &m in &c.members {
+                seen[m as usize] += 1;
+            }
+        }
+        assert!(
+            seen.iter().all(|&v| v == 1),
+            "every node in exactly one cluster"
+        );
+
+        // The real assertion: each node sits with the centre it is nearer to.
+        // Under the misparse this held only by accident, if at all.
+        for c in &clusters {
+            for &m in &c.members {
+                let own = matrix[m as usize * n + c.center_idx as usize];
+                for other in &clusters {
+                    let theirs = matrix[m as usize * n + other.center_idx as usize];
+                    assert!(
+                        own <= theirs,
+                        "node {m} is {own} from its own centre but {theirs} from another"
+                    );
+                }
+            }
+        }
     }
 
     /// Pins `fast_exp_negative` against the implementation it was ported from

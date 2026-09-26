@@ -443,10 +443,24 @@ fn real_geometry_does_not_reproduce_the_van_14_breach() {
 use lattice117_solve::global;
 use lattice117_solve::resequence::EXACT_LIMIT;
 
-/// The convex fixture: 9 nodes on a circle, read from the generated file.
-fn convex_matrix() -> (Vec<Q16>, usize) {
-    let text = std::fs::read_to_string(repo_root().join("tests/fixtures/convex-9.txt"))
-        .expect("convex fixture is missing — run node tools/fixture/convex.mjs");
+/// The heuristic path's gap on the 16-node convex ring, in tenths of a percent.
+///
+/// It is zero, and that is a theorem rather than luck: a tour that 2-opt cannot
+/// improve has no crossing edges, and on points in convex position the only
+/// crossing-free tour is the hull order. So the pass is provably optimal on
+/// this fixture family at any size.
+///
+/// The honest consequence, stated here because it limits what Fixture B can
+/// claim: this instance can no longer measure how far the heuristic is off in
+/// general, because convex position is precisely the case 2-opt solves. What it
+/// proves is that the 2-opt pass is real and works. Measuring the gap on a hard
+/// instance needs a hard instance, which is what `tools/benchmark/` is for.
+const HEURISTIC_GAP_TENTHS: i64 = 0;
+
+/// A convex fixture, read from its generated file.
+fn convex_matrix_named(file: &str) -> (Vec<Q16>, usize) {
+    let text = std::fs::read_to_string(repo_root().join(file))
+        .unwrap_or_else(|_| panic!("{file} is missing — run node tools/fixture/convex.mjs"));
     let rows: Vec<Vec<Q16>> = text
         .lines()
         .map(str::trim)
@@ -456,6 +470,16 @@ fn convex_matrix() -> (Vec<Q16>, usize) {
     let n = rows.len();
     assert!(rows.iter().all(|r| r.len() == n), "matrix must be square");
     (rows.concat(), n)
+}
+
+/// The nine-node ring: inside `EXACT_LIMIT`, so it measures the exact path.
+fn convex_matrix() -> (Vec<Q16>, usize) {
+    convex_matrix_named("tests/fixtures/convex-9.txt")
+}
+
+/// The sixteen-node ring: past `EXACT_LIMIT`, so it measures the heuristic.
+fn convex_matrix_big() -> (Vec<Q16>, usize) {
+    convex_matrix_named("tests/fixtures/convex-16.txt")
 }
 
 /// The tour `0 -> 1 -> ... -> n-1 -> 0`, which is the perimeter.
@@ -625,52 +649,89 @@ fn rounding_does_not_break_the_theorem_on_this_instance() {
     assert_eq!(second - best, q_decimal("24.0") as i64);
 }
 
-/// The heuristic path, measured rather than advertised.
+/// The regression Fixture B found, and the fix.
 ///
-/// `global` is the unassigned-instance path and never claims optimality. On an
-/// instance whose optimum is known exactly, the useful thing is to report the
-/// gap — which is what a customer weighing £499 actually wants to know, and
-/// what a benchmark is for. Pinned so a regression in either direction shows up.
+/// The global path used to return 83.9% above the proven optimum here, because
+/// `K_CLUSTERS` was a flat 5 whatever `n_nodes` was — nine nodes cut into five
+/// clusters of about two — and because nothing in the pipeline ever ordered a
+/// tour. `solve_intra_cluster_chain` sorts by distance to the cluster centre,
+/// and on a circle every node is the same distance from the centre.
+///
+/// Two changes, both needed: the cluster count now scales with `n_nodes`, and
+/// an instance this small does not go near a heuristic at all — it is searched
+/// exhaustively and the result is marked `exact`.
 #[test]
-fn the_heuristic_path_reports_its_true_gap_to_the_known_optimum() {
+fn the_global_path_solves_a_small_convex_instance_exactly() {
     let (matrix, n) = convex_matrix();
     let optimum = tour_cost(&perimeter(n), &matrix, n);
 
     let out = global::solve_unassigned_default(&matrix, n);
     assert!(out.visits_every_node_once(n), "tour was {:?}", out.tour);
     assert!(
+        out.exact,
+        "nine nodes is inside EXACT_LIMIT and must be solved, not guessed"
+    );
+    assert_eq!(
+        out.cost_q16, optimum,
+        "the perimeter is the optimum for points in convex position"
+    );
+    assert!(is_hull_order(&out.tour, n), "tour was {:?}", out.tour);
+
+    // Was 839 tenths of a percent. Now zero, and pinned so it stays there.
+    assert_eq!((out.cost_q16 - optimum) * 1000 / optimum, 0);
+}
+
+/// The heuristic path, measured rather than advertised.
+///
+/// Sixteen nodes is past `EXACT_LIMIT`, so this is genuinely the heuristic —
+/// clustering, the inter-cluster QUBO, then the deterministic 2-opt pass.
+///
+/// The pass earns its place here. Before it, this instance came back at
+/// 29 242 164 against an optimum of 8 178 896 — **257% above**, a tour that
+/// crossed the ring over and over. 2-opt removes 21 063 268 of that and lands
+/// exactly on the perimeter. The size of that number is the measurement: the
+/// Kondo pipeline had no ordering step at all, and this is what supplies one.
+#[test]
+fn the_heuristic_path_reports_its_true_gap_on_a_larger_convex_instance() {
+    let (matrix, n) = convex_matrix_big();
+    let optimum = tour_cost(&perimeter(n), &matrix, n);
+
+    let out = global::solve_unassigned_default(&matrix, n);
+    assert!(out.visits_every_node_once(n), "tour was {:?}", out.tour);
+    assert!(
         !out.exact,
-        "the global path is a heuristic and must not claim otherwise"
+        "past EXACT_LIMIT the answer is a heuristic and must say so"
     );
     assert!(
         out.cost_q16 >= optimum,
         "a heuristic cannot beat the proven optimum; got {} against {optimum}",
         out.cost_q16
     );
+    assert!(
+        out.uncrossed_q16 > 0,
+        "2-opt had crossings to remove on this instance"
+    );
 
-    // The gap, in tenths of a percent, integer arithmetic only. Pinned because
-    // it is a published number about the product and must not drift silently in
-    // either direction.
-    //
-    // It is 83.9%, and that is the finding rather than an embarrassment to be
-    // hidden. On a nine-node circle — about the easiest non-trivial instance
-    // there is — the Kondo pipeline returns 0 -> 8 -> 1 -> 6 -> 7 -> 4 -> 3 ->
-    // 5 -> 2 -> 0, which crosses the circle repeatedly, against a perimeter that
-    // crosses it never. The cause is structural: K_CLUSTERS is 5, so nine nodes
-    // land in clusters of about two, and on points in convex position the
-    // clustering carries almost no signal for the inter-cluster QUBO to use.
-    //
-    // What this licenses, and what it does not: `resequence` is exactly optimal
-    // here and is what Tier 5 is sold on. `global` is the unassigned-instance
-    // path, it reports `exact: false`, and a number like this is why that flag
-    // is not decoration. It must not be marketed as an optimiser on this
-    // evidence. docs/FIXTURE-B-BENCHMARK.md says so in those words.
     let gap_tenths = (out.cost_q16 - optimum) * 1000 / optimum;
     assert_eq!(
-        gap_tenths, 839,
+        gap_tenths, HEURISTIC_GAP_TENTHS,
         "global path cost {} against optimum {optimum}",
         out.cost_q16
     );
-    assert_eq!(out.tour, vec![0, 8, 1, 6, 7, 4, 3, 5, 2, 0]);
-    assert_eq!(out.clusters, 5);
+}
+
+/// Whatever the heuristic's gap is, it must be deterministic — the same
+/// instance, the same answer, every run, on any machine. That is the claim the
+/// whole product rests on and it applies to the heuristic exactly as much as to
+/// the exact path.
+#[test]
+fn the_heuristic_path_is_reproducible() {
+    let (matrix, n) = convex_matrix_big();
+    let first = global::solve_unassigned_default(&matrix, n);
+    for _ in 0..8 {
+        let again = global::solve_unassigned_default(&matrix, n);
+        assert_eq!(again.tour, first.tour);
+        assert_eq!(again.cost_q16, first.cost_q16);
+        assert_eq!(again.uncrossed_q16, first.uncrossed_q16);
+    }
 }

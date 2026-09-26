@@ -150,33 +150,65 @@ accepts either and says why — pinning one would pin an artefact of the input.
 A 24-minute margin is not a rounding-width margin, so the theorem survives the
 rounding comfortably on this instance.
 
-### 3.3 The result that matters commercially
+### 3.3 What it found, and the fix
 
-Both Tier 5 paths were run on it. They do not come out the same.
+Fixture B was built to measure. The first thing it measured was a defect.
 
-| Path | Result | Gap to the proven optimum |
+| Path | Before | After |
 |---|---|---|
-| `resequence` (exhaustive, per round) | 123.3 min, hull order | **0.00%** — exact |
-| `global` (Kondo, unassigned instance) | 226.8 min | **+83.9%** |
+| `resequence` (exhaustive, per round) | 123.3 min, hull order — **exact** | unchanged |
+| `global` (Kondo, unassigned, 9 nodes) | 226.8 min — **+83.9%** | 123.3 min — **exact** |
+| `global` (Kondo, unassigned, 16 nodes) | 446.2 min — **+257%** | 124.8 min — **exact** |
 
-`resequence` finds the optimum from the worst starting order the instance has.
-That is the path Tier 5 is sold on, and it is exactly optimal at its documented
-limit.
+The nine-node result was `0 → 8 → 1 → 6 → 7 → 4 → 3 → 5 → 2 → 0`: a tour that
+crosses the circle repeatedly, against a perimeter that crosses it never. Two
+causes, both structural rather than tuning misses.
 
-`global` returns `0 → 8 → 1 → 6 → 7 → 4 → 3 → 5 → 2 → 0`, which crosses the
-circle repeatedly against a perimeter that crosses it never. **83.9% above
-optimum on a nine-node circle** — about the easiest non-trivial instance there
-is. The cause is structural rather than a tuning miss: `K_CLUSTERS` is 5, so
-nine nodes land in clusters of about two, and on points in convex position the
-clustering carries almost no signal for the inter-cluster QUBO to work with.
+**Cause one: the cluster count was a constant.** `K_CLUSTERS` was a flat 5
+whatever `n_nodes` was, so nine nodes were cut into five clusters of about two.
+Clustering is how a large instance is made tractable; applied to a small one it
+destroys the global structure and buys nothing. It now scales:
 
-**What this licenses, and what it does not.** `global` reports `exact: false`,
-and a number like this is why that flag is not decoration. On this evidence the
-global path must not be marketed as an optimiser. It is the fallback for an
-instance with no vehicle assignment, it is honest about being a heuristic, and
-it needs work before it is a selling point. The figure is pinned in the test
-suite so it cannot drift in either direction unnoticed — including quietly
-improving, which is worth knowing too.
+```
+k = clamp(ceil(n / MAX_NODES_PER_CLUSTER), 1, K_CLUSTERS)
+```
+
+**Cause two, and the bigger one: the pipeline had no ordering step at all.**
+`solve_intra_cluster_chain` sorts a cluster's members by distance to the cluster
+centre, and its own documentation says so — "a filtered, pre-sorted order, not
+an independently re-optimized visiting sequence". On points in convex position
+every node is the same distance from the centre, so that sort carries no
+information whatever the cluster count. Fixing the clustering alone would not
+have fixed the tour.
+
+So two things changed. An instance inside `EXACT_LIMIT` no longer goes near a
+heuristic — it is searched exhaustively and comes back marked `exact: true`,
+which that field could never be before. And past the limit, a **deterministic
+2-opt pass** now runs over the stitched tour: best-improvement, ties to the
+lowest `(i, j)`, strictly positive gains only so it cannot oscillate, bounded
+rounds so a non-metric matrix cannot spin it forever, integer throughout.
+
+On the sixteen-node ring 2-opt removes 21 063 268 in Q16.16 — 321.4 minutes, the
+difference between 446.2 and 124.8. The size of that number *is* the finding.
+
+### 3.4 What Fixture B can no longer measure, and why
+
+The gap on both rings is now zero, and that is a theorem rather than luck: a
+tour 2-opt cannot improve has no crossing edges, and on points in convex
+position the only crossing-free tour is the hull order. **2-opt is provably
+optimal on this fixture family at any size.**
+
+Which means Fixture B can no longer tell you how far the heuristic is off in
+general, because convex position is precisely the case 2-opt solves. What it
+proves is that the pass is real and works. Measuring the gap on a hard instance
+needs a hard instance — that is §4, and it needs a file the user supplies.
+
+**What this still licenses, and what it does not.** `resequence` is exactly
+optimal at its documented limit and is what Tier 5 is sold on. `global` is now
+exact below the limit and provably optimal on convex position above it, which is
+a real improvement on +83.9%, but "optimal on the easy case" is not evidence of
+quality on hard ones. It still reports `exact: false` past the limit, and that
+flag should still be believed.
 
 ---
 
@@ -215,6 +247,8 @@ itself without anyone noticing:
 | Vendored third-party instance data | **none**, and §1 is why |
 | External standard | a theorem, checkable in one line of trigonometry |
 | `resequence` against it | exact, 0.00% gap, at `EXACT_LIMIT` |
-| `global` against it | +83.9%, pinned, and not to be marketed as an optimiser |
+| `global` against it | was +83.9%; now exact below the limit and provably optimal on convex position above it |
+| What that fixed | `K_CLUSTERS` scaling with `n`, an exact path below the limit, and a deterministic 2-opt pass — the pipeline had no ordering step before |
+| What it does not prove | anything about hard instances: convex position is exactly the case 2-opt solves |
 | Real published instances | supported by `tools/benchmark/`, user supplies the file |
 | Published optima | cited as facts in `best-known.json`, no data attached |
