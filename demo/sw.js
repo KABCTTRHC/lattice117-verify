@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v3';
+const CACHE = 'lattice117-v5';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -22,10 +22,18 @@ const SHELL = [
   './',
   './index.html',
   './audit.html',
+  // Every ES module the pages import. A module missing from this list is not
+  // a slow load offline - it is a page that does not run at all, because the
+  // import fails and the script never executes. Adding a module without
+  // adding it here silently breaks the offline claim the product is sold on.
   './licence.js',
+  './digest.js',
+  './rota.js',
+  './freetier.js',
   './lattice117_wasm.wasm',
   './example-fleet.json',
   './example-route-sheet.csv',
+  './example-rota.csv',
 ];
 
 self.addEventListener('install', (e) => {
