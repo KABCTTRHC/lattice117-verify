@@ -203,6 +203,7 @@
 
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
+import { verdictDigest as sharedDigest } from './digest.js';
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
@@ -434,12 +435,26 @@ function csvToSpec(){
 }
 
 /* ---------------------------- output ------------------------------------ */
+/* The digest is delegated to the shared canonicalisation so this page, the
+   Excel task pane and the npm package produce the SAME hash for the same
+   schedule. They used to produce three different ones - this page hashed the
+   values as supplied, so a CSV import (strings) and the JSON path (numbers)
+   disagreed about an identical fleet. Only the routes actually evaluated are
+   included, which matters on the free tier where the run is capped. */
 async function digestOf(rep){
-  const canon=JSON.stringify({
-    routes:rep.spec.routes.map(r=>[r.vehicle, r.stops.map(s=>[s.id,s.ready,s.due,s.travel])]),
-    verdict:rep.results.map(r=>[r.vehicle,r.status,r.node,r.arrival,r.close,r.deficit,r.cost])});
-  const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canon));
-  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const checked=rep.results.length;
+  const routes=rep.spec.routes.slice(0,checked).map(r=>({
+    id:r.vehicle,
+    stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
+  }));
+  const verdict=rep.results.map(r=>({
+    id:r.vehicle,
+    feasible:r.status===0,
+    violation:r.status===1
+      ? {stop:r.node, raw:{arrival:r.arrival, windowClose:r.close, deficit:r.deficit}}
+      : null,
+  }));
+  return sharedDigest(routes, verdict);
 }
 
 async function render(rep){

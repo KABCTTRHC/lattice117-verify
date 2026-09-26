@@ -92,6 +92,7 @@ the previous stop. Names can be anything.</p>
 
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
+import { verdictDigest as sharedDigest } from './digest.js';
 
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastFailRows=[];
@@ -243,6 +244,11 @@ async function run(){
       if(!rounds.size) throw new Error('No rounds found — the round/vehicle column was empty on every row.');
 
       let feasible=0, checked=0; const fails=[]; lastFailRows=[];
+      // Captured for the digest. The pane used to hash {checked,feasible,fails},
+      // which excluded the inputs entirely — two different schedules that
+      // happened to fail the same way produced the same hash, and the same
+      // schedule hashed differently here than in the browser or the package.
+      const canonRoutes=[], canonVerdict=[];
       for(const [veh,stops] of rounds){
         // The free-tier cap is applied here, where rounds are actually
         // evaluated, not by hiding rows afterwards. A limit that exists only
@@ -253,15 +259,22 @@ async function run(){
         stops[0].travel=0;                      // nothing precedes the first stop
         if(stops.length<2){ fails.push({veh,msg:'only one stop'}); continue; }
         const o=verifyRoute(stops);
-        if(o[0]===0){ feasible++; }
-        else if(o[0]===1){
+        canonRoutes.push({id:veh, stops:stops.map(st=>({
+          id:st.id, open:st.open, close:st.close, travel:st.travel}))});
+        if(o[0]===0){
+          feasible++;
+          canonVerdict.push({id:veh, feasible:true, violation:null});
+        } else if(o[0]===1){
           const s=stops[o[1]];
           fails.push({veh,stop:s?.id??'?',arrival:o[2],close:o[3],deficit:o[4]});
+          canonVerdict.push({id:veh, feasible:false, violation:{
+            stop:s?.id??String(o[1]),
+            raw:{arrival:o[2], windowClose:o[3], deficit:o[4]}}});
           if(s) lastFailRows.push(s.sheetRow);
         } else fails.push({veh,msg:'rejected before evaluation'});
       }
 
-      render(checked,feasible,fails,headers,map,rounds.size);
+      await render(checked,feasible,fails,headers,map,rounds.size,canonRoutes,canonVerdict);
 
       // Colour the offending rows in the sheet itself.
       const ws=ctx.workbook.worksheets.getActiveWorksheet();
@@ -285,7 +298,7 @@ async function clearHighlight(){
   }catch(e){ $('err').textContent=e.message; }
 }
 
-function render(checked,feasible,fails,headers,map,total){
+async function render(checked,feasible,fails,headers,map,total,canonRoutes,canonVerdict){
   const pct=checked?Math.round(100*feasible/checked):0;
   const bad=checked-feasible;
   const mapped=['vehicle','stop','open','close','travel']
@@ -318,11 +331,11 @@ function render(checked,feasible,fails,headers,map,total){
       'someone else confirm this result from the same sheet — is part of a licence.</div>');
     return;
   }
-  crypto.subtle.digest('SHA-256',new TextEncoder().encode(
-    JSON.stringify({checked,feasible,fails})))
-    .then(h=>{ $('out').insertAdjacentHTML('beforeend',
-      '<div class="digest"><b>verdict digest</b><br>'+
-      [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('')+'</div>'); });
+  // Same canonicalisation as the browser audit and the npm package, so a
+  // planner checking here and a client checking there get one number.
+  const dg=await sharedDigest(canonRoutes, canonVerdict);
+  $('out').insertAdjacentHTML('beforeend',
+    '<div class="digest"><b>verdict digest</b><br>'+dg+'</div>');
 }
 </script>
 </body>

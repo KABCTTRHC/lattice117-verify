@@ -25,12 +25,11 @@
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+// One canonicalisation, shared byte-for-byte with the browser audit and the
+// Excel task pane. CI fails if the three copies drift.
+import { Q, toQ, canonicalise, verdictDigest as digestOf } from './digest.js';
 
-/** Q16.16 scale factor. */
-const Q = 65536;
-/** Representable range of Q16.16 on i32. */
-export const Q16_MAX = 32767;
-export const Q16_MIN = -32768;
+export { Q16_MAX, Q16_MIN, canonicalise } from './digest.js';
 
 let _exports = null;
 let _loading = null;
@@ -60,21 +59,6 @@ export async function init() {
   })();
 
   return _loading;
-}
-
-function toQ(value, what) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    throw new RangeError(`${what}: "${value}" is not a finite number`);
-  }
-  if (n < Q16_MIN || n > Q16_MAX) {
-    throw new RangeError(
-      `${what}: ${n} is outside the Q16.16 representable range ` +
-      `(${Q16_MIN}..${Q16_MAX}). Rescale your time unit — minutes instead of ` +
-      `seconds, for example — rather than truncating.`
-    );
-  }
-  return Math.round(n * Q);
 }
 
 const fromQ = (v) => v / Q;
@@ -199,30 +183,5 @@ export async function verifyFleet(routes) {
  * @returns {Promise<string>} lowercase hex
  */
 export async function verdictDigest(routes, result) {
-  const canon = JSON.stringify({
-    routes: routes.map((r) => [
-      r.id,
-      r.stops.map((s, i) => [
-        s.id,
-        toQ(s.open ?? 0, `${s.id} window open`),
-        toQ(s.close ?? 0, `${s.id} window close`),
-        // Nothing precedes the first stop, so its travel time is not part of
-        // what was evaluated. Hashing it would move the digest for an input
-        // that produced an identical verdict — the same defect one line up.
-        i === 0 ? 0 : toQ(s.travel, `${s.id} travel`),
-      ]),
-    ]),
-    verdict: result.routes.map((r) => [
-      r.id, r.feasible, r.violation?.stop ?? null,
-      r.violation?.raw?.arrival ?? null,
-      r.violation?.raw?.windowClose ?? null,
-      r.violation?.raw?.deficit ?? null,
-    ]),
-  });
-
-  const data = new TextEncoder().encode(canon);
-  const subtle = globalThis.crypto?.subtle
-    ?? (await import('node:crypto')).webcrypto.subtle;
-  const buf = await subtle.digest('SHA-256', data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return digestOf(routes, result.routes);
 }

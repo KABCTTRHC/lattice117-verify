@@ -11,7 +11,7 @@
   "main": "./index.js",
   "types": "./index.d.ts",
   "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" } },
-  "files": ["index.js", "index.d.ts", "lattice117_wasm.wasm", "README.md"],
+  "files": ["index.js", "index.d.ts", "digest.js", "lattice117_wasm.wasm", "README.md"],
   "engines": { "node": ">=18" },
   "sideEffects": false
 }

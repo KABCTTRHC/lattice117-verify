@@ -117,6 +117,14 @@ jobs:
         run: |
           cmp licence/licence.js demo/licence.js
           cmp licence/licence.js excel-addin/licence.js
+      # The digest canonicalisation is the one thing that MUST be identical
+      # everywhere: its whole purpose is two parties confirming they reached
+      # the same verdict. Three surfaces once hashed three different things,
+      # so the same schedule produced three different numbers.
+      - name: Verdict canonicalisation is identical on every surface
+        run: |
+          cmp demo/digest.js excel-addin/digest.js
+          cmp demo/digest.js npm/digest.js
       - name: WASM is identical on every surface
         run: |
           cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
