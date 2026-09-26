@@ -68,6 +68,13 @@
   .digest b{color:var(--ink-dim)}
   .err{color:var(--bad);font:12.5px var(--mono);margin-top:10px;white-space:pre-wrap}
   .note{font-size:13px;color:var(--ink-dim);margin:12px 0 0}
+  .lock{display:flex;gap:9px;align-items:flex-start;margin:0 0 14px;padding:12px 14px;
+        border-radius:9px;font-size:13px;line-height:1.5;
+        border:1px solid color-mix(in srgb,var(--warn) 42%,transparent);
+        background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--ink)}
+  .lock svg{flex:none;margin-top:2px;color:var(--warn)}
+  td.masked{text-align:center;font-size:12.5px;color:var(--ink-dim);
+            background:color-mix(in srgb,var(--warn) 7%,transparent);font-style:italic}
   .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:6px}
   .tier{border:1px solid var(--line);border-radius:9px;padding:15px;background:var(--panel-2);
         display:flex;flex-direction:column}
@@ -184,6 +191,7 @@
   <h2>Rota rest &amp; break check</h2>
   <div class="hero"><div class="rate" id="rotaRate">—</div><div id="rotaHero"></div></div>
   <div id="rotaCapped"></div>
+  <div id="rotaLock"></div>
   <table id="rotaTable" style="display:none"><thead><tr>
     <th>Staff</th><th>Issue</th><th>Date</th><th>Row</th>
     <th>Actual</th><th>Expected</th><th>Short by</th></tr></thead>
@@ -198,6 +206,7 @@
 
 <div class="panel" id="resultPanel" style="display:none">
   <h2>Result</h2>
+  <div id="depthLock"></div>
   <div class="hero">
     <div class="rate" id="rate">—<small>rounds achievable</small></div>
     <div class="heroTxt">
@@ -306,6 +315,38 @@
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
 import { evaluateRota, humanMinutes, RULES, DISCLAIMER } from './rota.js';
+import { capRoutes, capRotaRows, splitBreaches, importsLeft, recordImport,
+         LIMITS, UPSELL, UPSELL_ROTA } from './freetier.js';
+
+/* Built-in examples are never capped and never counted against the import
+   quota. Someone who cannot see the tool work will not buy it, and the demo
+   is the marketing. Every other input is "custom". */
+let inputIsExample = true;
+let depthCap = null;
+const freeCustom = () => entitlement.tier === 'free' && !inputIsExample;
+
+/* Blocks a custom import once the rolling quota is spent. Returns false when
+   the caller should stop. Paid tiers are never gated. */
+async function guardCustomImport(){
+  if(entitlement.tier !== 'free') return true;
+  const left = await importsLeft();
+  if(left <= 0){
+    $('err').innerHTML =
+      `<b>Free tier: ${LIMITS.imports} custom imports per 24 hours reached.</b><br>` +
+      `The built-in examples still work. Paste a licence key below, or subscribe ` +
+      `to Standard (£29/mo) for unlimited imports.`;
+    return false;
+  }
+  await recordImport();
+  return true;
+}
+
+/* A lock banner, used by both modes. */
+const lockBanner = (text) =>
+  `<div class="lock"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">` +
+  `<path fill="currentColor" d="M5 7V5a3 3 0 0 1 6 0v2h.5A1.5 1.5 0 0 1 13 8.5v5A1.5 1.5 0 0 1 ` +
+  `11.5 15h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7H5Zm1.5 0h3V5a1.5 1.5 0 0 0-3 0v2Z"/>` +
+  `</svg><span>${text}</span></div>`;
 
 /* ---- Stripe ------------------------------------------------------------
    Drop your two live Payment Link URLs in here and nothing else changes.
@@ -616,9 +657,17 @@ async function render(rep){
     $('heroLine').innerHTML += `<br><span style="color:var(--warn,#d29922)">Free tier: checked 1 of `+
       `${rep.totalSubmitted} rounds. A licence checks the whole fleet.</span>`;
   }
+  $('depthLock').innerHTML = (depthCap && (depthCap.rounds||depthCap.stops))
+    ? lockBanner(UPSELL + (depthCap.stops
+        ? ` This round has ${depthCap.stops} further stop${depthCap.stops>1?'s':''} that were not checked.`
+        : '')) : '';
 
   const vr=$('violRows'); vr.innerHTML='';
-  const fails=rep.results.filter(r=>r.status===1);
+  const allFails=rep.results.filter(r=>r.status===1);
+  // One full diagnostic proves the tool works; the count proves there is more
+  // to buy. Showing none reads as broken; showing all is the product.
+  const split = freeCustom() ? splitBreaches(allFails) : {shown:allFails, hiddenCount:0};
+  const fails = split.shown;
   fails.forEach(r=>{
     const tr=document.createElement('tr'); tr.className='bad';
     tr.innerHTML=`<td><b>${r.vehicle}</b></td><td>${r.node}</td>`+
@@ -627,7 +676,14 @@ async function render(rep){
       `<td style="color:var(--bad);font-weight:700">${fmt(r.deficit)} <span class="q">(${r.deficit})</span></td>`;
     vr.appendChild(tr);
   });
-  $('violPanel').style.display=fails.length?'':'none';
+  if(split.hiddenCount){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="5" class="masked">+ ${split.hiddenCount} more breach`+
+      `${split.hiddenCount>1?'es':''} detected — unlock Standard (£29/mo) for full `+
+      `breach diagnostics.</td>`;
+    vr.appendChild(tr);
+  }
+  $('violPanel').style.display=(fails.length||split.hiddenCount)?'':'none';
 
   const ar=$('allRows'); ar.innerHTML='';
   rep.results.forEach(r=>{
@@ -695,7 +751,21 @@ Lattice117 · Brierley Sovereign Group Ltd · Nottingham
 
 async function go(fn){
   $('err').textContent='';
-  try{ await render(runRoutes(fn())); $('resultPanel').scrollIntoView({behavior:'smooth',block:'start'}); }
+  try{
+    let spec=fn();
+    depthCap=null;
+    // Depth cap: applied to the data BEFORE evaluation, so the rows past it
+    // are genuinely not checked. Slicing a fleet into one-van files no longer
+    // buys the whole fleet one file at a time.
+    if(freeCustom()){
+      const originalRounds=spec.routes.length;
+      const c=capRoutes(spec.routes);
+      depthCap={...c.hidden, originalRounds};
+      spec={...spec, routes:c.routes};
+    }
+    await render(runRoutes(spec));
+    $('resultPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
   catch(e){ $('err').textContent='Audit rejected: '+e.message; }
 }
 
@@ -718,10 +788,12 @@ $('pickRota').addEventListener('click',()=>$('fileRota').click());
 $('fileRota').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
   $('err').textContent='';
+  if(!await guardCustomImport()) return;
+  inputIsExample=false;
   try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
 });
 $('loadExRota').addEventListener('click',async()=>{
-  $('err').textContent='';
+  $('err').textContent=''; inputIsExample=true;
   try{ ingestCsv(await (await fetch('example-rota.csv')).text()); }
   catch(err){ $('err').textContent='Could not load the example rota: '+err.message; }
 });
@@ -731,6 +803,8 @@ const dropRota=$('dropRota');
 dropRota.addEventListener('drop',async e=>{
   const f=e.dataTransfer.files[0]; if(!f) return;
   $('err').textContent='';
+  if(!await guardCustomImport()) return;
+  inputIsExample=false;
   try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
 });
 
@@ -746,8 +820,15 @@ async function runRota(){
     break: ci.brk===null?0:r[ci.brk], row:i+2,
   }));
   // The free tier checks one person. Applied here, at evaluation, not by
-  // hiding rows afterwards.
-  const rep=evaluateRota(rows,{maxPeople: entitlement.maxRounds});
+  // hiding rows afterwards. On a CUSTOM upload the depth cap trims the rows
+  // first, so a rota sliced into one-person files buys nothing extra.
+  let rotaCap=null, fed=rows;
+  if(freeCustom()){
+    const c=capRotaRows(rows);
+    rotaCap={...c.hidden, originalRows:rows.length};
+    fed=c.rows;
+  }
+  const rep=evaluateRota(fed,{maxPeople: entitlement.maxRounds});
   if(!rep.checked) throw new Error('no staff found — check the staff column is mapped');
 
   const pct = rep.checked ? Math.round(100*rep.clear/rep.checked) : 0;
@@ -762,9 +843,15 @@ async function runRota(){
     ? `<p class="note" style="color:var(--warn)">Free tier: checked ${rep.checked} of `
       +`${rep.totalPeople} people. A licence checks the whole rota.</p>` : '';
 
+  $('rotaLock').innerHTML = (rotaCap && (rotaCap.people||rotaCap.shifts))
+    ? lockBanner(UPSELL_ROTA + (rotaCap.shifts
+        ? ` This person has ${rotaCap.shifts} further shift${rotaCap.shifts>1?'s':''} that were not checked.`
+        : '')) : '';
+
   const KIND={rest:'Rest between shifts', break:'Break on a long shift', overlap:'Shifts overlap'};
   const tb=$('rotaRows'); tb.innerHTML='';
-  for(const b of rep.breaches){
+  const rSplit = freeCustom() ? splitBreaches(rep.breaches) : {shown:rep.breaches, hiddenCount:0};
+  for(const b of rSplit.shown){
     const tr=document.createElement('tr'); tr.className='bad';
     tr.innerHTML=`<td><b>${b.staff}</b></td><td>${KIND[b.kind]}</td>`
       +`<td>${b.label??''}</td><td>${b.row}</td>`
@@ -772,7 +859,14 @@ async function runRota(){
       +`<td><b>${humanMinutes(b.shortfall)}</b></td>`;
     tb.appendChild(tr);
   }
-  $('rotaTable').style.display = rep.breaches.length ? '' : 'none';
+  if(rSplit.hiddenCount){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="7" class="masked">+ ${rSplit.hiddenCount} more breach`+
+      `${rSplit.hiddenCount>1?'es':''} detected — unlock Standard (£29/mo) for full `+
+      `breach diagnostics.</td>`;
+    tb.appendChild(tr);
+  }
+  $('rotaTable').style.display = (rSplit.shown.length||rSplit.hiddenCount) ? '' : 'none';
   $('rotaRejected').innerHTML = rep.rejected.length
     ? `<p class="note">${rep.rejected.length} row(s) skipped: `
       +rep.rejected.slice(0,3).map(r=>`row ${r.row} (${r.why})`).join('; ')+'</p>' : '';
@@ -835,10 +929,12 @@ $('pickCsv').addEventListener('click',()=>$('fileCsv').click());
 $('fileCsv').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
   $('err').textContent='';
+  if(!await guardCustomImport()) return;
+  inputIsExample=false;
   try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
 });
 $('loadExCsv').addEventListener('click',async()=>{
-  $('err').textContent='';
+  $('err').textContent=''; inputIsExample=true;
   try{ ingestCsv(await (await fetch('example-route-sheet.csv')).text()); }
   catch(err){ $('err').textContent='Could not load the example: '+err.message; }
 });
@@ -855,11 +951,15 @@ const dropCsv=$('dropCsv');
 dropCsv.addEventListener('drop',async e=>{
   const f=e.dataTransfer.files[0]; if(!f) return;
   $('err').textContent='';
+  if(!await guardCustomImport()) return;
+  inputIsExample=false;
   try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
 });
 
-$('run').addEventListener('click',()=>go(()=>fromJson(JSON.parse($('input').value))));
+$('run').addEventListener('click',()=>{ inputIsExample=false;
+  go(()=>fromJson(JSON.parse($('input').value))); });
 $('loadEx').addEventListener('click',async()=>{
+  inputIsExample=true;
   const t=await (await fetch('example-fleet.json')).text();
   $('input').value=t; go(()=>fromJson(JSON.parse(t)));
 });

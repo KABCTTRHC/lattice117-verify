@@ -129,6 +129,8 @@ jobs:
         run: |
           cmp demo/rota.js excel-addin/rota.js
           cmp demo/rota.js npm/rota.js
+          cmp demo/freetier.js excel-addin/freetier.js
+          cmp demo/freetier.js npm/freetier.js
       - name: WASM is identical on every surface
         run: |
           cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
@@ -138,3 +140,5 @@ jobs:
       # roster; a false negative tells them an unlawful one is fine.
       - name: Rota rest and break boundaries
         run: node tests/rota.test.mjs
+      - name: Free-tier depth caps
+        run: node tests/freetier.test.mjs
