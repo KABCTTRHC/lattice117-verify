@@ -180,6 +180,22 @@
   it is never sent anywhere, and neither is your schedule.</p>
 </div>
 
+<div class="panel" id="rotaPanel" style="display:none">
+  <h2>Rota rest &amp; break check</h2>
+  <div class="hero"><div class="rate" id="rotaRate">—</div><div id="rotaHero"></div></div>
+  <div id="rotaCapped"></div>
+  <table id="rotaTable" style="display:none"><thead><tr>
+    <th>Staff</th><th>Issue</th><th>Date</th><th>Row</th>
+    <th>Actual</th><th>Expected</th><th>Short by</th></tr></thead>
+    <tbody id="rotaRows"></tbody></table>
+  <div id="rotaRejected"></div>
+  <div class="btnrow" style="margin-top:14px">
+    <button class="primary" id="rotaCert" disabled>Download record</button>
+  </div>
+  <div class="digest" id="rotaDigestOut"></div>
+  <p class="note" id="rotaDisclaimer"></p>
+</div>
+
 <div class="panel" id="resultPanel" style="display:none">
   <h2>Result</h2>
   <div class="hero">
@@ -219,6 +235,7 @@
   <h2>Your schedule</h2>
   <div class="tabs">
     <button class="tab active" data-tab="csv">CSV route sheet</button>
+    <button class="tab" data-tab="rota">UK rota rest check</button>
     <button class="tab" data-tab="json">JSON</button>
   </div>
 
@@ -230,20 +247,39 @@
       <button id="loadExCsv" disabled>Load example route sheet</button>
     </div>
 
-    <div id="mapper" style="display:none">
-      <p class="note" style="margin-top:18px"><b>Check the columns.</b> We guessed these from your headers — change anything that is wrong.</p>
-      <div class="map" id="mapFields"></div>
-      <div class="prev" id="preview"></div>
-      <div class="ok-note" id="mapOk"></div>
-      <div class="btnrow" style="margin-top:14px">
-        <button class="primary" id="runCsv">Audit this sheet</button>
-      </div>
-    </div>
-
     <p class="note">Export one row per stop, in visit order. You need the round it belongs to, the stop,
     its delivery window, and the <b>travel time from the previous stop</b>. That last column is the whole
     trick: checking a fixed round needs the legs you actually drive, not a full distance matrix, so a
     normal route sheet is enough. Headers can be named anything.</p>
+  </div>
+
+  <div id="tab-rota" style="display:none">
+    <div class="drop" id="dropRota">Drop a rota CSV here — one row per shift</div>
+    <input type="file" id="fileRota" accept=".csv,text/csv,text/plain" style="display:none">
+    <div class="btnrow">
+      <button id="pickRota" disabled>Choose rota CSV…</button>
+      <button id="loadExRota" disabled>Load example rota</button>
+    </div>
+    <p class="note" style="margin-top:14px"><b>Indicative mathematical check against
+    configured rest and break rules (11h inter-shift rest, 20m break over 6h) —
+    not legal advice.</b> It compares times against the thresholds below and nothing
+    more. It knows nothing of opt-outs, young workers, compensatory rest or any
+    collective agreement. A clear result is not a defence and a flagged one is not
+    an offence.</p>
+    <p class="note">One row per shift. You need who is working, when the shift starts
+    and ends, and the break in minutes. A date column is used if present; otherwise
+    put full date-times in the start and end columns. Night shifts that run past
+    midnight are handled — an end earlier than its start is treated as the next day.</p>
+  </div>
+
+  <div id="mapper" style="display:none">
+    <p class="note" style="margin-top:18px"><b>Check the columns.</b> We guessed these from your headers — change anything that is wrong.</p>
+    <div class="map" id="mapFields"></div>
+    <div class="prev" id="preview"></div>
+    <div class="ok-note" id="mapOk"></div>
+    <div class="btnrow" style="margin-top:14px">
+      <button class="primary" id="runCsv">Audit this sheet</button>
+    </div>
   </div>
 
   <div id="tab-json" style="display:none">
@@ -268,7 +304,8 @@
 
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
-import { verdictDigest as sharedDigest } from './digest.js';
+import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
+import { evaluateRota, humanMinutes, RULES, DISCLAIMER } from './rota.js';
 
 /* ---- Stripe ------------------------------------------------------------
    Drop your two live Payment Link URLs in here and nothing else changes.
@@ -287,8 +324,8 @@ import { verdictDigest as sharedDigest } from './digest.js';
    revenue is not.
 
    Left as-is, the buttons say so rather than 404ing in front of a buyer.  */
-const STANDARD_STRIPE_URL = 'REPLACE_WITH_STANDARD_PAYMENT_LINK';
-const PRO_STRIPE_URL      = 'REPLACE_WITH_PRO_PAYMENT_LINK';
+const STANDARD_STRIPE_URL = 'https://buy.stripe.com/9B6dR8eSf5ZF2sn5LfgEg0g';
+const PRO_STRIPE_URL      = 'https://buy.stripe.com/7sYdR8dOb2Ntc2XflPgEg0h';
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
@@ -452,7 +489,26 @@ function score(field, header){
 /* Assign globally rather than field-by-field. Taking each field's own best in
    order lets an early field consume a header a later one needed - which is how
    "Stop No." was landing on `stop` and starving `seq`. */
+/* The rota is a second evaluation mode, so it gets its own column vocabulary.
+   'start'/'end' deliberately avoid 'window', and 'break' avoids 'breakdown'. */
+const ROTA_FIELDS=[
+  {key:'staff', label:'Staff name / ID', req:true,
+   hints:['staff','name','employee','worker','person','operative','carer','colleague','id','payroll'],
+   avoid:['shift','site','ward','team','role']},
+  {key:'date',  label:'Date (optional)', req:false,
+   hints:['date','day','rotadate','shiftdate','when'], avoid:['time','start','end']},
+  {key:'start', label:'Shift start', req:true,
+   hints:['start','shiftstart','on','from','begin','starttime','timein','in'], avoid:['end','break']},
+  {key:'end',   label:'Shift end', req:true,
+   hints:['end','shiftend','off','to','finish','endtime','timeout','out'], avoid:['start','break']},
+  {key:'break', label:'Break (minutes)', req:false,
+   hints:['break','rest','unpaidbreak','breakmins','breakminutes','lunch','meal'], avoid:['between']},
+];
+let MODE='route';
+const activeFields=()=>MODE==='rota'?ROTA_FIELDS:FIELDS;
+
 function guessMapping(headers){
+  const FIELDS=activeFields();
   const pairs=[];
   FIELDS.forEach((f,fi)=>headers.forEach((h,hi)=>{
     const sc=score(f,h);
@@ -468,8 +524,10 @@ function guessMapping(headers){
 }
 
 function renderMapper(){
+  const FIELDS=activeFields();
   const mf=$('mapFields'); mf.innerHTML='';
   const guess=guessMapping(csvHeaders);
+  $('runCsv').textContent = MODE==='rota' ? 'Check this rota' : 'Audit this sheet';
   for(const f of FIELDS){
     const wrap=document.createElement('div');
     const sel=document.createElement('select');
@@ -491,10 +549,10 @@ function renderMapper(){
 }
 
 function checkReady(){
-  const missing=FIELDS.filter(f=>f.req && !$('map_'+f.key).value).map(f=>f.label);
+  const missing=activeFields().filter(f=>f.req && !$('map_'+f.key).value).map(f=>f.label);
   $('runCsv').disabled=missing.length>0;
-  $('mapOk').textContent = missing.length
-    ? '' : `✓ all required columns mapped · ${csvRows.length} rows ready`;
+  $('mapOk').textContent = missing.length ? ''
+    : `✓ all required columns mapped · ${csvRows.length} ${MODE==='rota'?'shifts':'rows'} ready`;
 }
 
 function csvToSpec(){
@@ -645,9 +703,127 @@ async function go(fn){
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
-  $('tab-csv').style.display = t.dataset.tab==='csv' ? '' : 'none';
-  $('tab-json').style.display= t.dataset.tab==='json'? '' : 'none';
+  const tab=t.dataset.tab;
+  $('tab-csv').style.display = tab==='csv' ? '' : 'none';
+  $('tab-rota').style.display= tab==='rota'? '' : 'none';
+  $('tab-json').style.display= tab==='json'? '' : 'none';
+  // Switching mode invalidates any mapping guessed for the other vocabulary.
+  MODE = tab==='rota' ? 'rota' : 'route';
+  $('mapper').style.display='none';
+  csvHeaders=[]; csvRows=[];
 }));
+
+/* ---- rota mode ---------------------------------------------------------- */
+$('pickRota').addEventListener('click',()=>$('fileRota').click());
+$('fileRota').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('err').textContent='';
+  try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
+});
+$('loadExRota').addEventListener('click',async()=>{
+  $('err').textContent='';
+  try{ ingestCsv(await (await fetch('example-rota.csv')).text()); }
+  catch(err){ $('err').textContent='Could not load the example rota: '+err.message; }
+});
+const dropRota=$('dropRota');
+['dragenter','dragover'].forEach(ev=>dropRota.addEventListener(ev,e=>{e.preventDefault();dropRota.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>dropRota.addEventListener(ev,e=>{e.preventDefault();dropRota.classList.remove('over')}));
+dropRota.addEventListener('drop',async e=>{
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  $('err').textContent='';
+  try{ ingestCsv(await f.text()); }catch(err){ $('err').textContent='Could not read that CSV: '+err.message; }
+});
+
+let lastRota=null;
+
+async function runRota(){
+  $('err').textContent=''; $('resultPanel').style.display='none';
+  const g=k=>{ const v=$('map_'+k).value; return v===''?null:Number(v); };
+  const ci={staff:g('staff'), date:g('date'), start:g('start'), end:g('end'), brk:g('break')};
+  const rows=csvRows.map((r,i)=>({
+    staff:r[ci.staff], date: ci.date===null?null:r[ci.date],
+    start:r[ci.start], end:r[ci.end],
+    break: ci.brk===null?0:r[ci.brk], row:i+2,
+  }));
+  // The free tier checks one person. Applied here, at evaluation, not by
+  // hiding rows afterwards.
+  const rep=evaluateRota(rows,{maxPeople: entitlement.maxRounds});
+  if(!rep.checked) throw new Error('no staff found — check the staff column is mapped');
+
+  const pct = rep.checked ? Math.round(100*rep.clear/rep.checked) : 0;
+  $('rotaRate').className='rate '+(rep.breaches.length?'bad':'ok');
+  $('rotaRate').innerHTML=pct+'%<small>staff with no flags</small>';
+  $('rotaHero').innerHTML = rep.breaches.length
+    ? `<b>${rep.breaches.length} issue${rep.breaches.length>1?'s':''} across ${rep.checked} ${rep.checked>1?'people':'person'}.</b>`
+      +`<br><span style="color:var(--ink-dim)">${rep.clear} had no flags against the configured rules.</span>`
+    : `<b>No flags against the configured rules.</b><br><span style="color:var(--ink-dim)">`
+      +`${rep.checked} ${rep.checked>1?'people':'person'} checked.</span>`;
+  $('rotaCapped').innerHTML = rep.capped
+    ? `<p class="note" style="color:var(--warn)">Free tier: checked ${rep.checked} of `
+      +`${rep.totalPeople} people. A licence checks the whole rota.</p>` : '';
+
+  const KIND={rest:'Rest between shifts', break:'Break on a long shift', overlap:'Shifts overlap'};
+  const tb=$('rotaRows'); tb.innerHTML='';
+  for(const b of rep.breaches){
+    const tr=document.createElement('tr'); tr.className='bad';
+    tr.innerHTML=`<td><b>${b.staff}</b></td><td>${KIND[b.kind]}</td>`
+      +`<td>${b.label??''}</td><td>${b.row}</td>`
+      +`<td>${humanMinutes(b.actual)}</td><td>${humanMinutes(b.expected)}</td>`
+      +`<td><b>${humanMinutes(b.shortfall)}</b></td>`;
+    tb.appendChild(tr);
+  }
+  $('rotaTable').style.display = rep.breaches.length ? '' : 'none';
+  $('rotaRejected').innerHTML = rep.rejected.length
+    ? `<p class="note">${rep.rejected.length} row(s) skipped: `
+      +rep.rejected.slice(0,3).map(r=>`row ${r.row} (${r.why})`).join('; ')+'</p>' : '';
+
+  const dg=await rotaDigest(rep.people, rep.verdict, rep.rules);
+  lastRota={rep,pct,dg,when:new Date().toISOString()};
+  $('rotaDigestOut').innerHTML = entitlement.certificate
+    ? `<b>rota digest (SHA-256, computed in this browser):</b><br>${dg}`
+    : `<b>rota digest</b><br><span style="color:var(--ink-faint)">The reproducible `
+      +`SHA-256 over these shifts and this result — the number a third party `
+      +`re-computes to confirm it — is part of Pro.</span>`;
+  $('rotaCert').disabled = !entitlement.certificate;
+  $('rotaDisclaimer').innerHTML='<b>'+DISCLAIMER+'</b>';
+  $('rotaPanel').style.display='';
+}
+
+$('rotaCert').addEventListener('click',()=>{
+  if(!lastRota) return;
+  const {rep,pct,dg,when}=lastRota;
+  const L=[];
+  L.push('LATTICE117 — ROTA REST & BREAK RECORD');
+  L.push('='.repeat(64));
+  L.push('');
+  L.push(DISCLAIMER.toUpperCase());
+  L.push('');
+  L.push(`Issued            ${when}`);
+  L.push(`Staff checked     ${rep.checked} of ${rep.totalPeople}`);
+  L.push(`With no flags     ${rep.clear}  (${pct}%)`);
+  L.push('');
+  L.push('RULES APPLIED');
+  L.push(`  Minimum rest between shifts   ${humanMinutes(rep.rules.restMinutes)}`);
+  L.push(`  Shift longer than             ${humanMinutes(rep.rules.longShiftMinutes)}`);
+  L.push(`  ...expects a break of         ${humanMinutes(rep.rules.breakMinutes)}`);
+  L.push('');
+  if(rep.breaches.length){
+    L.push('FLAGGED');
+    for(const b of rep.breaches){
+      L.push(`  ${b.staff} — ${KINDTXT[b.kind]}${b.label?` (${b.label})`:''}, sheet row ${b.row}`);
+      L.push(`      achieved ${humanMinutes(b.actual)} against ${humanMinutes(b.expected)}`
+             +` — short by ${humanMinutes(b.shortfall)}`);
+    }
+  } else L.push('FLAGGED — none');
+  L.push('');
+  L.push('ROTA DIGEST (SHA-256 over the shifts, the rules and the result)');
+  L.push(`  ${dg}`);
+  L.push('  Re-running the identical rota must reproduce this digest.');
+  L.push('');
+  L.push('Computed entirely in the browser. No data left this machine.');
+  dl(L.join('\n'),'lattice117-rota-record.txt','text/plain');
+});
+const KINDTXT={rest:'rest between shifts', break:'break on a long shift', overlap:'overlapping shifts'};
 
 function ingestCsv(text){
   const rows=parseCsv(text);
@@ -666,7 +842,12 @@ $('loadExCsv').addEventListener('click',async()=>{
   try{ ingestCsv(await (await fetch('example-route-sheet.csv')).text()); }
   catch(err){ $('err').textContent='Could not load the example: '+err.message; }
 });
-$('runCsv').addEventListener('click',()=>go(csvToSpec));
+$('runCsv').addEventListener('click',()=>{
+  if(MODE==='rota'){
+    $('err').textContent='';
+    runRota().catch(e=>{ $('err').textContent=e.message; });
+  } else go(csvToSpec);
+});
 
 const dropCsv=$('dropCsv');
 ['dragenter','dragover'].forEach(ev=>dropCsv.addEventListener(ev,e=>{e.preventDefault();dropCsv.classList.add('over')}));
@@ -738,7 +919,10 @@ $('removeLicence').addEventListener('click', async()=>{ clearLicence(); await re
 refreshTier();
 
 loadWasm().then(()=>{
-  ['run','loadEx','pickCsv','loadExCsv'].forEach(id=>$(id).disabled=false);
+  // The rota path needs no WASM — it is exact integer arithmetic — but the
+  // buttons enable together so the page has one ready state, not two.
+  ['run','loadEx','pickCsv','loadExCsv','pickRota','loadExRota']
+    .forEach(id=>$(id).disabled=false);
 }).catch(e=>{
   $('engineBadge').textContent='engine: failed to load';
   $('err').textContent='Could not load the WebAssembly module: '+e.message+

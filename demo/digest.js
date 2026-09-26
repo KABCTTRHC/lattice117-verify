@@ -90,11 +90,60 @@ export function canonicalise(routes, verdict) {
   });
 }
 
-/** Canonical SHA-256 over the inputs and the verdict, lowercase hex. */
-export async function verdictDigest(routes, verdict) {
-  const data = new TextEncoder().encode(canonicalise(routes, verdict));
+/** SHA-256 of a canonical string, lowercase hex. Both modes hash through here. */
+async function sha256(canon) {
+  const data = new TextEncoder().encode(canon);
   const subtle = globalThis.crypto?.subtle
     ?? (await import('node:crypto')).webcrypto.subtle;
   const buf = await subtle.digest('SHA-256', data);
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Canonical SHA-256 over the inputs and the verdict, lowercase hex. */
+export async function verdictDigest(routes, verdict) {
+  return sha256(canonicalise(routes, verdict));
+}
+
+/* ---- rota mode -----------------------------------------------------------
+   A second canonicalisation for the rest/break check. Same discipline, own
+   shape: a rota is people and shifts, not routes and stops, and forcing it
+   through the routing canon would produce a hash whose structure lied about
+   what was checked.
+
+   Absolute shift times are hashed as EXACT INTEGER MINUTES rather than Q16.16.
+   Minutes since the civil epoch run to tens of millions, which overflows
+   Q16.16 entirely; they are already exact integers, so scaling them would add
+   risk and remove nothing. The differences the check turns on - rest gaps,
+   break shortfalls - are small, and those are hashed in Q16.16 where every
+   whole minute is exactly representable.
+
+   The thresholds are part of the canon. A record that did not pin them could
+   be reproduced against different rules and still match, which would make the
+   digest meaningless for the one thing it exists to prove.
+-------------------------------------------------------------------------- */
+
+/**
+ * @param {{id:string, shifts:{start:number,end:number,breakMins:number}[]}[]} people
+ * @param {{id:string, ok:boolean, breaches:{kind:string, q:{actual:number,expected:number,shortfall:number}}[]}[]} verdict
+ * @param {{restMinutes:number, longShiftMinutes:number, breakMinutes:number}} rules
+ */
+export function canonicaliseRota(people, verdict, rules) {
+  return JSON.stringify({
+    mode: 'lattice117.rota.v1',
+    rules: [rules.restMinutes * Q, rules.longShiftMinutes * Q, rules.breakMinutes * Q],
+    people: people.map((p) => [
+      p.id,
+      p.shifts.map((s) => [s.start, s.end, s.breakMins]),
+    ]),
+    verdict: verdict.map((v) => [
+      v.id,
+      v.ok,
+      v.breaches.map((b) => [b.kind, b.q.actual, b.q.expected, b.q.shortfall]),
+    ]),
+  });
+}
+
+/** SHA-256 over the rota canonical form, lowercase hex. */
+export async function rotaDigest(people, verdict, rules) {
+  return sha256(canonicaliseRota(people, verdict, rules));
 }

@@ -125,7 +125,16 @@ jobs:
         run: |
           cmp demo/digest.js excel-addin/digest.js
           cmp demo/digest.js npm/digest.js
+      - name: Rota rules are identical on every surface
+        run: |
+          cmp demo/rota.js excel-addin/rota.js
+          cmp demo/rota.js npm/rota.js
       - name: WASM is identical on every surface
         run: |
           cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
           cmp demo/lattice117_wasm.wasm excel-addin/lattice117_wasm.wasm
+      # Boundary cases decide whether a lawful rota gets flagged. A false
+      # positive at exactly 11 hours sends someone to rewrite a compliant
+      # roster; a false negative tells them an unlawful one is fine.
+      - name: Rota rest and break boundaries
+        run: node tests/rota.test.mjs
