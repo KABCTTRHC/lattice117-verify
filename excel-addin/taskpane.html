@@ -112,7 +112,7 @@ the previous stop. Names can be anything.</p>
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
-import { evaluateRota, humanMinutes, DISCLAIMER } from './rota.js';
+import { evaluateRota, humanMinutes, RULES_NOTE, CLOCK_NOTE } from './rota.js';
 
 const Q=65536, QMAX=32767, QMIN=-32768;
 let wasm=null, lastFailRows=[];
@@ -432,7 +432,8 @@ async function renderRota(rep){
     const dg=await rotaDigest(rep.people, rep.verdict, rep.rules);
     $('out').insertAdjacentHTML('beforeend','<div class="digest"><b>rota digest</b><br>'+dg+'</div>');
   }
-  $('out').insertAdjacentHTML('beforeend','<div class="note"><b>'+DISCLAIMER+'</b></div>');
+  $('out').insertAdjacentHTML('beforeend',
+    '<div class="note"><b>'+RULES_NOTE+'</b> '+CLOCK_NOTE+'</div>');
 }
 
 async function clearHighlight(){

@@ -471,7 +471,9 @@
     not legal advice.</b> It compares times against the thresholds below and nothing
     more. It knows nothing of opt-outs, young workers, compensatory rest or any
     collective agreement. A clear result is not a defence and a flagged one is not
-    an offence.</p>
+    an offence. Rest and shift lengths are measured in clock time: on the night the
+    clocks go forward, an 11-hour gap is only 10 real hours and is still reported
+    as clear.</p>
     <p class="note">One row per shift. You need who is working, when the shift starts
     and ends, and the break in minutes. A date column is used if present; otherwise
     put full date-times in the start and end columns. Night shifts that run past
@@ -511,7 +513,7 @@
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
-import { evaluateRota, humanMinutes, RULES, DISCLAIMER } from './rota.js';
+import { evaluateRota, humanMinutes, RULES, DISCLAIMER, RULES_NOTE, CLOCK_NOTE } from './rota.js';
 import { capRoutes, capRotaRows, splitBreaches, importsLeft, recordImport,
          LIMITS, UPSELL, UPSELL_ROTA } from './freetier.js';
 
@@ -1133,7 +1135,9 @@ async function runRota(){
       +`SHA-256 over these shifts and this result — the number a third party `
       +`re-computes to confirm it — is part of Pro.</span>`;
   $('rotaCert').disabled = !entitlement.certificate;
-  $('rotaDisclaimer').innerHTML='<b>'+DISCLAIMER+'</b>';
+  // Legal line emphasised, clock-time caveat plain — 322 characters of bold
+  // 13px dim text buries the half a user can act on.
+  $('rotaDisclaimer').innerHTML='<b>'+RULES_NOTE+'</b> '+CLOCK_NOTE;
   $('rotaPanel').style.display='';
 }
 

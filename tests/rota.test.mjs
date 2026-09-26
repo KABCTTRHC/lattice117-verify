@@ -8,7 +8,8 @@
  *
  * Run: node tests/rota.test.mjs
  */
-import { evaluateRota, RULES, breakToMinutes, toMinutes } from '../demo/rota.js';
+import { evaluateRota, RULES, breakToMinutes, toMinutes,
+         DISCLAIMER, RULES_NOTE, CLOCK_NOTE } from '../demo/rota.js';
 import { rotaDigest, canonicaliseRota } from '../demo/digest.js';
 import { readFileSync } from 'node:fs';
 
@@ -108,6 +109,41 @@ const d4 = await rotaDigest(nudged, r.verdict, r.rules);
 eq('moving one shift by one minute changes the digest', d1 !== d4, true);
 eq('canonical form contains no floating point',
    /\d+\.\d/.test(canonicaliseRota(r.people, r.verdict, r.rules)), false);
+
+/* The clock-time convention is the one case where this check is knowingly
+   optimistic (see docs/WTR-REG10-CLOCK-CHANGE.md), so the caveat disclosing it
+   is treated as a product requirement, not copy. A surface that emphasised the
+   legal line and dropped the caveat would be the worst of both. */
+console.log('\nDisclosure of the clock-time convention');
+eq('DISCLAIMER carries both parts',
+   DISCLAIMER === RULES_NOTE + ' ' + CLOCK_NOTE, true);
+eq('the caveat names the direction of the error',
+   /clocks go forward/.test(CLOCK_NOTE) && /10 real hours/.test(CLOCK_NOTE), true);
+for (const [surface, file] of [
+  ['browser page',     'demo/audit.html'],
+  ['Excel task pane',  'excel-addin/taskpane.html'],
+  ['Sheets template',  'sheets-addon/sidebar.template.html'],
+  ['Sheets bundle',    'sheets-addon/Sidebar.html'],
+]) {
+  const src = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  eq(`${surface} renders the clock-time caveat`, src.includes('CLOCK_NOTE'), true);
+}
+// audit.html states the same caveat statically, before any CSV is chosen — a
+// legal notice should not depend on a module having loaded. Static text drifts,
+// so it is pinned to the module's wording here rather than trusted.
+{
+  const flat = (t) => t.replace(/\s+/g, ' ');
+  const page = flat(readFileSync(new URL('../demo/audit.html', import.meta.url), 'utf8'));
+  const firstSentence = CLOCK_NOTE.slice(0, CLOCK_NOTE.indexOf('. ') + 1);
+  eq('audit.html states the caveat before upload too', page.includes(flat(firstSentence)), true);
+}
+
+// Every copy of the module must agree, or one surface disclaims differently.
+for (const copy of ['npm/rota.js', 'excel-addin/rota.js']) {
+  eq(`${copy} matches demo/rota.js`,
+     readFileSync(new URL('../' + copy, import.meta.url), 'utf8')
+       === readFileSync(new URL('../demo/rota.js', import.meta.url), 'utf8'), true);
+}
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

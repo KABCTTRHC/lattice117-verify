@@ -263,11 +263,45 @@ choice that no longer has anywhere to be documented — which is why it went
 unnoticed through four surfaces, three test suites and nine device captures.
 **[ARGUE]**
 
-Deliberately left unfixed at the time of writing. It changes published verdict
-digests, and the right answer is a legal question about reg. 10 rather than an
-engineering one. Recommend stating the convention in `DISCLAIMER` and offering
-elapsed-time rest as an explicit, digest-affecting rule flag — which, by §7.4,
-would have to enter the canonical form. **[ARGUE]**
+**Which reading is right was then investigated rather than left open**, and the
+answer is elapsed time. `docs/WTR-REG10-CLOCK-CHANGE.md` has the note and the
+sources; three arguments converge. Reg. 10 is drafted in durations — "not less
+than eleven consecutive hours", in "each 24-hour period", on a civil day that
+is 23 hours long. The Regulations are health-and-safety law and the protected
+interest is actual recovery, which a clock change does not supply. And the
+closest regulated regime has already settled it in practice: **drivers' hours
+under Regulation (EC) 561/2006 are recorded by tachographs that store UTC**,
+displaying local time but never recording it, precisely so that a clock change
+cannot alter a rest period. **[EVIDENCE — sources in the note]**
+
+Cite that last one in the paper. A sector with more enforcement and more
+litigation than any other removed local time from the measurement entirely; it
+is not authority on reg. 10, but it is the best available indication of what
+eleven hours' rest means, and it is a *reproducibility* argument as much as a
+legal one. UTC is the canonical form for time. **[ARGUE]**
+
+So the arithmetic is not in doubt and the law is not in much doubt either — and
+the two still disagreed for as long as nobody wrote the convention down.
+
+What was done about it, which is the part worth reporting honestly:
+
+- **Disclosed, not silently fixed.** `DISCLAIMER` now states the clock-time
+  convention and names the spring-forward night. It is not in the canonical
+  form, so no published digest moved. **[EVIDENCE]**
+- **Not fixed with `Date`.** Computing elapsed time from the host zone would
+  reintroduce the defect the integer parser exists to prevent, and would fail
+  `tests/timezone.test.mjs`. The tachograph answer is the right one: measure in
+  a reference with no DST in it. **[ARGUE]**
+- **The real fix is a versioned schema change.** Elapsed rest needs a *declared*
+  UTC offset per shift, supplied as data and refused by name when absent. By
+  §7.4 that offset changes the verdict, so it must enter the canonical form,
+  which moves every rota digest — `lattice117.rota.v2`, not a patch. Specified
+  in the note; deliberately not implemented here. **[EVIDENCE]**
+
+That sequence is the paper's practical thesis in miniature: the defect was
+found by writing down a limitation, resolved by reading the statute, disclosed
+in one line at no cost to reproducibility, and its correct repair turns out to
+be a change to the canonical form. Not one step of it was arithmetic. **[ARGUE]**
 
 ### 7.6 Synthesis — a taxonomy
 
@@ -303,7 +337,9 @@ Do not let a reviewer find these first.
 - Vehicle capacity is not yet a hard constraint. **[EVIDENCE]**
 - Rest is measured in civil time, not elapsed time, so the engine over-reports
   compliance by one hour on the spring-forward night — once a year, in the
-  unsafe direction. See §7.5. **[EVIDENCE]**
+  unsafe direction. Disclosed in `DISCLAIMER`; the reading of reg. 10 that makes
+  it a defect, and the versioned fix, are in
+  `docs/WTR-REG10-CLOCK-CHANGE.md`. See §7.5. **[EVIDENCE]**
 
 ## 10. What this does not prove
 

@@ -57,9 +57,35 @@ export const RULES = Object.freeze({
   breakMinutes: 20,
 });
 
-export const DISCLAIMER =
+/* The clock-time convention is stated here because it is the one thing a user
+   cannot infer from the output. Rest and shift lengths are measured in civil
+   (clock) minutes, so on the night the clocks go forward an 11-hour gap is
+   10 real hours and this check reports it clear.
+
+   WTR 1998 reg. 10 says "not less than eleven consecutive hours", which reads
+   as a duration, and the regulated analogue agrees: digital tachographs record
+   drivers' hours in UTC precisely so a clock change cannot alter a rest period.
+   On that reading this check is optimistic on one night a year, in the unsafe
+   direction, so it says so rather than leaving the user to find out.
+
+   See §7.5 of docs/WHITEPAPER-OUTLINE-determinism.md. Measuring elapsed time
+   instead needs a declared UTC offset per shift, which by §7.4 must enter the
+   canonical form — a schema change, not a one-line fix. */
+export const RULES_NOTE =
   'Indicative mathematical check against configured rest and break rules ' +
   '(11h inter-shift rest, 20m break over 6h) — not legal advice.';
+
+export const CLOCK_NOTE =
+  'Rest and shift lengths are measured in clock time: on the night the clocks ' +
+  'go forward, an 11-hour gap is only 10 real hours and is still reported as ' +
+  'clear. Check clock-change nights by hand.';
+
+/* Composed, not duplicated, so a surface that prints only DISCLAIMER — the
+   exported evidence block does — still carries the clock-time caveat. Surfaces
+   that want the legal line emphasised and the caveat plain render the two
+   parts; they cannot render one and silently drop the other, because
+   tests/rota.test.mjs asserts every surface references both. */
+export const DISCLAIMER = RULES_NOTE + ' ' + CLOCK_NOTE;
 
 /* ---- time parsing, without Date ------------------------------------------
 

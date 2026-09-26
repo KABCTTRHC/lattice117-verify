@@ -120,7 +120,7 @@ const WASM_B64 = "__WASM_B64__";
 
 const $ = (id) => document.getElementById(id);
 const { verdictDigest, rotaDigest } = L117_DIGEST;
-const { evaluateRota, humanMinutes, DISCLAIMER } = L117_ROTA;
+const { evaluateRota, humanMinutes, RULES_NOTE, CLOCK_NOTE } = L117_ROTA;
 const { verifyLicence, currentEntitlement, saveLicence, clearLicence } = L117_LICENCE;
 const { capRoutes, capRotaRows, splitBreaches, UPSELL, UPSELL_ROTA } = L117_FREETIER;
 
@@ -387,7 +387,8 @@ async function runRota(grid, headers, map){
     html += `<div class="note">${rep.rejected.length} row(s) skipped — times could not be read.</div>`;
   $('out').innerHTML = html;
   await emitDigest(() => rotaDigest(rep.people, rep.verdict, rep.rules), 'rota digest');
-  $('out').insertAdjacentHTML('beforeend', `<div class="note"><b>${DISCLAIMER}</b></div>`);
+  $('out').insertAdjacentHTML('beforeend',
+    `<div class="note"><b>${RULES_NOTE}</b> ${CLOCK_NOTE}</div>`);
 }
 
 async function emitDigest(compute, label){
