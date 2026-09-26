@@ -33,6 +33,24 @@ export const FREE_TIER = Object.freeze({
   label: 'Free',
 });
 
+/**
+ * What each paid tier grants.
+ *
+ * The split is deliberate: Standard removes the cap, Pro adds the
+ * digest-sealed certificate. The certificate is the part with durable value —
+ * a feasibility check is a moment, a reproducible record of it is something a
+ * customer keeps in a compliance folder — so it is what the higher price buys.
+ *
+ * An unrecognised tier degrades to Standard rather than Pro. A key that was
+ * mis-issued should under-deliver and get reported, not silently hand out the
+ * paid feature.
+ */
+const TIERS = Object.freeze({
+  standard: { maxRounds: Infinity, certificate: false, label: 'Standard' },
+  pro:      { maxRounds: Infinity, certificate: true,  label: 'Pro' },
+  team:     { maxRounds: Infinity, certificate: true,  label: 'Team' },
+});
+
 const unb64u = (s) => {
   const pad = s.replace(/-/g, '+').replace(/_/g, '/');
   const bin = atob(pad + '='.repeat((4 - (pad.length % 4)) % 4));
@@ -69,11 +87,12 @@ export async function verifyLicence(licence) {
     if (p.exp * 1000 < Date.now()) {
       return { ...FREE_TIER, reason: `expired ${new Date(p.exp * 1000).toISOString().slice(0, 10)}` };
     }
+    const grant = TIERS[p.tier] ?? TIERS.standard;
     return {
       tier: p.tier,
-      maxRounds: Infinity,
-      certificate: true,
-      label: p.tier === 'team' ? 'Team' : 'Pro',
+      maxRounds: grant.maxRounds,
+      certificate: grant.certificate,
+      label: grant.label,
       email: p.sub,
       expires: new Date(p.exp * 1000),
     };

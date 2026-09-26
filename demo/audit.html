@@ -68,6 +68,22 @@
   .digest b{color:var(--ink-dim)}
   .err{color:var(--bad);font:12.5px var(--mono);margin-top:10px;white-space:pre-wrap}
   .note{font-size:13px;color:var(--ink-dim);margin:12px 0 0}
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:6px}
+  .tier{border:1px solid var(--line);border-radius:9px;padding:15px;background:var(--panel-2);
+        display:flex;flex-direction:column}
+  .tier.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .tier h3{margin:0 0 2px;font:700 14px var(--sans)}
+  .tier .price{font:800 26px/1.1 var(--mono);letter-spacing:-.02em;margin:6px 0 2px}
+  .tier .per{font-size:11.5px;color:var(--ink-faint);margin-bottom:12px}
+  .tier ul{list-style:none;margin:0 0 14px;padding:0;font-size:12.5px;flex:1}
+  .tier li{padding:4px 0 4px 18px;position:relative;color:var(--ink-dim)}
+  .tier li.yes::before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  .tier li.no::before{content:"—";position:absolute;left:0;color:var(--ink-faint)}
+  .tier a.buy{display:block;text-align:center;text-decoration:none;font:600 13px var(--sans);
+              padding:9px 14px;border-radius:7px;border:1px solid var(--accent);
+              background:var(--accent);color:#fff}
+  .tier a.buy.ghost{background:var(--panel);color:var(--ink);border-color:var(--line)}
+  .tier .current{text-align:center;font:600 12px var(--sans);color:var(--ok);padding:9px 0}
   code{font-family:var(--mono);font-size:.92em;background:var(--panel-2);padding:1px 5px;border-radius:4px}
   footer{margin-top:28px;font-size:12.5px;color:var(--ink-faint)}
   a{color:var(--accent)}
@@ -98,6 +114,55 @@
   <span class="badge">no server · no upload · works offline</span>
   <span class="badge"><a href="index.html" style="text-decoration:none;color:inherit">single-round view →</a></span>
   <span class="badge" id="tierBadge">tier: …</span>
+</div>
+
+<div class="panel" id="pricingPanel">
+  <h2>Plans</h2>
+  <div class="tiers">
+    <div class="tier">
+      <h3>Free</h3>
+      <div class="price">£0</div>
+      <div class="per">no card, no account</div>
+      <ul>
+        <li class="yes">One round per audit</li>
+        <li class="yes">Names the stop, arrival, window and deficit</li>
+        <li class="yes">Runs entirely on your machine</li>
+        <li class="no">Verdict certificate</li>
+      </ul>
+      <div class="current" id="freeMark">You are on this plan</div>
+    </div>
+
+    <div class="tier">
+      <h3>Standard</h3>
+      <div class="price">£29</div>
+      <div class="per">per month</div>
+      <ul>
+        <li class="yes">Unlimited rounds, whole fleets</li>
+        <li class="yes">CSV route sheets and rota presets</li>
+        <li class="yes">Runs entirely on your machine</li>
+        <li class="no">Verdict certificate</li>
+      </ul>
+      <a class="buy ghost" id="buyStandard" rel="noopener">Subscribe</a>
+    </div>
+
+    <div class="tier featured">
+      <h3>Pro</h3>
+      <div class="price">£99</div>
+      <div class="per">per month</div>
+      <ul>
+        <li class="yes">Everything in Standard</li>
+        <li class="yes"><b>Digest-sealed verdict certificate</b></li>
+        <li class="yes">Reproducible SHA-256 anyone can re-check</li>
+        <li class="yes">JSON audit report export</li>
+      </ul>
+      <a class="buy" id="buyPro" rel="noopener">Subscribe</a>
+    </div>
+  </div>
+  <p class="note"><b>How it works.</b> Pay through Stripe and your licence key is
+  issued to the email address you pay with. Paste it below to unlock immediately —
+  the key is checked by public-key signature <i>in this browser</i>. There is no
+  account to create, no server to log into, and your schedule still never leaves
+  this machine.</p>
 </div>
 
 <div class="panel" id="licencePanel">
@@ -204,6 +269,26 @@
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest } from './digest.js';
+
+/* ---- Stripe ------------------------------------------------------------
+   Drop your two live Payment Link URLs in here and nothing else changes.
+   Create them at dashboard.stripe.com -> Payment Links; they are free to
+   make and need no integration, no server and no webhook. Turn ON "collect
+   customer email" so you know where to send the key.
+
+   Fulfilment is deliberately manual to begin with: Stripe emails you the
+   payment, you run
+
+       node licence/issue.mjs issue <their-email> standard 1
+       node licence/issue.mjs issue <their-email> pro 1
+
+   and reply with the key. Do not build a payment integration for your first
+   twenty customers - the integration is the easy part to add later, and
+   revenue is not.
+
+   Left as-is, the buttons say so rather than 404ing in front of a buyer.  */
+const STANDARD_STRIPE_URL = 'REPLACE_WITH_STANDARD_PAYMENT_LINK';
+const PRO_STRIPE_URL      = 'REPLACE_WITH_PRO_PAYMENT_LINK';
 let entitlement = { tier:'free', maxRounds:1, certificate:false, label:'Free' };
 
 async function refreshTier(){
@@ -221,6 +306,7 @@ async function refreshTier(){
         ? `<br><span style="color:var(--bad)">licence rejected: ${entitlement.reason}</span>` : '');
   }
   $('cert').disabled = !entitlement.certificate;
+  paintPlans();
 }
 
 const Q=65536, QMAX=32767, QMIN=-32768;
@@ -496,7 +582,14 @@ async function render(rep){
   $('allPanel').style.display='';
 
   const dg=await digestOf(rep);
-  $('digest').innerHTML=`<b>audit digest (SHA-256, computed in this browser):</b><br>${dg}`;
+  // The digest IS the Pro feature. The Excel pane already withheld it on the
+  // free tier; this page was printing it in full, so the thing being charged
+  // for could be copied off the screen.
+  $('digest').innerHTML = entitlement.certificate
+    ? `<b>audit digest (SHA-256, computed in this browser):</b><br>${dg}`
+    : `<b>audit digest</b><br><span style="color:var(--ink-faint)">` +
+      `The reproducible SHA-256 over these inputs and this verdict — the number ` +
+      `a third party re-computes to confirm your result — is part of Pro.</span>`;
   lastReport={rep,pct,failed,dg,when:new Date().toISOString()};
 }
 
@@ -606,6 +699,32 @@ $('json').addEventListener('click',()=>{
     rounds:rep.results.map(({spec,...r})=>r),audit_digest_sha256:dg},null,2),
     'lattice117-audit-report.json','application/json');
 });
+
+/* Marks the plan you are actually on, and points the two buttons at Stripe.
+   An unreplaced placeholder is shown as such: a dead link in front of someone
+   holding a card is worse than an honest "not live yet". */
+function paintPlans(){
+  const live = u => typeof u === 'string' && /^https:\/\//.test(u);
+  const tier = entitlement.tier;
+  $('freeMark').style.display = tier === 'free' ? '' : 'none';
+  for(const [id,url,name] of [['buyStandard',STANDARD_STRIPE_URL,'standard'],
+                              ['buyPro',PRO_STRIPE_URL,'pro']]){
+    const a=$(id);
+    const superseded = name==='standard' && entitlement.certificate;
+    if(tier===name || superseded){
+      a.replaceWith(Object.assign(document.createElement('div'),
+        {className:'current', id,
+         textContent: superseded ? 'Included in Pro' : 'Your current plan'}));
+      continue;
+    }
+    if(live(url)){ a.href=url; a.target='_blank'; a.removeAttribute('aria-disabled'); }
+    else { a.removeAttribute('href'); a.setAttribute('aria-disabled','true');
+           a.style.opacity='.55'; a.style.cursor='not-allowed';
+           a.title='Payment link not configured yet';
+           a.textContent='Payment link not set'; }
+  }
+}
+paintPlans();
 
 $('applyLicence').addEventListener('click', async()=>{
   const k=$('licenceKey').value.trim();
