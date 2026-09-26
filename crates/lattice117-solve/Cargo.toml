@@ -16,3 +16,9 @@ name = "lattice117_solve"
 # Sheets sidebar. Every dependency is a new way for the "opens no sockets,
 # 21 KB, nothing leaves your machine" claim to become false.
 [dependencies]
+
+# Present for tests/referee.rs only. The solver must be gradable by the
+# verifier without ever being able to reach into it at runtime, so this stays a
+# dev-dependency and [dependencies] above stays empty.
+[dev-dependencies]
+lattice117-verify = { path = "../lattice117-verify" }

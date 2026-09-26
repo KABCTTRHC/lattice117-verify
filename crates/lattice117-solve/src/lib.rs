@@ -49,9 +49,14 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(not(test), no_std)]
 
+// `Vec` is the only heap type this crate needs, so it takes `alloc` rather
+// than `std` — the WASM payload is the product's headline number.
+extern crate alloc;
+
 pub mod fixed;
 pub mod kondo;
 pub mod miqubo;
+pub mod repair;
 
 /// Q16.16 fixed point on `i32`: one integer scaled by 65,536.
 pub type Q16 = i32;

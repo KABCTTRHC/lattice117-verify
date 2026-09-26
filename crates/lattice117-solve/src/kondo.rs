@@ -18,8 +18,7 @@
 // ═══════════════════════════════════════════════════════
 // Q16.16 CONSTANTS
 // ═══════════════════════════════════════════════════════
-extern crate alloc;
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 
 pub const Q16_ONE: i32 = 65536;
 
@@ -133,7 +132,7 @@ pub fn kondo_cluster_nodes(
         .iter()
         .map(|&c| KondoCluster {
             center_idx: c as u32,
-            members: vec![c as u32],
+            members: alloc::vec![c as u32],
             shielding_radius: critical_point_q16,
             resonance_centroid: Q16_ONE,
         })
@@ -237,8 +236,8 @@ pub fn build_inter_cluster_qubo(clusters: &[KondoCluster], inter_cluster_distanc
 /// solve) fall back to `0` here — callers should check `validate_tour`
 /// first if that distinction matters, which `solve_logistics_kondo` does.
 pub fn extract_cluster_tour(qubo_result: u32, k: usize) -> Vec<usize> {
-    let mut tour = vec![0usize; k];
-    let mut position_filled = vec![false; k];
+    let mut tour = alloc::vec![0usize; k];
+    let mut position_filled = alloc::vec![false; k];
 
     for cluster in 0..k {
         for position in 0..k {
@@ -255,8 +254,8 @@ pub fn extract_cluster_tour(qubo_result: u32, k: usize) -> Vec<usize> {
 /// True iff every cluster is visited exactly once and every position is
 /// filled exactly once — the QUBO's two constraint families both satisfied.
 pub fn validate_tour(result: u32, k: usize) -> bool {
-    let mut cluster_visits = vec![0u32; k];
-    let mut position_visits = vec![0u32; k];
+    let mut cluster_visits = alloc::vec![0u32; k];
+    let mut position_visits = alloc::vec![0u32; k];
 
     for cluster in 0..k {
         for position in 0..k {
@@ -425,8 +424,8 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
     let m = ordered.len().min(MAX_NODES_PER_CLUSTER);
     ordered.truncate(m);
 
-    let mut linear_costs = vec![0i32; m];
-    let mut coupling_costs = vec![0i32; m.saturating_sub(1)];
+    let mut linear_costs = alloc::vec![0i32; m];
+    let mut coupling_costs = alloc::vec![0i32; m.saturating_sub(1)];
 
     for i in 0..(m.saturating_sub(1)) {
         let n1 = ordered[i] as usize;
@@ -450,8 +449,8 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
         *cost = -inclusion_bias;
     }
 
-    let mut cost = vec![[0i32; 2]; m];
-    let mut best_prev: Vec<[i8; 2]> = vec![[0i8; 2]; m];
+    let mut cost = alloc::vec![[0i32; 2]; m];
+    let mut best_prev: Vec<[i8; 2]> = alloc::vec![[0i8; 2]; m];
 
     cost[0][0] = 0;
     cost[0][1] = linear_costs[0];
@@ -490,7 +489,7 @@ pub fn solve_intra_cluster_chain(cluster: &KondoCluster, distance_matrix: &[i32]
     }
 
     // Same tie-break direction as above, for the same reason.
-    let mut states = vec![0i32; m];
+    let mut states = alloc::vec![0i32; m];
     states[m - 1] = if cost[m - 1][0] < cost[m - 1][1] { 0 } else { 1 };
     for i in (0..m - 1).rev() {
         states[i] = best_prev[i + 1][states[i + 1] as usize] as i32;
@@ -547,7 +546,7 @@ pub fn solve_logistics_kondo(
     let phase1_ns = 0u64;
 
     let k = clusters.len();
-    let mut inter_dist = vec![0i32; k * k];
+    let mut inter_dist = alloc::vec![0i32; k * k];
     for (i, c1) in clusters.iter().enumerate() {
         for (j, c2) in clusters.iter().enumerate() {
             inter_dist[i * k + j] = distance_matrix[c1.center_idx as usize * n_nodes + c2.center_idx as usize];
@@ -620,7 +619,7 @@ mod tests {
     /// (node i at position i * unit), so distances are simple and every
     /// assertion below is checkable by hand.
     fn line_matrix(n: usize, unit_q16: i32) -> Vec<i32> {
-        let mut m = vec![0i32; n * n];
+        let mut m = alloc::vec![0i32; n * n];
         for i in 0..n {
             for j in 0..n {
                 m[i * n + j] = (i as i32 - j as i32).abs() * unit_q16;
@@ -639,7 +638,7 @@ mod tests {
 
         let mut all_members: Vec<u32> = clusters.iter().flat_map(|c| c.members.clone()).collect();
         all_members.sort_unstable();
-        assert_eq!(all_members, vec![0, 1, 2], "every node must appear exactly once across all clusters");
+        assert_eq!(all_members, alloc::vec![0, 1, 2], "every node must appear exactly once across all clusters");
 
         let mut centers: Vec<u32> = clusters.iter().map(|c| c.center_idx).collect();
         centers.sort_unstable();
@@ -655,7 +654,7 @@ mod tests {
         // value (dist<<16 is huge relative to shield_sq), not the tiny value
         // a `dist << (16 / shield_sq)` misparse would produce.
         let n = 2;
-        let matrix = vec![0, 100 * Q16_ONE, 100 * Q16_ONE, 0];
+        let matrix = alloc::vec![0, 100 * Q16_ONE, 100 * Q16_ONE, 0];
         let clusters = kondo_cluster_nodes(&matrix, n, Q16_858_MILLI);
         // With n_nodes == k_target == 2, both nodes become centers, so this
         // test's real value is just that clustering completes without the
@@ -713,7 +712,7 @@ mod tests {
         let clusters: Vec<KondoCluster> = (0..5)
             .map(|i| KondoCluster {
                 center_idx: i,
-                members: vec![i],
+                members: alloc::vec![i],
                 shielding_radius: Q16_858_MILLI,
                 resonance_centroid: Q16_ONE,
             })
@@ -756,7 +755,7 @@ mod tests {
         let k = 3;
         let result: u32 = (1 << 0) | (1 << 4) | (1 << 8);
         assert!(validate_tour(result, k));
-        assert_eq!(extract_cluster_tour(result, k), vec![0, 1, 2]);
+        assert_eq!(extract_cluster_tour(result, k), alloc::vec![0, 1, 2]);
     }
 
     #[test]
