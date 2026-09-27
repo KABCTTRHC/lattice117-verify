@@ -113,8 +113,19 @@ fn tour_cost(tour: &[usize], matrix: &[Q16], n: usize) -> i64 {
 /// `max_rounds` rather than by convergence, so a matrix that violates the
 /// triangle inequality cannot spin it forever. Every comparison is integer.
 ///
-/// The endpoints are pinned: `tour[0]` and `tour[len - 1]` are the depot, and a
-/// vehicle that starts somewhere else is a different problem.
+/// # Both endpoints are pinned, and that is correct HERE
+///
+/// `depot_first` closes the tour: `tour[0]` and `tour[len - 1]` are both the
+/// depot. Reversing any interior segment is then the standard 2-opt move and
+/// pinning the ends costs nothing, because they are the same node.
+///
+/// **`sovereign_api/kondo_router` deliberately differs.** Its
+/// `solve_logistics_kondo` returns an OPEN walk from the depot, and there the
+/// tail must be free: with it pinned, no sequence of moves can change which
+/// node the walk finishes on, so a walk ending in the wrong place is stuck
+/// there. That cost a seventeen-node ring 37.6% above its own optimum before it
+/// was found. The two copies are not out of sync — they operate on different
+/// shapes, and neither form is right for the other's.
 fn two_opt(tour: &mut [usize], matrix: &[Q16], n: usize, max_rounds: usize) -> i64 {
     let at = |a: usize, b: usize| matrix[a * n + b] as i64;
     let mut saved: i64 = 0;
@@ -279,31 +290,33 @@ mod tests {
         m
     }
 
-    /// Nodes equally spaced on a circle of radius `r`, scaled to Q16.16 and
-    /// rounded — the same shape as Fixture B, at whatever size a test wants.
-    /// The optimal tour is the perimeter, because the points are in convex
-    /// position.
-    fn circle(n: usize, r: i64) -> Vec<Q16> {
-        // Integer-only coordinates: cos/sin from a small fixed table would need
-        // a transcendental, so the points are placed on a scaled unit circle
-        // using exact rational approximations via repeated chord subdivision.
-        // Simpler and sufficient: use a regular polygon's vertices computed in
-        // integer millidegrees is still transcendental, so instead this builds
-        // the DISTANCE matrix directly from the chord formula's known structure:
-        // on a regular n-gon, the distance between vertices k apart depends only
-        // on k. The values are supplied by the caller-independent table below,
-        // generated once and checked against Fixture B.
-        let _ = r;
+    /// A regular n-gon's distance matrix, built from a chord table.
+    ///
+    /// On a regular polygon the distance between two vertices depends only on
+    /// how many vertices apart they are, so the matrix needs no coordinates and
+    /// no trigonometry at test time. Each entry is `2R sin(pi k / n)` km at
+    /// 30 km/h in minutes, scaled to Q16.16, for R = 10 km:
+    ///
+    /// ```text
+    /// [round(2*10*math.sin(math.pi*k/n)/30*60*65536) for k in range(n//2+1)]
+    /// ```
+    ///
+    /// The table has to be a REAL chord function or the tests mean nothing: the
+    /// theorem they rest on is that the optimal tour of points in convex
+    /// position is the hull order, and an invented monotone table is not points
+    /// in convex position. The first draft here was hand-written and a few
+    /// hundred ulps off the true chords — close enough to pass, which is worse
+    /// than failing.
+    fn circle(n: usize) -> Vec<Q16> {
         let chords: &[i64] = match n {
-            9 => &[0, 898_237, 1_684_301, 2_267_678, 2_582_119],
+            9 => &[0, 896_585, 1_685_029, 2_270_234, 2_581_614],
             _ => panic!("no chord table for n = {n}"),
         };
         let mut m = alloc::vec![0; n * n];
         for i in 0..n {
             for j in 0..n {
                 let d = (i as i64 - j as i64).unsigned_abs() as usize;
-                let k = d.min(n - d);
-                m[i * n + j] = chords[k] as Q16;
+                m[i * n + j] = chords[d.min(n - d)] as Q16;
             }
         }
         m
@@ -409,7 +422,7 @@ mod tests {
     #[test]
     fn the_convex_instance_that_was_83_9_percent_off_is_now_exact() {
         let n = 9;
-        let m = circle(n, 0);
+        let m = circle(n);
         let optimum: i64 = (0..n).map(|i| m[i * n + (i + 1) % n] as i64).sum();
         let out = solve_unassigned_default(&m, n);
         assert!(out.exact);

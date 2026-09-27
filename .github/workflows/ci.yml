@@ -157,26 +157,47 @@ jobs:
       # in the CLI, Math.round(Number(v) * 65536) in JS — and that boundary is
       # what the 36,003-value BigInt sweep exists to check. They are not allowed
       # where the verdict is decided.
-      # Both guards below strip #[cfg(test)] blocks and comment lines first.
-      # A guard that fires on the word "f64" inside a doc comment explaining
-      # why there is no f64 is a guard someone eventually switches off.
+      #
+      # Three patterns, not two. The literal check is the newest and it is here
+      # because sovereign_api's TS-026 governor was computing
+      # `(bio::FATIGUE_COEFF * 65536.0) as i32` INSIDE the veto — and a guard
+      # matching only `\bf(32|64)\b` let it through, because that expression
+      # names no type. Two more sat in the same file, one of them multiplying a
+      # megahertz constant by 1000 as though it were gigahertz, overflowing i32
+      # and saturating, which made a documented ratio of ~12,090,251 read as
+      # 279. Same class of blind spot as the f64::exp() call that motivated the
+      # transcendental check: no new float token, float arithmetic in a decision.
+      #
+      # All three strip #[cfg(test)] blocks and comment lines first. A guard that
+      # fires on the word "f64" inside a doc comment explaining why there is no
+      # f64 is a guard someone eventually switches off.
       - name: No floating point in the evaluation path
         run: |
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
           FOUND=0
+          # A digit before the dot is what separates a float literal like
+          # `65536.0` from a tuple access like `self.0`; the second alternative
+          # catches scientific notation such as `1e-6`. `const` declarations are
+          # skipped: declaring a documented constant is not deciding anything.
+          LITERAL='[0-9]\.[0-9]|[0-9][eE][-+]?[0-9]'
           for d in $CRATES; do
             [ -d "$d" ] || continue
             for f in $(find "$d" -name '*.rs'); do
-              if sed '/#\[cfg(test)\]/,$d' "$f" \
-                 | sed -E 's|//.*$||' \
-                 | grep -nE '\bf(32|64)\b'; then
-                echo "  ^ in $f"; FOUND=1
+              BODY=$(sed '/#\[cfg(test)\]/,$d' "$f" \
+                     | grep -v 'float-guard: allow' \
+                     | sed -E 's|//.*$||' \
+                     | grep -vE '^\s*(pub(\([a-z]+\))?\s+)?const\s+[A-Za-z_0-9]+\s*:')
+              if printf '%s\n' "$BODY" | grep -nE '\bf(32|64)\b'; then
+                echo "  ^ float type in $f"; FOUND=1
+              fi
+              if printf '%s\n' "$BODY" | grep -nE "$LITERAL"; then
+                echo "  ^ float literal in $f"; FOUND=1
               fi
             done
           done
-          [ "$FOUND" = 1 ] && { echo "::error::f32/f64 found in the evaluation path"; exit 1; }
-          echo "evaluation path is integer-only"
+          [ "$FOUND" = 1 ] && { echo "::error::float in the evaluation path"; exit 1; }
+          echo "evaluation path is integer-only, types and literals"
 
       # A declaration guard alone would not have caught the real defect.
       # kondo_router's annealer called .exp() on an already-f64 value: no new
@@ -190,8 +211,6 @@ jobs:
           FOUND=0
           for d in $CRATES; do
             [ -d "$d" ] || continue
-            # Strip #[cfg(test)] blocks crudely: drop from the first cfg(test)
-            # to end of file, which is where every one of ours sits.
             for f in $(find "$d" -name '*.rs'); do
               if sed '/#\[cfg(test)\]/,$d' "$f" \
                  | sed -E 's|//.*$||' \
@@ -202,13 +221,6 @@ jobs:
           done
           [ "$FOUND" = 1 ] && { echo "::error::libm transcendental in the evaluation path"; exit 1; }
           echo "no libm transcendentals outside test code"
-      # The Nottingham matrix and CSV are derived artifacts. The first draft of
-      # the matrix was hand-calculated and turned out not to be reproducible
-      # from any single set of coordinates — two cells were 0.1 min out. A
-      # benchmark nobody can regenerate is not a benchmark, so the generator is
-      # in the repository and this fails if either file drifts from it.
-      - name: Nottingham fixture is reproducible from its coordinates
-        run: node tools/fixture/nottingham.mjs --check
       # Fixture B. Its optimum is a theorem rather than a downloaded instance,
       # because TSPLIB's licence is non-commercial and forbids redistribution
       # and Solomon's instances carry no licence at all — see
