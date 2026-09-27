@@ -23,6 +23,7 @@
 //! | [`Q2_22`] | `Q<2, 22>` | 25 | ±4 | 2.38e-7 |
 //! | [`Q2_15`] | `Q<2, 15>` | 18 | ±4 | 3.05e-5 |
 //! | [`Q1_31`] | `Q<0, 31>` | 32 | ±1 | 4.66e-10 |
+//! | [`Q12_19`] | `Q<12, 19>` | 32 | ±4096 | 1.91e-6 |
 //!
 //! Note that what this codebase calls "Q16.16" is really 1 sign + 15 integer +
 //! 16 fractional bits in an `i32`. [`Q16_16`] is therefore `Q<15, 16>`, not
@@ -215,6 +216,94 @@ pub type Q2_15 = Q<2, 15>;
 /// Horner path uses.
 pub type Q1_31 = Q<0, 31>;
 
+/// High-precision intermediate buffer. 1 sign + 12 integer + 19 fractional.
+///
+/// Eight times finer than [`Q16_16`] — a resolution of `2^-19` ≈ 1.907e-6
+/// against `2^-16` ≈ 1.526e-5 — bought by giving up integer range: ±4,095
+/// instead of ±32,767.
+///
+/// # What it is for, and what it is not for
+///
+/// It is for **intermediate** values in a chain of Q16.16 operations, where the
+/// inputs and the answer are both comfortably inside ±4,095 but the arithmetic
+/// between them would otherwise lose bits to repeated truncation. Utilisation
+/// ratios are the clearest case: a pod's CPU request over a node's allocatable
+/// is a number between 0 and 1, and summing a hundred of those in Q16.16 throws
+/// away three decimal digits that Q12.19 keeps.
+///
+/// It is **not** a general replacement for Q16.16 and must not become one. The
+/// range is the reason: ±4,095 is under three days in a schedule measured in
+/// minutes,
+/// and [`crate::repair`] marks an off-sequence leg with `i32::MAX / 2`, which is
+/// not
+/// representable here at all. Converting a value that exceeds the range
+/// saturates, and a saturated capacity ceiling is a veto that does not fire.
+///
+/// Use [`q16_to_q12_19`] and [`q12_19_to_q16`] rather than `Q::convert`, not
+/// because they do anything different — they delegate — but because they are
+/// greppable, and the places this format is used should be a list someone can
+/// read.
+pub type Q12_19 = Q<12, 19>;
+
+/// Q16.16 raw → Q12.19 raw, saturating.
+///
+/// Widening the fraction by 3 bits is a left shift, so precision is gained and
+/// nothing is lost — but the integer part narrows from 15 bits to 12, so a
+/// magnitude above 4,095 saturates. That is why this returns the raw `i32` and
+/// why [`q16_fits_q12_19`] exists next to it: a caller that cannot tolerate
+/// saturation should ask first rather than discover it in a verdict.
+#[inline(always)]
+pub const fn q16_to_q12_19(raw_q16: i32) -> i32 {
+    let widened = (raw_q16 as i64) << 3;
+    saturate_i32(widened)
+}
+
+/// Q12.19 raw → Q16.16 raw.
+///
+/// Narrowing the fraction by 3 bits is an ARITHMETIC right shift, which floors
+/// toward negative infinity rather than truncating toward zero: `-1 >> 3` is
+/// `-1`, not `0`. That is the same rule [`Q::convert`] documents, and it is
+/// deliberate — a consistent direction is what makes the conversion
+/// reproducible, and floor is the direction the rest of this crate uses.
+///
+/// The integer part widens, so this never saturates.
+#[inline(always)]
+pub const fn q12_19_to_q16(raw_q12_19: i32) -> i32 {
+    raw_q12_19 >> 3
+}
+
+/// Whether a Q16.16 raw value survives the trip into Q12.19 unsaturated.
+///
+/// `±4,095.999998` is the representable range. Ask before converting anything
+/// that decides something.
+#[inline(always)]
+pub const fn q16_fits_q12_19(raw_q16: i32) -> bool {
+    let widened = (raw_q16 as i64) << 3;
+    widened >= i32::MIN as i64 && widened <= i32::MAX as i64
+}
+
+/// Saturating Q12.19 addition on raw values.
+#[inline(always)]
+pub const fn q12_19_add(a: i32, b: i32) -> i32 {
+    saturate_i32(a as i64 + b as i64)
+}
+
+/// Saturating Q12.19 subtraction on raw values.
+#[inline(always)]
+pub const fn q12_19_sub(a: i32, b: i32) -> i32 {
+    saturate_i32(a as i64 - b as i64)
+}
+
+/// Saturating Q12.19 multiplication on raw values.
+///
+/// The product of two Q12.19 values has 38 fractional bits, so the `i64`
+/// intermediate is shifted right by 19 to land back in Q12.19. Computed in
+/// `i64` because the intermediate needs up to 62 bits.
+#[inline(always)]
+pub const fn q12_19_mul(a: i32, b: i32) -> i32 {
+    saturate_i32(((a as i64) * (b as i64)) >> 19)
+}
+
 impl Q16_16 {
     /// Adopts a raw `Q16` from the telemetry wire format.
     ///
@@ -395,5 +484,111 @@ mod tests {
         let b: Q2_15 = a.convert();
         let c: Q2_22 = b.convert();
         assert_eq!(c.raw(), 1 << 22);
+    }
+    // ---- Q12.19 -----------------------------------------------------------
+
+    #[test]
+    fn q12_19_fits_an_i32_with_its_sign_bit() {
+        assert_eq!(Q12_19::TOTAL_BITS, 32);
+        assert_eq!(Q12_19::SCALE, 1 << 19);
+        // Eight times finer than Q16.16, which is the whole reason it exists.
+        assert_eq!(Q12_19::SCALE, Q16_16::SCALE * 8);
+    }
+
+    #[test]
+    fn the_round_trip_is_exact_for_anything_inside_the_range() {
+        // Q12.19 has MORE fractional bits, so a Q16.16 value that fits the
+        // narrower integer range survives the trip untouched.
+        for raw in [
+            0,
+            1,
+            -1,
+            65_536,
+            -65_536,
+            56_229,
+            4_095 * 65_536,
+            -4_095 * 65_536,
+        ] {
+            assert_eq!(q12_19_to_q16(q16_to_q12_19(raw)), raw, "raw {raw}");
+        }
+    }
+
+    #[test]
+    fn the_extra_precision_is_real_and_not_decorative() {
+        // One Q12.19 tick is an eighth of a Q16.16 tick. Three values that are
+        // all the same number in Q16.16 stay distinct in Q12.19.
+        let a = q16_to_q12_19(1) + 1;
+        let b = q16_to_q12_19(1) + 2;
+        assert_ne!(a, b, "Q12.19 must distinguish sub-Q16.16 differences");
+        // ...and collapse to the same Q16.16 value, which is the precision the
+        // buffer exists to hold on to between operations.
+        assert_eq!(q12_19_to_q16(a), q12_19_to_q16(b));
+    }
+
+    #[test]
+    fn a_value_past_the_narrower_integer_range_saturates_and_says_so() {
+        // 4,096 in Q16.16 is outside Q12.19's +/-4,095 integer range.
+        let too_big = 4_096 * 65_536;
+        assert!(!q16_fits_q12_19(too_big), "the range check must catch this");
+        assert_eq!(
+            q16_to_q12_19(too_big),
+            i32::MAX,
+            "and the conversion saturates"
+        );
+
+        // The case that would actually bite: repair's unreachable-leg sentinel.
+        assert!(
+            !q16_fits_q12_19(i32::MAX / 2),
+            "an i32::MAX/2 sentinel must never be silently squeezed into Q12.19"
+        );
+    }
+
+    #[test]
+    fn narrowing_floors_rather_than_truncating_toward_zero() {
+        // Arithmetic shift right: -1 >> 3 is -1, not 0. Consistent with
+        // Q::convert, and a consistent direction is what makes it reproducible.
+        assert_eq!(q12_19_to_q16(-1), -1);
+        assert_eq!(q12_19_to_q16(-7), -1);
+        assert_eq!(q12_19_to_q16(-8), -1);
+        assert_eq!(q12_19_to_q16(7), 0);
+    }
+
+    #[test]
+    fn q12_19_arithmetic_saturates_rather_than_wrapping() {
+        assert_eq!(q12_19_add(i32::MAX, 1), i32::MAX);
+        assert_eq!(q12_19_sub(i32::MIN, 1), i32::MIN);
+        assert_eq!(q12_19_mul(i32::MAX, i32::MAX), i32::MAX);
+    }
+
+    #[test]
+    fn q12_19_multiply_is_correct_on_hand_checkable_values() {
+        let one = 1 << 19;
+        assert_eq!(q12_19_mul(one, one), one, "1.0 * 1.0 == 1.0");
+        assert_eq!(q12_19_mul(one * 3, one * 4), one * 12);
+        let half = one / 2;
+        assert_eq!(q12_19_mul(half, half), one / 4);
+    }
+
+    /// The worked case the type was added for: summing a hundred utilisation
+    /// ratios. Q16.16 loses ground to repeated truncation; Q12.19 does not.
+    #[test]
+    fn a_hundred_ratios_accumulate_more_accurately_in_q12_19() {
+        // 1/3 of a unit, as close as each format can hold it.
+        let third_q16 = 65_536 / 3; // 21845, i.e. 0.33332
+        let third_q12 = (1 << 19) / 3; // 174762, i.e. 0.3333320
+        let mut sum_q16 = 0i64;
+        let mut sum_q12 = 0i64;
+        for _ in 0..100 {
+            sum_q16 += third_q16 as i64;
+            sum_q12 += third_q12 as i64;
+        }
+        // Exact answer is 33.3333...; measure each format's error in parts per
+        // million of a unit, integer arithmetic only.
+        let err_q16 = (100 * 65_536 / 3 - sum_q16).abs() * 1_000_000 / 65_536;
+        let err_q12 = (100 * (1 << 19) / 3 - sum_q12).abs() * 1_000_000 / (1 << 19);
+        assert!(
+            err_q12 < err_q16,
+            "Q12.19 accumulated error {err_q12} ppm should beat Q16.16's {err_q16} ppm"
+        );
     }
 }
