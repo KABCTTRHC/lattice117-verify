@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Lattice117 — demo cards</title>
+<style>
+  /* ===================================================================
+     VIDEO CARDS — not a product page.
+
+     This renders the terminal and closing frames of brand/demo.mp4. It
+     lives under tools/ rather than demo/ because nothing here is
+     shippable UI: it exists to be photographed at 1920x1080.
+
+     THE TEXT IS NOT IN THIS FILE. `record-demo.mjs` runs the real
+     commands, captures their stdout, and injects it. A card with the
+     output typed into it would go stale the first time a digest moved
+     and nobody would notice until a customer ran the command.
+     =================================================================== */
+  :root{
+    --bg:#05070b; --ink:#e8eef6; --ink-dim:#93a3b8; --ink-faint:#64748b;
+    --ok:#10b981; --bad:#f43f5e; --accent:#38bdf8; --rust:#c2632c;
+    --line:rgba(255,255,255,.09);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    display:grid;place-items:center;overflow:hidden;-webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(70% 55% at 50% 40%, rgba(56,189,248,.075), transparent 70%),
+      radial-gradient(50% 45% at 72% 66%, rgba(194,99,44,.045), transparent 70%);
+  }
+  .card{display:none;width:100%;height:100%;place-items:center}
+  body[data-card="term"]  .card.term  {display:grid}
+  body[data-card="close"] .card.close {display:grid}
+
+  /* ---- terminal ---------------------------------------------------- */
+  .term .shell{width:min(88vw,1500px)}
+  .term h3{
+    font:700 11px/1 var(--sans);letter-spacing:.34em;text-transform:uppercase;
+    color:var(--ink-faint);margin:0 0 16px;text-align:center;
+  }
+  .win{
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:rgba(8,11,17,.94);box-shadow:0 30px 80px -30px rgba(0,0,0,.9);
+  }
+  .bar{
+    display:flex;align-items:center;gap:8px;padding:11px 15px;
+    border-bottom:1px solid var(--line);background:rgba(255,255,255,.025);
+  }
+  .bar i{width:11px;height:11px;border-radius:50%;background:#2b3546;display:block}
+  .bar .path{
+    margin-left:10px;font:600 11.5px var(--mono);color:var(--ink-faint);letter-spacing:.02em;
+  }
+  pre{
+    margin:0;padding:20px 24px;font:14px/1.62 var(--mono);white-space:pre-wrap;
+    color:var(--ink-dim);max-height:62vh;overflow:hidden;
+  }
+  pre .cmd{color:var(--accent);font-weight:700}
+  pre .ok{color:var(--ok);font-weight:700}
+  pre .bad{color:var(--bad);font-weight:700}
+  pre .hi{color:var(--ink)}
+  pre .dim{color:var(--ink-faint)}
+
+  /* ---- closing ----------------------------------------------------- */
+  .close .inner{text-align:center;display:grid;justify-items:center;gap:0}
+  .close .marks{display:flex;align-items:center;gap:40px;margin-bottom:34px}
+  .close .marks img.product{width:190px;height:190px;display:block}
+  .close .marks .div{width:1px;height:120px;background:var(--line)}
+  .close .marks img.company{width:230px;height:auto;display:block;opacity:.92}
+  .close .line{
+    font:700 clamp(22px,2.5vw,34px)/1.45 var(--sans);letter-spacing:-.015em;max-width:15em;
+  }
+  .close .line em{font-style:normal;color:var(--accent)}
+  .close .rule{width:300px;height:1px;background:var(--line);margin:30px 0 22px}
+  .close .url{font:600 14px var(--mono);color:var(--ink-dim);letter-spacing:.02em}
+  .close .sub{
+    font:600 10.5px var(--sans);letter-spacing:.32em;text-transform:uppercase;
+    color:var(--ink-faint);margin-top:14px;
+  }
+</style>
+</head>
+<body data-card="term">
+
+  <section class="card term">
+    <div class="shell">
+      <h3 id="termTitle">Independent re-derivation</h3>
+      <div class="win">
+        <div class="bar"><i></i><i></i><i></i><span class="path" id="termPath">bash</span></div>
+        <pre id="termOut"></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="card close">
+    <div class="inner">
+      <div class="marks">
+        <img class="product" src="./mark-512.webp" alt="Lattice117">
+        <span class="div"></span>
+        <img class="company" src="./bsg-crest-560.webp" alt="Brierley Sovereign Group">
+      </div>
+      <p class="line">The solver proposes.<br>The referee decides.<br><em>The digest proves it.</em></p>
+      <div class="rule"></div>
+      <p class="url" id="closeUrl">github.com/KABCTTRHC/lattice117-verify</p>
+      <p class="sub">Lattice117 · Brierley Sovereign Group · Nottingham</p>
+    </div>
+  </section>
+
+<script>
+/* The recorder calls these. Nothing here invents content. */
+window.showTerminal = (title, path, html) => {
+  document.getElementById('termTitle').textContent = title;
+  document.getElementById('termPath').textContent = path;
+  document.getElementById('termOut').innerHTML = html;
+  document.body.dataset.card = 'term';
+};
+window.showClosing = (url) => {
+  if (url) document.getElementById('closeUrl').textContent = url;
+  document.body.dataset.card = 'close';
+};
+</script>
+</body>
+</html>

@@ -351,6 +351,27 @@ console.log('\nThe reproduction pack is publishable and complete');
        undeclared.length === 0);
   }
 
+  /* The toolpath adapter. Its one load-bearing property is that the distance it
+     computes for a pair IS the entry at that pair's index — a phantom saving
+     is exactly what a mismatch there produces, confidently and reproducibly.
+     tests/toolpath.test.mjs opens with that identity on random coordinates;
+     this asserts the test still opens with it, because a guard moved to the
+     bottom of a file is a guard that stops being read. */
+  {
+    const tp = read('demo/toolpath.js');
+    const tt = read('tests/toolpath.test.mjs');
+    ok('  the toolpath adapter is in the offline shell', sw.includes("'./toolpath.js'"));
+    ok('  it states the distance convention in one place',
+       /M\[i\]\[j\]\s*=\s*\|end\(i\)/.test(tp));
+    ok('  and the identity test is the FIRST section of its test file',
+       tt.indexOf('adapter and matrix agree') < tt.indexOf('Asymmetry') ||
+       tt.indexOf('adapter and matrix agree') < 3000);
+    ok('  the adapter refuses SVG curves rather than guessing a tolerance',
+       /contains a curve command/.test(tp));
+    ok('  and refuses geometry outside the Q16.16 range',
+       /representable range/.test(tp));
+  }
+
   /* The dashboard is the densest surface and the easiest place for a number to
      appear that nothing computed. It may show only what the engine produced. */
   {

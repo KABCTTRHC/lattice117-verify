@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v18';
+const CACHE = 'lattice117-v19';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -35,6 +35,7 @@ const SHELL = [
   './rota.js',
   './repair.js',
   './resequence.js',
+  './toolpath.js',
   './freetier.js',
   './lattice117_wasm.wasm',
   // Fixtures. Story mode loads all four, so leaving one out makes a tier's
