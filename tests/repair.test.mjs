@@ -156,5 +156,55 @@ console.log('\nThe engine actually applies the departure it is given');
   eq('and the engine names the stop that broke', late.routes[0].violation.stop, 'A');
 }
 
+/* ── the two digests the V5 sign-off ledger cites ────────────────────────── */
+console.log('\nThe repair fixture seals a before and an after digest');
+{
+  /* PART VI Section A test 2 of the V5 Master Build Spec quotes
+     `b7267d76… -> ade84da2…` for this fixture. Those values were correct, but
+     nothing in either repository asserted them, so they were not reproducible
+     from the tests — a figure on a sign-off ledger that no test emits is a
+     figure nobody can check. These two assertions are what make them real.
+
+     They also pin the thing the repair is FOR: moving one departure from 540 to
+     535 must change the sealed state. If a refactor made the digest blind to
+     the depart column again (the §5.3 hazard this file already guards in the
+     other direction), `digest_before === digest_after` and this fails. */
+  const { verifyFleet } = await import('../npm/index.js');
+  const { verdictDigest } = await import('../demo/digest.js');
+
+  const rows = readFileSync(new URL('../demo/example-route-sheet-timed.csv', import.meta.url), 'utf8')
+    .trim().split(/\r?\n/).slice(1);
+  const grouped = new Map();
+  for (const l of rows) {
+    const [v, , stop, open, close, travel, depart] = l.split(',');
+    if (!grouped.has(v)) grouped.set(v, { id: v, depart: Number(depart), stops: [] });
+    grouped.get(v).stops.push({
+      id: stop, open: Number(open), close: Number(close), travel: Number(travel),
+    });
+  }
+  const routesBefore = [...grouped.values()];
+
+  const before = await verifyFleet(routesBefore);
+  const digestBefore = await verdictDigest(routesBefore, before.routes);
+
+  // Apply exactly what the repair proposes — it reports changes, it does not
+  // mutate the sheet.
+  const out = repairFixedSequence(roundsFromRows(routesBefore));
+  const moved = new Map(out.changes.map((c) => [c.roundId, fromQ(c.toQ)]));
+  const routesAfter = routesBefore.map(
+    (r) => (moved.has(r.id) ? { ...r, depart: moved.get(r.id) } : r));
+
+  const after = await verifyFleet(routesAfter);
+  const digestAfter = await verdictDigest(routesAfter, after.routes);
+
+  eq('digest_before is the published value',
+     digestBefore,
+     'b7267d761617cc609f1d5543ee1fc41e7855ded95b1de0e554eb8569eff4ff02');
+  eq('digest_after is the published value',
+     digestAfter,
+     'ade84da208ea2fc2deeae3227654848bfed7a285bb0f6cc7b5cd51d8389679cf');
+  eq('and re-timing one round does change the seal', digestBefore !== digestAfter, true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
