@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Schedule Check</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png">
 <script src="https://appsstatic.officeapps.live.com/officeapps/office.js"></script>
 <style>
   :root{
@@ -84,10 +85,19 @@
         border-radius:0 4px 4px 0;font:12px var(--mono)}
   .flag b{color:var(--bad)}
   .flag .who{color:var(--ink);font-weight:700}
+
+  /* Brand lockup. The glyph is the emblem crop rather than the full mark:
+     at 30px the wordmark inside the mark is unreadable, and the <h1> beside
+     it already says the name. */
+  .lockup{display:flex;align-items:center;gap:.55rem;margin:0 0 .3rem}
+  .lockup img{width:30px;height:30px;flex-shrink:0;display:block}
+  .lockup .wordmark{font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+                    font-size:.72rem;opacity:.8}
 </style>
 </head>
 <body>
 
+<div class="lockup"><img src="assets/glyph-48.png" width="30" height="30" alt=""><span class="wordmark">Lattice117</span></div>
 <h1>Schedule Check</h1>
 <p class="sub">Select your route rows, including the header, then check.</p>
 <div>

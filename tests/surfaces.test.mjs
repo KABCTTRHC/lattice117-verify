@@ -19,7 +19,7 @@
  *
  * Run: node tests/surfaces.test.mjs
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -236,6 +236,140 @@ console.log('\nThe reproduction pack is publishable and complete');
      here('.github/ISSUE_TEMPLATE/digest-reproduction.yml'));
   ok('and the CLI points at it',
      cli.includes('digest-reproduction.yml'));
+}
+
+/* ---------------------------------------------------------------------------
+   THE ENGINE SIZE BADGE, ON EVERY SURFACE
+
+   21,525 bytes is 21.0 KiB and 21.5 kB. A badge that says "21.0 KB" is
+   ambiguous between the two and disagrees with the figure the white paper
+   cites, which is the byte count.
+
+   This is asserted across ALL FIVE surfaces because the fix was previously
+   applied to three of them — Excel, Sheets and the npm CLI — while
+   demo/index.html and demo/audit.html kept dividing by 1024, and the only
+   test looking at it looked at the sidebar. A per-surface check is what turns
+   "fixed" into "fixed everywhere".
+--------------------------------------------------------------------------- */
+{
+  console.log('\nThe engine size badge reports bytes on every surface');
+  for (const f of ['demo/index.html', 'demo/audit.html',
+                   'excel-addin/taskpane.html', 'sheets-addon/Sidebar.html',
+                   'sheets-addon/sidebar.template.html']) {
+    const src = read(f);
+    ok(`  ${f} does not divide byteLength by 1024`, !/byteLength\s*\/\s*1024/.test(src));
+    // Sheets decodes base64 into a Uint8Array, so its count is `.length`
+    // rather than `.byteLength`. Both are the byte count; what matters is
+    // that the badge says "bytes" and nothing divides.
+    ok(`  ${f} renders the byte count`,
+       /\.(byteLength|length)\.toLocaleString\('en-GB'\)/.test(src) && /\bbytes\b/.test(src));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   BRAND ASSETS
+
+   Every icon a surface REFERENCES must exist, be non-empty, and — for the demo
+   pages — be in the offline shell. This is the same defect class as the one
+   that made audit.html a dead page offline: sw.js cached everything except
+   resequence.js, which audit.html imports, so the online page worked and the
+   offline one did not run at all. A missing favicon is cosmetic; a missing
+   header lockup is a broken image on the page a sceptic reloads with their
+   Wi-Fi off, which is the worst possible moment to look half-built.
+
+   The icons are duplicated into demo/brand/ because demo/ is the deployed
+   root and a page there cannot reference a sibling of its own parent. A copy
+   is fine; a copy that has drifted is not, so they are byte-compared against
+   brand/ exactly as the shared modules are.
+--------------------------------------------------------------------------- */
+{
+  console.log('\nBrand assets exist, match their master copies, and are cached offline');
+
+  const bytes = (p) => (here(p) ? statSync(join(ROOT, p)).size : 0);
+  const same = (a, b) =>
+    here(a) && here(b) && readFileSync(join(ROOT, a)).equals(readFileSync(join(ROOT, b)));
+
+  /* The generator's own output. If these are missing nothing else here can
+     pass, so it is worth saying so separately. */
+  for (const f of ['brand/lattice117-mark-master.webp', 'brand/glyph-32.png',
+                   'brand/glyph-48.png', 'brand/mark-128.png', 'brand/mark-180.png']) {
+    ok(`  ${f} exists and is not empty`, bytes(f) > 0);
+  }
+  ok('  the icon generator is committed alongside them',
+     here('tools/brand/icons.py'));
+
+  /* Copies on the deployed surfaces, byte-identical to the master set. */
+  for (const f of ['glyph-32.png', 'glyph-48.png', 'mark-180.png']) {
+    ok(`  demo/brand/${f} matches brand/${f}`, same(`demo/brand/${f}`, `brand/${f}`));
+  }
+  ok('  excel-addin/assets/glyph-48.png matches brand/glyph-48.png',
+     same('excel-addin/assets/glyph-48.png', 'brand/glyph-48.png'));
+  ok('  excel-addin/assets/icon-32.png matches brand/glyph-32.png',
+     same('excel-addin/assets/icon-32.png', 'brand/glyph-32.png'));
+  ok('  store-assets/workspace/icon-128.png matches brand/mark-128.png',
+     same('store-assets/workspace/icon-128.png', 'brand/mark-128.png'));
+
+  /* Every local image a demo page references must be in the shell. A regex
+     over the actual href/src is deliberate: a hard-coded list here would go
+     stale the moment someone adds an asset, which is exactly how the last one
+     was missed. */
+  const sw = read('demo/sw.js');
+  for (const page of ['index.html', 'audit.html', 'determinism.html', 'splash.html']) {
+    const html = read(`demo/${page}`);
+    const refs = [...html.matchAll(/(?:href|src)="(\.\/brand\/[^"]+)"/g)].map((m) => m[1]);
+    ok(`  demo/${page} references at least one brand asset`, refs.length > 0);
+    for (const r of new Set(refs)) {
+      const rel = r.replace('./', 'demo/');
+      ok(`    ${r} exists`, bytes(rel) > 0);
+      ok(`    ${r} is in the offline shell`, sw.includes(`'${r}'`));
+    }
+  }
+
+  /* The splash is the first thing a visitor sees, so it is the worst thing to
+     find missing from the offline shell. It is also the only surface carrying
+     the COMPANY mark: BSG presents, Lattice117 is presented, and neither name
+     may exist only as pixels. */
+  {
+    const splash = read('demo/splash.html');
+    ok('  the splash is itself in the offline shell', sw.includes("'./splash.html'"));
+    ok('  it presents the company mark', splash.includes('bsg-crest-560.webp'));
+    ok('  and the product mark', splash.includes('mark-512.webp'));
+    ok('  both names are in text, not only in the images',
+       /Brierley Sovereign Group/.test(splash) && /Lattice117/.test(splash));
+    /* A splash is a delay with a picture on it. For someone who has asked for
+       no motion the honest version is the final frame, immediately. */
+    ok('  it honours prefers-reduced-motion',
+       /@media \(prefers-reduced-motion:\s*reduce\)/.test(splash));
+    /* Every `var()` used in an `animation` shorthand must resolve, because one
+       that does not invalidates the whole declaration rather than falling back
+       — which is how the "Presented by" line spent its first outing invisible. */
+    const used = new Set([...splash.matchAll(/var\((--[\w-]+)\)/g)].map((m) => m[1]));
+    const declared = new Set([...splash.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map((m) => m[1]));
+    const undeclared = [...used].filter((v) => !declared.has(v));
+    ok(`  every custom property it uses is declared${undeclared.length ? ` (missing: ${undeclared.join(', ')})` : ''}`,
+       undeclared.length === 0);
+  }
+
+  /* Apps Script serves the sidebar from a sandboxed iframe and will not serve
+     sibling files, so the Sheets glyph has to be inlined rather than linked.
+     A relative <img src> there would be a broken image in every install. */
+  const sidebar = read('sheets-addon/Sidebar.html');
+  ok('  the Sheets sidebar inlines its glyph rather than linking one',
+     sidebar.includes('data:image/png;base64,') &&
+     !/<img[^>]+src="(?!data:)/.test(sidebar));
+
+  /* The lockup must carry the name in text. An <img alt=""> beside a wordmark
+     is correct; an image that IS the only name is not readable by anything
+     that cannot see it. */
+  for (const [label, html] of [
+    ['demo/index.html', read('demo/index.html')],
+    ['demo/audit.html', read('demo/audit.html')],
+    ['excel-addin/taskpane.html', read('excel-addin/taskpane.html')],
+    ['sheets-addon/Sidebar.html', sidebar],
+  ]) {
+    ok(`  ${label} spells "Lattice117" in text, not only in the image`,
+       /class="wordmark">Lattice117</.test(html));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -1,3 +1,5 @@
+<img src="brand/mark-192.png" alt="Lattice117" width="96" align="right">
+
 # lattice117-verify
 
 **Deterministic time-window feasibility verification.** Checks whether a

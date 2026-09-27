@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v14';
+const CACHE = 'lattice117-v16';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -23,6 +23,7 @@ const SHELL = [
   './index.html',
   './audit.html',
   './determinism.html',
+  './splash.html',
   // Every ES module the pages import. A module missing from this list is not
   // a slow load offline - it is a page that does not run at all, because the
   // import fails and the script never executes. Adding a module without
@@ -43,6 +44,20 @@ const SHELL = [
   './example-rota.csv',
   './example-fleet-nottingham.csv',
   './example-fleet-nottingham-matrix.txt',
+  // Brand assets the pages reference. A favicon missing offline is cosmetic;
+  // the header lockup missing is a broken image on the page a sceptic reloads
+  // with their Wi-Fi off, which is the worst possible moment for the site to
+  // look half-built. Same rule as the modules above: referenced, therefore
+  // cached.
+  './brand/glyph-32.png',
+  './brand/glyph-48.png',
+  './brand/mark-180.png',
+  // The splash's two marks. WebP rather than PNG because these are the
+  // largest images in the shell and the offline claim is measured in how
+  // little has to be cached: 512px of the product mark is 75 KB as WebP
+  // against 450 KB as PNG.
+  './brand/mark-512.webp',
+  './brand/bsg-crest-560.webp',
 ];
 
 self.addEventListener('install', (e) => {
