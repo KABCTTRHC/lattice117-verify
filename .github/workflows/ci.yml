@@ -171,11 +171,41 @@ jobs:
       # All three strip #[cfg(test)] blocks and comment lines first. A guard that
       # fires on the word "f64" inside a doc comment explaining why there is no
       # f64 is a guard someone eventually switches off.
+      #
+      # STRIPPING TEST CODE. `strip_tests` below matches each #[cfg(test)]
+      # item's closing brace at the attribute's OWN indentation. It replaced
+      # `sed '/#\[cfg(test)\]/,$d'` — "delete from the first occurrence to
+      # EOF" — which is correct only while test modules are the last thing in
+      # every file. sovereign_api's ffi/k8s_bridge.rs has a #[cfg(test)] mod
+      # NESTED inside another module about 400 lines before the end, and every
+      # production line after it was silently exempt; a float literal planted in
+      # a real function passed the guard. No file in THIS repo nests one today,
+      # so the hole is latent here rather than live — which is exactly when to
+      # close it, because the first nested test module would reopen it without
+      # anyone noticing. Indentation rather than brace counting: a counter
+      # miscounts on a `{` inside a string literal, and test code is full of
+      # `format!`.
       - name: No floating point in the evaluation path
         run: |
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
           FOUND=0
+          strip_tests() {
+            awk '
+            {
+              if (skipping) {
+                if ($0 == indent "}" || $0 == indent "};") { skipping = 0 }
+                next
+              }
+              if ($0 ~ /^[ \t]*#\[cfg\(test\)\]/) {
+                match($0, /^[ \t]*/)
+                indent = substr($0, 1, RLENGTH)
+                skipping = 1
+                next
+              }
+              print
+            }' "$1"
+          }
           # A digit before the dot is what separates a float literal like
           # `65536.0` from a tuple access like `self.0`; the second alternative
           # catches scientific notation such as `1e-6`. `const` declarations are
@@ -184,7 +214,7 @@ jobs:
           for d in $CRATES; do
             [ -d "$d" ] || continue
             for f in $(find "$d" -name '*.rs'); do
-              BODY=$(sed '/#\[cfg(test)\]/,$d' "$f" \
+              BODY=$(strip_tests "$f" \
                      | grep -v 'float-guard: allow' \
                      | sed -E 's|//.*$||' \
                      | grep -vE '^\s*(pub(\([a-z]+\))?\s+)?const\s+[A-Za-z_0-9]+\s*:')
@@ -209,10 +239,26 @@ jobs:
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
           FOUND=0
+          strip_tests() {
+            awk '
+            {
+              if (skipping) {
+                if ($0 == indent "}" || $0 == indent "};") { skipping = 0 }
+                next
+              }
+              if ($0 ~ /^[ \t]*#\[cfg\(test\)\]/) {
+                match($0, /^[ \t]*/)
+                indent = substr($0, 1, RLENGTH)
+                skipping = 1
+                next
+              }
+              print
+            }' "$1"
+          }
           for d in $CRATES; do
             [ -d "$d" ] || continue
             for f in $(find "$d" -name '*.rs'); do
-              if sed '/#\[cfg(test)\]/,$d' "$f" \
+              if strip_tests "$f" \
                  | sed -E 's|//.*$||' \
                  | grep -nE '\.(exp|exp2|ln|log|log2|log10|powf|powi|sin|cos|tan|asin|acos|atan|atan2|sqrt|cbrt|hypot)\(' ; then
                 echo "  ^ in $f"; FOUND=1
