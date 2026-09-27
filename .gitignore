@@ -12,6 +12,12 @@ licence/keypair.json
 # npm pack output — a build artefact, never a committed file.
 *.tgz
 
+# Dependencies. The PRODUCT has none — the engine, the digest and every shared
+# module are dependency-free by design, which is what lets the offline claim
+# hold. This exists only for the dev-time video tooling (tools/brand/*.mjs
+# needs playwright), so it is a local build input and never a committed one.
+node_modules
+
 # clasp writes the real scriptId here; it is account-specific local config.
 # The committed template is sheets-addon/.clasp.json.example
 sheets-addon/.clasp.json

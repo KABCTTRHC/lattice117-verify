@@ -152,6 +152,47 @@ try {
   const freeze = () => page.addStyleTag({ content:
     '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}' });
 
+  /**
+   * Refuses to film a terminal card whose content does not fit the frame.
+   *
+   * The first cut of this video clipped partway through the SECOND of three
+   * MATCH blocks, so two of the three digests — the whole reason that shot
+   * exists — were never on screen, and the video looked fine unless you went
+   * looking. A card that silently crops its payload is worse than one that
+   * fails to render, because only one of those gets noticed.
+   *
+   * Measures the laid-out element rather than trusting the CSS: content
+   * length changes with the machine the capture ran on (the environment block
+   * prints the CPU model), so arithmetic done here would be arithmetic about
+   * a different string.
+   */
+  const assertFits = async (what) => {
+    const fit = await page.evaluate(() => {
+      const pre = document.getElementById('termOut');
+      const win = pre.closest('.win');
+      return {
+        overflowY: pre.scrollHeight - pre.clientHeight,
+        overflowX: pre.scrollWidth - pre.clientWidth,
+        bottom: Math.round(win.getBoundingClientRect().bottom),
+        viewport: innerHeight,
+        lines: pre.textContent.split('\n').length,
+      };
+    });
+    const problems = [];
+    if (fit.overflowY > 1) problems.push(`${fit.overflowY}px clipped vertically`);
+    if (fit.overflowX > 1) problems.push(`${fit.overflowX}px clipped horizontally`);
+    if (fit.bottom > fit.viewport) {
+      problems.push(`card bottom at ${fit.bottom}px, past the ${fit.viewport}px frame`);
+    }
+    if (problems.length) {
+      throw new Error(
+        `the "${what}" card does not fit the frame: ${problems.join('; ')} ` +
+        `(${fit.lines} lines). Shrink the type in tools/brand/cards.html rather ` +
+        `than letting the shot crop its own payload.`);
+    }
+    process.stdout.write(`    ${what}: ${fit.lines} lines fit\n`);
+  };
+
   /** Eased scroll, driven frame by frame rather than animated by the browser. */
   const scrollTo = async (sel, from, to, seconds) => {
     const k = sec(seconds);
@@ -282,6 +323,7 @@ try {
   await page.evaluate(([t, p, h]) => window.showTerminal(t, p, h),
     ['Independent re-derivation', '~/lattice117-verify  $  npx lattice117-verify reproduce',
      paint(reproduceOut)]);
+  await assertFits('reproduction CLI');
   await hold(6.5);
 
   if (refereeOut) {
@@ -290,6 +332,7 @@ try {
       ['The referee refuses its own solver',
        '~/sovereign_api  $  cargo test --lib ffi::k8s_bridge',
        paint(refereeOut)]);
+    await assertFits('referee proof');
     await hold(5.5);
   }
 

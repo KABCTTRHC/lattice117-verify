@@ -40,7 +40,7 @@
   .term .shell{width:min(88vw,1500px)}
   .term h3{
     font:700 11px/1 var(--sans);letter-spacing:.34em;text-transform:uppercase;
-    color:var(--ink-faint);margin:0 0 16px;text-align:center;
+    color:var(--ink-faint);margin:0 0 12px;text-align:center;
   }
   .win{
     border:1px solid var(--line);border-radius:12px;overflow:hidden;
@@ -54,9 +54,18 @@
   .bar .path{
     margin-left:10px;font:600 11.5px var(--mono);color:var(--ink-faint);letter-spacing:.02em;
   }
+  /* SIZED FOR THE REAL OUTPUT, NOT GUESSED AT.
+     `lattice117-verify reproduce` prints 47 lines, longest 94 characters. At
+     14px/1.62 with a 62vh cap it clipped partway through the SECOND of three
+     MATCH blocks, so two of the three digests — the entire point of the shot —
+     were never on screen. 12.5px/1.42 gives 47 x 17.75 = 834px of text, which
+     fits 1080 with the title bar and heading above it.
+     `max-height` is gone deliberately: a cap silently crops, and
+     record-demo.mjs now ASSERTS the content fits rather than trusting either
+     the cap or this arithmetic. */
   pre{
-    margin:0;padding:20px 24px;font:14px/1.62 var(--mono);white-space:pre-wrap;
-    color:var(--ink-dim);max-height:62vh;overflow:hidden;
+    margin:0;padding:18px 24px;font:12.5px/1.42 var(--mono);white-space:pre;
+    color:var(--ink-dim);overflow:hidden;
   }
   pre .cmd{color:var(--accent);font-weight:700}
   pre .ok{color:var(--ok);font-weight:700}
