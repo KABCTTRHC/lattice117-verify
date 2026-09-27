@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lattice117 — Operations</title>
+<link rel="icon" type="image/png" sizes="32x32" href="./brand/glyph-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./brand/mark-180.png">
+<style>
+  /* ===================================================================
+     OPERATIONS DASHBOARD
+
+     THE RULE THIS FILE IS BUILT ON: every number on this page is
+     computed, live, by the engine that ships. There are no sample
+     gauges, no simulated telemetry and no animated needles pointing at
+     invented percentages. A dashboard full of plausible fake numbers is
+     the exact opposite of what this product sells, and it would be the
+     easiest thing in the world to build.
+
+     Where a panel has no real data source it is not here. That is why
+     there is no CPU load meter, no thermal chart and no drone map: this
+     engine runs in a browser tab and knows none of those things.
+
+     COLOUR. The tokens are audit.html's, unchanged, because five
+     surfaces already ship them and nine device captures record them.
+     One measured caveat drives a layout rule throughout:
+
+       #10b981 (holds) vs #f43f5e (breaks) is deltaE 5.6 under
+       deuteranopia — BELOW the 6-8 floor at which colour may carry
+       meaning with secondary encoding, let alone alone.
+
+     So holds/breaks is NEVER signalled by colour by itself anywhere on
+     this page. Every status carries a glyph and a word; the proportion
+     bar hatches its failing segment; failing table rows take a left
+     border as well as a tint. Red-green is the most common colour
+     blindness there is and this is the most important distinction on
+     the page.
+     =================================================================== */
+
+  :root{
+    --bg:#07090e;
+    --ink:#e8eef6; --ink-dim:#94a3b8; --ink-faint:#64748b;
+    --ok:#10b981; --bad:#f43f5e; --warn:#f59e0b; --accent:#0ea5e9;
+    --indigo:#6366f1;
+    --glass:rgba(17,24,39,.65);
+    --glass-2:rgba(23,32,48,.58);
+    --line:rgba(255,255,255,.08);
+    --line-2:rgba(255,255,255,.14);
+    --rim:inset 0 1px 0 rgba(255,255,255,.07);
+    --lift:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.55);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{
+    margin:0;color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;background:var(--bg);
+    background-image:
+      radial-gradient(900px 620px at 12% -8%,  rgba(16,185,129,.10), transparent 62%),
+      radial-gradient(820px 560px at 88% 4%,   rgba(14,165,233,.09), transparent 60%),
+      radial-gradient(760px 700px at 50% 108%, rgba(99,102,241,.08), transparent 60%);
+    background-attachment:fixed;
+  }
+
+  /* ---- chrome ---------------------------------------------------- */
+  header{
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:12px 20px;border-bottom:1px solid var(--line);
+    background:rgba(7,9,14,.82);backdrop-filter:blur(12px);
+    position:sticky;top:0;z-index:20;
+  }
+  .lockup{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .lockup img{width:30px;height:30px;display:block}
+  .lockup .co{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);line-height:1.3}
+  .lockup .co b{display:block;color:var(--ink-dim);font-weight:600}
+  .title{font:700 15px/1 var(--sans);letter-spacing:-.01em}
+  .title span{color:var(--ink-faint);font-weight:400}
+  .spacer{flex:1}
+  .chip{
+    font:600 11px/1 var(--mono);padding:6px 9px;border-radius:6px;
+    border:1px solid var(--line);background:var(--glass-2);color:var(--ink-dim);
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .chip.live{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+  .chip.off{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+  .grid{
+    display:grid;gap:14px;padding:16px 20px 56px;
+    grid-template-columns:260px minmax(0,1fr) 310px;
+    align-items:start;max-width:1720px;margin:0 auto;
+  }
+  @media (max-width:1240px){ .grid{grid-template-columns:minmax(0,1fr)} }
+
+  .panel{
+    background:var(--glass);border:1px solid var(--line);border-radius:10px;
+    padding:14px 15px;box-shadow:var(--rim);margin-bottom:14px;
+  }
+  .panel:last-child{margin-bottom:0}
+  .panel > h2{
+    font:700 10.5px/1 var(--sans);text-transform:uppercase;letter-spacing:.1em;
+    color:var(--ink-faint);margin:0 0 12px;display:flex;align-items:center;gap:8px;
+  }
+  .panel > h2 .n{margin-left:auto;font-family:var(--mono);letter-spacing:0;color:var(--ink-dim)}
+  .hint{font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.5}
+
+  button{
+    font:600 12.5px var(--sans);padding:8px 13px;border-radius:7px;cursor:pointer;
+    border:1px solid var(--line);background:var(--glass-2);color:var(--ink);width:100%;
+    text-align:left;display:flex;align-items:center;gap:9px;margin-bottom:7px;
+  }
+  button:hover:not(:disabled){border-color:var(--ink-faint)}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04121c;font-weight:700}
+  button.primary:hover:not(:disabled){filter:brightness(1.08)}
+  button .k{margin-left:auto;font:600 10px var(--mono);color:var(--ink-faint);letter-spacing:.04em}
+  button.primary .k{color:rgba(4,18,28,.66)}
+
+  /* ---- hero stat --------------------------------------------------
+     A single headline number is not a chart. The proportion beneath it
+     is one bar on one axis, and the failing segment is HATCHED as well
+     as coloured — see the deltaE note at the top of this file.
+  ------------------------------------------------------------------ */
+  .hero{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .stat{font:800 clamp(34px,5.4vw,52px)/1 var(--mono);letter-spacing:-.03em}
+  .stat.ok{color:var(--ok)} .stat.bad{color:var(--bad)} .stat.idle{color:var(--ink-faint)}
+  .stat small{font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;
+              color:var(--ink-faint);display:block;margin-top:9px}
+  .heroNote{font-size:13px;color:var(--ink-dim);flex:1;min-width:200px}
+
+  .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:14px;
+       background:var(--glass-2);border:1px solid var(--line)}
+  .bar i{display:block;height:100%}
+  .bar i + i{border-left:2px solid var(--bg)}   /* 2px surface gap between fills */
+  .bar i.ok{background:var(--ok)}
+  /* Secondary encoding, not decoration. */
+  .bar i.bad{
+    background:var(--bad);
+    background-image:repeating-linear-gradient(135deg,
+      rgba(0,0,0,.34) 0 3px, transparent 3px 7px);
+  }
+  .barKey{display:flex;gap:14px;margin-top:8px;font:600 10.5px var(--mono);color:var(--ink-faint)}
+  .barKey b{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+  .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .sw.ok{background:var(--ok)}
+  .sw.bad{background:var(--bad);
+          background-image:repeating-linear-gradient(135deg,rgba(0,0,0,.34) 0 2px,transparent 2px 5px)}
+
+  /* ---- tables ----------------------------------------------------- */
+  table{width:100%;border-collapse:collapse;font:12px var(--mono)}
+  th{text-align:left;font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.07em;
+     color:var(--ink-faint);padding:0 9px 7px 0;white-space:nowrap}
+  td{padding:7px 9px 7px 0;border-top:1px solid var(--line);vertical-align:top}
+  tbody tr.bad td{background:color-mix(in srgb,var(--bad) 9%,transparent)}
+  tbody tr.bad td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+  tbody tr.bad td:first-child{padding-left:8px}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+
+  /* Status pill: glyph + word, never colour alone. */
+  .pill{display:inline-flex;align-items:center;gap:5px;font:700 10px/1 var(--mono);
+        padding:5px 8px;border-radius:5px;border:1px solid;white-space:nowrap}
+  .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+  .pill.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+  .pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+  .pill.idle{color:var(--ink-faint);border-color:var(--line)}
+  .pill .g{font-size:11px;line-height:1}
+
+  /* ---- status rows ------------------------------------------------ */
+  .rows{display:flex;flex-direction:column;gap:9px}
+  .row{display:flex;align-items:center;gap:9px;font-size:12px}
+  .row .lbl{color:var(--ink-dim);flex:1;min-width:0}
+  .row .val{font:600 11.5px var(--mono);color:var(--ink);text-align:right;white-space:nowrap}
+
+  /* ---- digest ----------------------------------------------------- */
+  .digest{font:11px/1.55 var(--mono);word-break:break-all;color:var(--ink-dim);
+          background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:7px;padding:9px 10px}
+  .digest .lab{display:block;color:var(--ink-faint);font-size:9.5px;letter-spacing:.09em;
+               text-transform:uppercase;margin-bottom:3px;font-family:var(--sans);font-weight:700}
+  .digest + .digest{margin-top:8px}
+  .digest.moved{border-color:color-mix(in srgb,var(--accent) 38%,var(--line))}
+
+  /* ---- before/after comparison (the one real chart) ---------------
+     Two bars, one axis, one measure. Direct-labelled, so the legend is
+     the labels themselves and identity is never colour-alone.
+  ------------------------------------------------------------------ */
+  .cmp{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+  .cmpRow{display:grid;grid-template-columns:62px 1fr auto;align-items:center;gap:10px}
+  .cmpRow .nm{font:600 10.5px var(--mono);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
+  .cmpRow .track{height:18px;background:var(--glass-2);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .cmpRow .fill{height:100%;border-radius:0 4px 4px 0;transition:width .5s cubic-bezier(.16,1,.3,1)}
+  .cmpRow.before .fill{background:color-mix(in srgb,var(--ink-faint) 55%,transparent)}
+  .cmpRow.after  .fill{background:var(--accent)}
+  .cmpRow .v{font:700 12px var(--mono);min-width:62px;text-align:right}
+  .saving{margin-top:11px;font:700 13px var(--mono);color:var(--accent);display:flex;align-items:center;gap:8px}
+  .saving .pct{font-size:11px;color:var(--ink-dim);font-weight:600}
+
+  /* ---- log -------------------------------------------------------- */
+  .log{font:11.5px/1.7 var(--mono);max-height:230px;overflow:auto;
+       background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:7px;padding:10px 11px}
+  .log div{display:flex;gap:9px;white-space:nowrap}
+  .log .t{color:var(--ink-faint);flex-shrink:0}
+  .log .m{color:var(--ink-dim);white-space:normal}
+  .log .m b{color:var(--ink)}
+  .log .ok b{color:var(--ok)} .log .bad b{color:var(--bad)}
+
+  .err{color:var(--bad);font-size:12px;margin-top:9px;white-space:pre-wrap}
+  .muted{color:var(--ink-faint);font-size:12px}
+  code{font:11.5px var(--mono);color:var(--ink-dim)}
+  a{color:var(--accent)}
+
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="lockup">
+    <img src="./brand/glyph-48.png" width="30" height="30" alt="">
+    <span class="co">Brierley<br><b>Sovereign Group</b></span>
+  </div>
+  <div class="title">LATTICE117 <span>// Operations</span></div>
+  <div class="spacer"></div>
+  <span class="chip live" id="engineChip"><span class="dot"></span>engine: loading…</span>
+  <span class="chip" id="netChip"><span class="dot"></span>network: …</span>
+  <span class="chip" id="tierChip">tier: …</span>
+</header>
+
+<div class="grid">
+
+  <!-- ===================== LEFT: controls ===================== -->
+  <div>
+    <div class="panel">
+      <h2>Load a schedule</h2>
+      <button id="bFleet">Fleet — 8 rounds <span class="k">CSV</span></button>
+      <button id="bTimed">Timed fleet — 4 rounds <span class="k">TIER 4</span></button>
+      <button id="bNott">Nottingham — WGS84 <span class="k">TIER 5</span></button>
+      <p class="hint">Bundled fixtures. Nothing is uploaded — the engine runs
+        in this tab and opens no sockets.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Run</h2>
+      <button class="primary" id="bVerify" disabled>Verify fleet <span class="k">↵</span></button>
+      <button id="bRepair" disabled>Repair departures <span class="k">T4</span></button>
+      <button id="bSeq" disabled>Re-sequence stops <span class="k">T5</span></button>
+      <button id="bDet" disabled>Determinism check <span class="k">×12</span></button>
+      <p class="hint" id="runHint">Load a schedule to begin.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Rounds</h2>
+      <div id="roundList" class="muted">None loaded.</div>
+    </div>
+  </div>
+
+  <!-- ===================== CENTRE ===================== -->
+  <div>
+    <div class="panel">
+      <h2>Fleet verdict <span class="n" id="verdictUnit"></span></h2>
+      <div class="hero">
+        <div class="stat idle" id="statBig">—<small id="statSub">not yet run</small></div>
+        <div class="heroNote" id="heroNote">
+          Load one of the bundled schedules and press <b>Verify fleet</b>. The
+          engine evaluates every round in Q16.16 fixed point and names the stop
+          that breaks, when the vehicle arrives, when the window shut, and by
+          how much it was missed.
+        </div>
+      </div>
+      <div class="bar" id="bar" hidden><i class="ok" id="barOk"></i><i class="bad" id="barBad"></i></div>
+      <div class="barKey" id="barKey" hidden>
+        <b><span class="sw ok"></span>✓ holds</b>
+        <b><span class="sw bad"></span>✕ breaks</b>
+      </div>
+      <div class="err" id="err" hidden></div>
+    </div>
+
+    <div class="panel">
+      <h2>Rounds <span class="n" id="roundsN"></span></h2>
+      <div id="tableWrap" class="muted">Nothing evaluated yet.</div>
+    </div>
+
+    <div class="panel" id="repairPanel" hidden>
+      <h2>Tier 4 — departure repair</h2>
+      <div id="repairBody"></div>
+    </div>
+
+    <div class="panel" id="seqPanel" hidden>
+      <h2>Tier 5 — stop re-sequencing</h2>
+      <div id="seqBody"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Verdict log <span class="n" id="logN">0</span></h2>
+      <div class="log" id="log"><div><span class="t">—</span><span class="m">Waiting.</span></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== RIGHT ===================== -->
+  <div>
+    <div class="panel">
+      <h2>Engine integrity</h2>
+      <div class="rows" id="integrity">
+        <div class="row"><span class="lbl">Arithmetic</span><span class="val">Q16.16 · i32</span></div>
+        <div class="row"><span class="lbl">Representable range</span><span class="val">−32768 … 32767</span></div>
+        <div class="row"><span class="lbl">Resolution</span><span class="val">1 / 65536</span></div>
+        <div class="row"><span class="lbl">Floating point</span><span class="val" id="fpRow">none in path</span></div>
+        <div class="row"><span class="lbl">Module size</span><span class="val" id="wasmSize">…</span></div>
+        <div class="row"><span class="lbl">Imports</span><span class="val" id="wasmImports">…</span></div>
+        <div class="row"><span class="lbl">Offline shell</span><span class="val" id="swRow">…</span></div>
+      </div>
+      <p class="hint">Every row is read from the running instance, not written
+        down here. <b>Imports</b> is the count the module actually declares: a
+        module with zero imports cannot open a socket, read a clock, or call
+        anything back.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Determinism monitor</h2>
+      <div id="detBody" class="muted">Not run. Press <b>Determinism check</b>
+        to re-evaluate the loaded schedule twelve times and compare every digest.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Verdict digest</h2>
+      <div id="digestBody" class="muted">No verdict sealed yet.</div>
+      <p class="hint">SHA-256 over the canonical form of the Q16.16 integers
+        actually evaluated, plus the verdict reached. <b>Not a signature</b> —
+        anyone with the inputs can compute it, which is exactly what makes it
+        checkable by someone who trusts neither party.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Entitlement</h2>
+      <div class="rows" id="entRows"></div>
+      <p class="hint"><a href="audit.html">Full auditor &amp; plans →</a></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { loadEngine, runRoutes, digestOf, parseCsv, toQ, fromQ, Q } from './engine.js';
+import { repairFixedSequence, roundsFromRows, fromQ as qToUnits } from './repair.js';
+import { resequenceFleet, roundsFromRows as matrixRounds, parseMatrix,
+         fromQ as mToUnits } from './resequence.js';
+import { currentEntitlement } from './licence.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let engine = null, spec = null, report = null, source = '', matrix = null, logN = 0;
+/* The licence's round cap. Held here and passed to EVERY runRoutes call in
+   this file, because the cap has to be applied at the point of evaluation:
+   a limit that only exists in the presentation layer is not a limit, and a
+   panel that says "rounds per run: 1" while quietly evaluating eight is
+   worse than no panel. */
+let maxRounds = 1;
+
+/* --------------------------------------------------------------------------
+   Logging. Every evaluation lands here with the time it happened and the
+   verdict it reached, because a dashboard that shows only the LATEST state
+   cannot answer "did this change, and when".
+-------------------------------------------------------------------------- */
+function log(msg, kind = '') {
+  const el = $('log');
+  if (logN === 0) el.innerHTML = '';
+  const t = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const d = document.createElement('div');
+  d.className = kind;
+  d.innerHTML = `<span class="t">${t}</span><span class="m">${msg}</span>`;
+  el.prepend(d);
+  $('logN').textContent = ++logN;
+}
+
+function fail(e) {
+  const el = $('err');
+  el.hidden = false;
+  el.textContent = e && e.message ? e.message : String(e);
+  log(`<b>error</b> — ${esc(e.message ?? e)}`, 'bad');
+}
+const clearErr = () => { $('err').hidden = true; };
+
+/* ---------------------------- boot -------------------------------------- */
+(async function boot() {
+  try {
+    engine = await loadEngine('lattice117_wasm.wasm');
+    $('engineChip').innerHTML =
+      `<span class="dot"></span>engine: ${engine.byteLength.toLocaleString('en-GB')} bytes`;
+    $('wasmSize').textContent = `${engine.byteLength.toLocaleString('en-GB')} bytes`;
+
+    /* Read the import count off the real module rather than asserting it.
+       WebAssembly.Module.imports() is the module's own declaration. */
+    const mod = await WebAssembly.compile(
+      await (await fetch('lattice117_wasm.wasm')).arrayBuffer());
+    const imports = WebAssembly.Module.imports(mod);
+    $('wasmImports').textContent = imports.length === 0
+      ? '0 — opens nothing' : `${imports.length} ⚠`;
+
+    log(`engine ready — <b>${engine.byteLength.toLocaleString('en-GB')} bytes</b>, ` +
+        `${imports.length} imports`, 'ok');
+  } catch (e) { fail(e); }
+
+  const paintNet = () => {
+    const on = navigator.onLine;
+    $('netChip').className = `chip ${on ? '' : 'off'}`;
+    $('netChip').innerHTML =
+      `<span class="dot"></span>network: ${on ? 'online (unused)' : 'offline'}`;
+  };
+  paintNet();
+  addEventListener('online', paintNet); addEventListener('offline', paintNet);
+
+  $('swRow').textContent = 'registered' in navigator.serviceWorker ? '…' : '…';
+  navigator.serviceWorker?.getRegistration?.().then((r) => {
+    $('swRow').textContent = r ? 'cached' : 'not registered';
+  }).catch(() => { $('swRow').textContent = 'unavailable'; });
+
+  const ent = await currentEntitlement();
+  maxRounds = ent.maxRounds;
+  $('tierChip').textContent = `tier: ${ent.tier}`;
+  $('entRows').innerHTML = [
+    ['Tier', ent.tier],
+    ['Rounds per run', ent.maxRounds === Infinity ? 'unlimited' : ent.maxRounds],
+    ['Verdict digest', ent.certificate ? 'included' : 'not included'],
+  ].map(([k, v]) =>
+    `<div class="row"><span class="lbl">${k}</span><span class="val">${esc(v)}</span></div>`).join('');
+})();
+
+/* --------------------------- loading ------------------------------------ */
+async function loadCsv(file, label, mtx) {
+  clearErr();
+  try {
+    const rows = parseCsv(await (await fetch(file)).text()).filter((r) => r.length > 1);
+    const head = rows.shift().map((h) => h.trim().toLowerCase());
+    /* Bundled fixtures only, so the column names are known rather than
+       guessed. audit.html carries a fuzzy mapper because it accepts a
+       stranger's spreadsheet; this console loads three files it ships with,
+       and inventing a second mapper to read them would be two mappers that
+       can disagree about one file. A header that moves fails loudly below. */
+    const col = (n) => {
+      const i = head.indexOf(n);
+      if (i < 0) throw new Error(`${file}: expected a "${n}" column, found: ${head.join(', ')}`);
+      return i;
+    };
+    const cv = col('vehicle'), cs = col('stop');
+    const cr = col('window_open'), cd = col('window_close');
+    const ct = col('travel_mins_from_previous');
+    const cdep = head.indexOf('depart');          // optional
+
+    const byVehicle = new Map();
+    for (const r of rows) {
+      const v = r[cv].trim();
+      if (!byVehicle.has(v)) byVehicle.set(v, { vehicle: v, depart: cdep >= 0 ? Number(r[cdep] || 0) : 0, stops: [] });
+      byVehicle.get(v).stops.push({
+        id: r[cs].trim(), ready: Number(r[cr]), due: Number(r[cd]), travel: Number(r[ct] || 0),
+      });
+    }
+    spec = { unit: 'minutes', routes: [...byVehicle.values()] };
+    source = label;
+    matrix = mtx ? parseMatrix(await (await fetch(mtx)).text()) : null;
+
+    report = null;
+    $('bVerify').disabled = false;
+    $('bRepair').disabled = false;
+    $('bSeq').disabled = !matrix;
+    $('bDet').disabled = false;
+    $('repairPanel').hidden = true; $('seqPanel').hidden = true;
+    $('runHint').innerHTML = `<b>${esc(label)}</b> loaded — ${spec.routes.length} round(s).`;
+    $('roundList').innerHTML = spec.routes.map((r) =>
+      `<div class="row"><span class="lbl">${esc(r.vehicle)}</span>` +
+      `<span class="val">${r.stops.length} stops</span></div>`).join('');
+    $('roundList').className = 'rows';
+    log(`loaded <b>${esc(label)}</b> — ${spec.routes.length} rounds, ` +
+        `${spec.routes.reduce((a, r) => a + r.stops.length, 0)} stops`);
+  } catch (e) { fail(e); }
+}
+
+$('bFleet').onclick = () => loadCsv('example-route-sheet.csv', 'example-route-sheet.csv');
+$('bTimed').onclick = () => loadCsv('example-route-sheet-timed.csv', 'example-route-sheet-timed.csv');
+$('bNott').onclick  = () => loadCsv('example-fleet-nottingham.csv', 'example-fleet-nottingham.csv',
+                                    'example-fleet-nottingham-matrix.txt');
+
+/* --------------------------- verify ------------------------------------- */
+const fmt = (q) => fromQ(q).toFixed(1);
+
+$('bVerify').onclick = async () => {
+  clearErr();
+  try {
+    const t0 = performance.now();
+    report = runRoutes(engine, spec, maxRounds);
+    const ms = performance.now() - t0;
+
+    const ok = report.feasible, n = report.checked, bad = n - ok;
+    const allOk = bad === 0;
+    $('statBig').className = `stat ${allOk ? 'ok' : 'bad'}`;
+    $('statBig').innerHTML =
+      `${ok}<span style="color:var(--ink-faint)">/${n}</span>` +
+      `<small>rounds achievable</small>`;
+    $('verdictUnit').textContent = report.unit;
+    const capNote = report.capped
+      ? ` The other <b>${report.totalSubmitted - n}</b> round(s) were <b>not evaluated at all</b> — ` +
+        `this tier checks ${n}. Whether they hold is not something this tier can tell you.`
+      : '';
+    $('heroNote').innerHTML = (allOk
+      ? `Every round evaluated in <code>${esc(source)}</code> holds against its own time windows.`
+      : `<b>${bad}</b> of ${n} evaluated rounds in <code>${esc(source)}</code> cannot be driven ` +
+        `as scheduled. Each is named below with the stop that breaks and by how much.`) + capNote;
+
+    $('bar').hidden = false; $('barKey').hidden = false;
+    $('barOk').style.width = `${(ok / n) * 100}%`;
+    $('barBad').style.width = `${(bad / n) * 100}%`;
+
+    $('roundsN').textContent = report.capped
+      ? `${n} of ${report.totalSubmitted} evaluated — tier cap · ${ms.toFixed(1)} ms`
+      : `${n} evaluated · ${ms.toFixed(1)} ms`;
+    $('tableWrap').className = '';
+    $('tableWrap').innerHTML =
+      '<table><thead><tr><th>Round</th><th>Status</th><th>Breaks at</th>' +
+      '<th class="num">Arrives</th><th class="num">Window shuts</th><th class="num">Late by</th>' +
+      '</tr></thead><tbody>' +
+      report.results.map((r) => {
+        const good = r.status === 0;
+        return `<tr class="${good ? '' : 'bad'}">` +
+          `<td>${esc(r.vehicle)}</td>` +
+          `<td><span class="pill ${good ? 'ok' : 'bad'}"><span class="g">${good ? '✓' : '✕'}</span>` +
+          `${good ? 'HOLDS' : 'BREAKS'}</span></td>` +
+          `<td>${good ? '—' : esc(r.node)}</td>` +
+          `<td class="num">${good ? '—' : fmt(r.arrival)}</td>` +
+          `<td class="num">${good ? '—' : fmt(r.close)}</td>` +
+          `<td class="num">${good ? '—' : fmt(r.deficit)}</td></tr>`;
+      }).join('') + '</tbody></table>';
+
+    const d = await digestOf(report);
+    $('digestBody').className = '';
+    $('digestBody').innerHTML =
+      `<div class="digest"><span class="lab">verdict digest</span>${d}</div>`;
+
+    log(`verified <b>${ok}/${n}</b> achievable in ${ms.toFixed(1)} ms — ` +
+        `<b>${d.slice(0, 12)}…</b>`, allOk ? 'ok' : 'bad');
+  } catch (e) { fail(e); }
+};
+
+/* --------------------------- Tier 4 ------------------------------------- */
+$('bRepair').onclick = async () => {
+  clearErr();
+  try {
+    const before = await digestOf(runRoutes(engine, spec, maxRounds));
+    const rounds = roundsFromRows(spec.routes.map((r) => ({
+      id: r.vehicle, depart: r.depart ?? 0,
+      stops: r.stops.map((s) => ({ id: s.id, open: s.ready, close: s.due, travel: s.travel })),
+    })));
+    const fix = repairFixedSequence(rounds);
+    const shift = new Map(fix.changes.map((c) => [c.roundId, qToUnits(c.toQ)]));
+    const fixedSpec = { ...spec, routes: spec.routes.map((r) =>
+      shift.has(r.vehicle) ? { ...r, depart: shift.get(r.vehicle) } : r) };
+    const after = await digestOf(runRoutes(engine, fixedSpec, maxRounds));
+
+    $('repairPanel').hidden = false;
+    $('repairBody').innerHTML =
+      `<div class="hero"><div class="stat ${fix.fullyRepaired ? 'ok' : 'bad'}">` +
+      `${fix.feasibleBefore}<span style="color:var(--ink-faint)"> → </span>${fix.feasibleAfter}` +
+      `<small>of ${fix.roundsTotal} rounds held</small></div>` +
+      `<div class="heroNote">` +
+      (fix.changes.length
+        ? fix.changes.map((c) => `<b>${esc(c.roundId)}</b> now leaves ` +
+            `${qToUnits(c.fromQ)} → <b>${qToUnits(c.toQ)}</b>`).join('; ') + '. '
+        : 'No departure change helps any round. ') +
+      (fix.residual.length
+        ? '<br>And the honest part: ' + fix.residual.map((r) =>
+            `<b>${esc(r.roundId)}</b> cannot be fixed by re-timing at all — ` +
+            `${esc(r.stopId)} is short by <b>${qToUnits(r.deficitQ)}</b> at every possible ` +
+            'departure. That needs the stops re-ordered, which needs a distance matrix.').join('')
+        : '') +
+      '</div></div>' +
+      `<div style="margin-top:12px">` +
+      `<div class="digest"><span class="lab">digest before</span>${before}</div>` +
+      `<div class="digest moved"><span class="lab">digest after</span>${after}</div></div>` +
+      `<p class="hint">The repair proposes a departure shift. It never touches a ` +
+      `digest — <b>the same untouched verifier</b> that produced <code>before</code> ` +
+      `grades <code>after</code>.</p>`;
+    log(`repair: <b>${fix.feasibleBefore} → ${fix.feasibleAfter}</b> of ` +
+        `${fix.roundsTotal} held`, fix.fullyRepaired ? 'ok' : 'bad');
+  } catch (e) { fail(e); }
+};
+
+/* --------------------------- Tier 5 ------------------------------------- */
+$('bSeq').onclick = async () => {
+  clearErr();
+  try {
+    const { matrix: M, n, names } = matrix;
+    const before = await digestOf(runRoutes(engine, spec, maxRounds));
+    const rounds = matrixRounds(
+      spec.routes.map((r) => ({ id: r.vehicle, depart: r.depart ?? 0,
+        stops: r.stops.map((s) => ({ id: s.id, open: s.ready, close: s.due, travel: s.travel })) })),
+      (id) => (names.has(id) ? names.get(id) : -1));
+    const fleet = resequenceFleet(rounds, M, n);
+    const newSpec = { ...spec, routes: spec.routes.map((r, ri) => {
+      const o = fleet.outcomes[ri];
+      if (!o || !o.changed) return r;
+      const src = rounds[ri];
+      return { ...r, stops: o.best.map((pos, k) => ({ ...r.stops[pos],
+        travel: k === 0 ? 0
+          : mToUnits(M[src.stops[o.best[k - 1]].node * n + src.stops[pos].node]) })) };
+    }) };
+    const after = await digestOf(runRoutes(engine, newSpec, maxRounds));
+
+    const o = fleet.outcomes[0];
+    const bCost = mToUnits(o.originalCostQ), aCost = mToUnits(o.bestCostQ);
+    const worst = Math.max(bCost, aCost);
+    const pct = (100 * o.savingQ / o.originalCostQ);
+
+    $('seqPanel').hidden = false;
+    $('seqBody').innerHTML =
+      `<div class="cmp">` +
+      `<div class="cmpRow before"><span class="nm">before</span>` +
+      `<span class="track"><span class="fill" style="width:${(bCost / worst) * 100}%"></span></span>` +
+      `<span class="v">${bCost.toFixed(1)}</span></div>` +
+      `<div class="cmpRow after"><span class="nm">after</span>` +
+      `<span class="track"><span class="fill" style="width:${(aCost / worst) * 100}%"></span></span>` +
+      `<span class="v">${aCost.toFixed(1)}</span></div></div>` +
+      `<div class="saving">−${mToUnits(o.savingQ).toFixed(1)} ${esc(spec.unit)} ` +
+      `<span class="pct">(${pct.toFixed(1)}% of travel time)</span></div>` +
+      `<p class="hint">New order: <b>${o.bestIds.map(esc).join(' → ')}</b><br>` +
+      `<b>${fleet.feasibleBefore} of ${fleet.roundsTotal}</b> held before against ` +
+      `<b>${fleet.feasibleAfter} of ${fleet.roundsTotal}</b> after. Up to eight interior ` +
+      `stops every order is evaluated, so this is <b>the</b> optimum — no iteration ` +
+      `budget, temperature or seed to tune.</p>` +
+      `<div class="digest"><span class="lab">digest before</span>${before}</div>` +
+      `<div class="digest moved"><span class="lab">digest after</span>${after}</div>`;
+    log(`re-sequenced: <b>${bCost.toFixed(1)} → ${aCost.toFixed(1)}</b> ` +
+        `${esc(spec.unit)} (−${pct.toFixed(1)}%)`, 'ok');
+  } catch (e) { fail(e); }
+};
+
+/* --------------------------------------------------------------------------
+   DETERMINISM MONITOR
+
+   The one panel that could not exist in a dashboard built on mock data: it
+   re-runs the SAME schedule through the SAME engine twelve times and compares
+   every digest against the first. Twelve identical strings is the product's
+   central claim, demonstrated on the visitor's own machine rather than cited
+   from a paper.
+
+   It reports the distinct-digest COUNT rather than a pass tick, because "1
+   distinct value across 12 runs" is a measurement and "PASS" is an opinion.
+-------------------------------------------------------------------------- */
+$('bDet').onclick = async () => {
+  clearErr();
+  const RUNS = 12;
+  try {
+    $('detBody').className = 'muted';
+    $('detBody').textContent = `running ${RUNS}…`;
+    const seen = new Map();
+    const t0 = performance.now();
+    for (let i = 0; i < RUNS; i++) {
+      const d = await digestOf(runRoutes(engine, spec, maxRounds));
+      seen.set(d, (seen.get(d) ?? 0) + 1);
+    }
+    const ms = performance.now() - t0;
+    const distinct = seen.size;
+    const stable = distinct === 1;
+    const [d0] = [...seen.keys()];
+
+    $('detBody').className = '';
+    $('detBody').innerHTML =
+      `<div class="hero"><div class="stat ${stable ? 'ok' : 'bad'}">${distinct}` +
+      `<small>distinct digest${distinct === 1 ? '' : 's'} in ${RUNS} runs</small></div></div>` +
+      `<div class="rows" style="margin-top:12px">` +
+      `<div class="row"><span class="lbl">Verdict</span><span class="val">` +
+      `<span class="pill ${stable ? 'ok' : 'bad'}"><span class="g">${stable ? '✓' : '✕'}</span>` +
+      `${stable ? 'REPRODUCIBLE' : 'DIVERGED'}</span></span></div>` +
+      `<div class="row"><span class="lbl">Total elapsed</span>` +
+      `<span class="val">${ms.toFixed(1)} ms</span></div>` +
+      `<div class="row"><span class="lbl">Per run</span>` +
+      `<span class="val">${(ms / RUNS).toFixed(2)} ms</span></div></div>` +
+      `<div class="digest" style="margin-top:10px"><span class="lab">` +
+      `${stable ? 'every run' : 'first run'}</span>${d0}</div>` +
+      (stable ? '' : `<p class="hint" style="color:var(--bad)">The same input produced ` +
+        `more than one verdict on this machine. That is a defect, not a warning.</p>`);
+    log(`determinism: <b>${distinct} distinct</b> digest${distinct === 1 ? '' : 's'} ` +
+        `across ${RUNS} runs (${ms.toFixed(1)} ms)`, stable ? 'ok' : 'bad');
+  } catch (e) { fail(e); }
+};
+
+/* Enter runs the primary action, which is what a keyboard user expects of a
+   console. Not bound while focus is in a control that uses Enter itself. */
+addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.target.closest('button,input,textarea,select')) {
+    if (!$('bVerify').disabled) $('bVerify').click();
+  }
+});
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

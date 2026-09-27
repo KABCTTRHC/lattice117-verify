@@ -620,6 +620,12 @@
 <script type="module">
 import { verifyLicence, currentEntitlement, saveLicence, clearLicence } from './licence.js';
 import { verdictDigest as sharedDigest, rotaDigest } from './digest.js';
+/* The verification engine itself, shared rather than owned. See engine.js
+   for why: a second copy of a verification path is the one duplication this
+   project cannot tolerate. */
+import { loadEngine, runRoutes as engineRunRoutes, digestOf as engineDigestOf,
+         parseCsv as engineParseCsv, fromJson as engineFromJson,
+         Q as ENGINE_Q } from './engine.js';
 import { repairFixedSequence, roundsFromRows, fromQ as qToUnits } from './repair.js';
 import {
   parseMatrix, resequenceFleet, roundsFromRows as matrixRounds, fromQ as mToUnits,
@@ -727,7 +733,7 @@ async function refreshTier(){
 }
 
 const Q=65536, QMAX=32767, QMIN=-32768;
-let wasm=null, lastReport=null, csvRows=null, csvHeaders=null;
+let wasm=null, engine=null, lastReport=null, csvRows=null, csvHeaders=null;
 
 const $=id=>document.getElementById(id);
 const toQ=(v,what)=>{
@@ -739,16 +745,9 @@ const toQ=(v,what)=>{
 const fromQ=v=>v/Q, fmt=v=>fromQ(v).toFixed(4);
 
 async function loadWasm(){
-  const r=await fetch('lattice117_wasm.wasm');
-  const b=await r.arrayBuffer();
-  wasm=(await WebAssembly.instantiate(b,{})).instance.exports;
-  $('engineBadge').textContent='engine: WebAssembly, '+b.byteLength.toLocaleString('en-GB')+' bytes';
-}
-const mem=()=>new DataView(wasm.memory.buffer);
-function put(arr){
-  const bytes=arr.length*4, ptr=wasm.lattice_alloc(bytes), dv=mem();
-  for(let i=0;i<arr.length;i++) dv.setInt32(ptr+i*4,arr[i],true);
-  return {ptr,bytes};
+  engine = await loadEngine('lattice117_wasm.wasm');
+  wasm = engine.exports;                       // kept: existing call sites read it
+  $('engineBadge').textContent='engine: WebAssembly, '+engine.byteLength.toLocaleString('en-GB')+' bytes';
 }
 
 /* ---------------------------------------------------------------------------
@@ -766,118 +765,17 @@ function put(arr){
    sees. It defaults to the licence's own cap, so every caller that matters is
    unchanged, and Story mode never passes a cap for a customer's own sheet — the
    entitlement is still the only thing that decides what their data gets. */
+/* The tier cap stays HERE rather than moving into engine.js: which rounds a
+   customer is entitled to have evaluated is this surface's policy, and the
+   engine should not know what a licence is. */
 function runRoutes(spec, cap){
-  if(!wasm) throw new Error('the verification engine is still loading — try again in a moment');
-  const limit = cap ?? entitlement.maxRounds;
-  const results=[];
-  let capped=false;
-  for(const r of spec.routes){
-    // Free tier checks one round. The cap is applied here, at the point of
-    // evaluation, rather than by hiding rows in the UI - a limit that only
-    // exists in the presentation layer is not a limit.
-    if(results.length >= limit){ capped=true; break; }
-    const k=r.stops.length;
-    if(k<2) throw new Error(`round "${r.vehicle}" has ${k} stop(s); at least 2 are needed`);
-    const dist=new Array(k*k).fill(0);
-    for(let i=1;i<k;i++) dist[(i-1)*k+i]=toQ(r.stops[i].travel, `${r.vehicle} → ${r.stops[i].id} travel time`);
-
-    /* The departure time, folded into the leg out of the first stop.
-       The engine starts its clock at zero and takes no departure argument, so
-       this is how a departure is expressed to it. It is folded HERE, in the
-       verification path, and deliberately NOT in the canonical form, where it
-       stays a separate `depart` field — the digest records the schedule a planner
-       would run, not the encoding used to ask the question.
-
-       This was missing until Tier 5 landed, and it was a real defect rather than
-       an omission: the `depart` column entered the canonical form when the A4
-       repair shipped, so a sheet carrying `depart: 540` hashed as a 09:00 start
-       while being VERIFIED as though it left at midnight. The repair path folded
-       the departure only when proposing a change, so the headline verdict and the
-       repair's own count could disagree about the same sheet.
-
-       Folding zero is a no-op, which is why every digest published before this —
-       the fleet fixture's e249d90e…, the nine device captures, the white paper —
-       is unaffected. No bundled fixture carried a departure column. */
-    dist[1]+=toQ(r.depart ?? 0, `${r.vehicle} departure`);
-    const wins=[];
-    for(const st of r.stops) wins.push(toQ(st.ready,`${st.id} window open`), toQ(st.due,`${st.id} window close`));
-    const routeIdx=r.stops.map((_,i)=>i);
-
-    const db=put(dist), wb=put(wins), rb=put(routeIdx), ob=put([0,0,0,0,0,0]);
-    wasm.lattice_verify(rb.ptr, k, db.ptr, k, wb.ptr, ob.ptr);
-    const dv=mem(), o=[]; for(let i=0;i<6;i++) o.push(dv.getInt32(ob.ptr+i*4,true));
-    [db,wb,rb,ob].forEach(x=>wasm.lattice_free(x.ptr,x.bytes));
-
-    results.push({vehicle:r.vehicle, stops:k-2>0?k-2:k,
-      status:o[0], node:o[1]>=0?(r.stops[o[1]]?.id??String(o[1])):null,
-      arrival:o[2], close:o[3], deficit:o[4], cost:o[5]});
-  }
-  return {unit:spec.unit, checked:results.length, capped,
-          totalSubmitted:spec.routes.length,
-          feasible:results.filter(r=>r.status===0).length, results, spec};
+  return engineRunRoutes(engine, spec, cap ?? entitlement.maxRounds);
 }
 
-function fromJson(doc){
-  if(doc.schema!=='lattice117.audit.v1') throw new Error(`unexpected schema "${doc.schema}" — expected "lattice117.audit.v1"`);
-  const nodes=doc.nodes||[], n=nodes.length;
-  if(!n) throw new Error('no nodes');
-  const idx=new Map(nodes.map((nd,i)=>[nd.id,i]));
-  const M=doc.distance_matrix||[];
-  if(M.length!==n) throw new Error(`distance_matrix has ${M.length} rows but there are ${n} nodes`);
-  M.forEach((row,i)=>{ if(row.length!==n) throw new Error(`distance_matrix row ${i} has ${row.length} entries, expected ${n}`); });
-  const routes=(doc.routes||[]).map(r=>{
-    const stops=r.stops.map((sid,i)=>{
-      if(!idx.has(sid)) throw new Error(`round "${r.vehicle}" references unknown stop "${sid}"`);
-      const nd=nodes[idx.get(sid)];
-      return {id:sid, ready:nd.ready??0, due:nd.due??0,
-              travel: i===0 ? 0 : M[idx.get(r.stops[i-1])][idx.get(sid)]};
-    });
-    return {vehicle:r.vehicle, stops};
-  });
-  return {unit:doc.time_unit||'units', routes};
-}
+const fromJson = engineFromJson;
 
 /* ------------------------------ CSV ------------------------------------- */
-function parseCsv(text){
-  const rows=[]; let row=[], field='', q=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i];
-    if(q){
-      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
-      else field+=c;
-    } else if(c==='"') q=true;
-    else if(c===','){ row.push(field); field=''; }
-    else if(c==='\n'||c==='\r'){
-      if(field!==''||row.length){ row.push(field); rows.push(row); row=[]; field=''; }
-      if(c==='\r'&&text[i+1]==='\n') i++;
-    } else field+=c;
-  }
-  if(field!==''||row.length){ row.push(field); rows.push(row); }
-  return rows.filter(r=>r.some(c=>c.trim()!==''));
-}
-
-const FIELDS=[
-  {key:'vehicle', label:'Round / vehicle', req:true,
-   hints:['vehicle','round','van','truck','route','trip','duty','dutyid','run','journey'], avoid:[]},
-  {key:'stop',    label:'Stop',            req:true,
-   hints:['stop','location','site','customer','drop','address','name','point','deliverypoint','premises'],
-   avoid:['no','num','seq','order','index','count']},
-  {key:'open',    label:'Window opens',    req:true,
-   hints:['open','ready','earliest','from','start','windowopen','twstart','earliestarrival'], avoid:[]},
-  {key:'close',   label:'Window closes',   req:true,
-   hints:['close','due','latest','until','end','deadline','windowclose','twend','latestarrival'], avoid:[]},
-  {key:'travel',  label:'Travel from previous', req:true,
-   hints:['travel','leg','drive','drivetime','duration','transit','timefrom','mins','minutes','runtime'], avoid:[]},
-  {key:'seq',     label:'Sequence (optional)',  req:false,
-   hints:['seq','sequence','order','position','index','stopno','stopnumber','no','num','legno'], avoid:[]},
-  /* Optional, and the only column Tier 4 repair needs. A sheet without it
-     means "leaves at zero", which is what this schema has always meant, so
-     its digest does not move. 'start' is deliberately not a hint — it belongs
-     to the window-opens column. */
-  {key:'depart',  label:'Departure (optional)', req:false,
-   hints:['depart','departure','leave','leaves','leavetime','departtime','setoff','rollout'],
-   avoid:['window']},
-];
+const parseCsv = engineParseCsv;
 
 const norm=h=>h.toLowerCase().replace(/[^a-z]/g,'');
 
@@ -1012,22 +910,7 @@ function csvToSpec(){
    values as supplied, so a CSV import (strings) and the JSON path (numbers)
    disagreed about an identical fleet. Only the routes actually evaluated are
    included, which matters on the free tier where the run is capped. */
-async function digestOf(rep){
-  const checked=rep.results.length;
-  const routes=rep.spec.routes.slice(0,checked).map(r=>({
-    id:r.vehicle,
-    depart:r.depart ?? 0,
-    stops:r.stops.map(s=>({id:s.id, open:s.ready, close:s.due, travel:s.travel})),
-  }));
-  const verdict=rep.results.map(r=>({
-    id:r.vehicle,
-    feasible:r.status===0,
-    violation:r.status===1
-      ? {stop:r.node, raw:{arrival:r.arrival, windowClose:r.close, deficit:r.deficit}}
-      : null,
-  }));
-  return sharedDigest(routes, verdict);
-}
+const digestOf = engineDigestOf;
 
 /* ---------------------------- Tier 4 repair ------------------------------ */
 /* The solver proposes; the engine decides. `repairFixedSequence` never touches

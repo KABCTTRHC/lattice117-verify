@@ -314,7 +314,8 @@ console.log('\nThe reproduction pack is publishable and complete');
      stale the moment someone adds an asset, which is exactly how the last one
      was missed. */
   const sw = read('demo/sw.js');
-  for (const page of ['index.html', 'audit.html', 'determinism.html', 'splash.html']) {
+  for (const page of ['index.html', 'audit.html', 'determinism.html', 'splash.html',
+                      'dashboard.html']) {
     const html = read(`demo/${page}`);
     const refs = [...html.matchAll(/(?:href|src)="(\.\/brand\/[^"]+)"/g)].map((m) => m[1]);
     ok(`  demo/${page} references at least one brand asset`, refs.length > 0);
@@ -348,6 +349,25 @@ console.log('\nThe reproduction pack is publishable and complete');
     const undeclared = [...used].filter((v) => !declared.has(v));
     ok(`  every custom property it uses is declared${undeclared.length ? ` (missing: ${undeclared.join(', ')})` : ''}`,
        undeclared.length === 0);
+  }
+
+  /* The dashboard is the densest surface and the easiest place for a number to
+     appear that nothing computed. It may show only what the engine produced. */
+  {
+    const dash = read('demo/dashboard.html');
+    ok('  the dashboard is in the offline shell', sw.includes("'./dashboard.html'"));
+    ok('  it uses the shared engine module rather than its own copy',
+       /from '\.\/engine\.js'/.test(dash) && !/WebAssembly\.instantiate/.test(dash));
+    ok('  it applies the licence round cap at evaluation',
+       /runRoutes\(engine, spec, maxRounds\)/.test(dash) &&
+       !/runRoutes\(engine, [a-zA-Z]+, Infinity\)/.test(dash));
+    /* #10b981 vs #f43f5e is deltaE 5.6 under deuteranopia — below the floor at
+       which colour may carry meaning even WITH secondary encoding. So holds and
+       breaks must never be distinguished by colour alone anywhere on the page. */
+    ok('  holds/breaks carries a glyph and a word, not colour alone',
+       dash.includes("'✓' : '✕'") && dash.includes("'HOLDS' : 'BREAKS'"));
+    ok('  and the failing bar segment is hatched as well as coloured',
+       /\.bar i\.bad\{[^}]*repeating-linear-gradient/s.test(dash));
   }
 
   /* Apps Script serves the sidebar from a sandboxed iframe and will not serve
