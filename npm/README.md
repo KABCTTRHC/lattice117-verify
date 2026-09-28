@@ -111,13 +111,14 @@ Vehicle capacity is not yet checked as a hard constraint.
 
 ## Provenance
 
-Extracted from the Lattice117 engine, where it sits under 196 passing tests and
+Extracted from the Lattice117 engine, where it sits under 540 passing tests and
 is validated against the published SINTEF Solomon C101 instance and its
 published Rochat & Taillard solution.
 
-That parent engine is not published, so read the 196 as our claim rather than
-as something you can check. The open repository ships 4 tests — that is what
-`cargo test` gives you there. What you *can* check is the digest: CI pins the
+That parent engine is not published, so read the 540 as our claim rather than
+as something you can check. The open repository ships 79 Rust tests and 474
+JavaScript checks — that is what `cargo test --all` and `node tests/*.test.mjs`
+give you there. What you *can* check is the digest: CI pins the
 verdict digest for a known input and fails if Linux, macOS and Windows
 disagree, which is the determinism claim this package rests on.
 
