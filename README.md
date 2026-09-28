@@ -78,9 +78,11 @@ cargo build --release
 lattice117-audit --input schedule.json          # human-readable
 lattice117-audit --input schedule.json --json   # machine-readable
 cat schedule.json | lattice117-audit            # stdin
+lattice117-audit --input schedule.json --allow-open-route   # see "Route origin"
 ```
 
-**Exit codes** — `0` feasible, `1` infeasible, `2` bad input. Distinct so it
+**Exit codes** — `0` feasible, `1` infeasible, `2` bad input (including a
+route that does not start at the depot). Distinct so it
 works as a CI gate: check your planner's output on every commit rather than in
 a meeting afterwards.
 
@@ -103,8 +105,19 @@ a meeting afterwards.
 ```
 
 Travel times and time windows share one unit. The tool never assumes what that
-unit is — it echoes your `time_unit` label back and reports in it. Node 0 is
-the route origin.
+unit is — it echoes your `time_unit` label back and reports in it.
+
+### Route origin
+
+Node 0 is the depot, and **every route must start there**. Each route is timed
+from its first stop at t = 0, so a route written `["A","B","C"]` instead of
+`["depot","A","B","C","depot"]` drops the depot-to-A leg: every arrival comes
+out early by that leg and a late schedule can pass. Versions before 28 Sep 2026
+did exactly that. Such a route is now a bad-input error (exit `2`) naming the
+route and the depot. For a vehicle genuinely already in the field, pass
+`--allow-open-route`; the report then says `"route_origin": "open"` and the flag
+is folded into the digest, so an open-route verdict never matches a
+depot-origin one. Digests of depot-origin schedules are unchanged.
 
 Values outside the Q16.16 representable range (−32,768 to 32,767) are a hard
 input error naming the offending field, not a silent wrap. A wrapped value

@@ -57,10 +57,25 @@
 //!
 //! - `0` — every route feasible
 //! - `1` — at least one route infeasible (a violation was attributed)
-//! - `2` — the input could not be read, parsed, or validated
+//! - `2` — the input could not be read, parsed, or validated, including a
+//!   route that does not start at the depot (see below)
 //!
 //! Distinct codes so this is usable as a CI gate, which is the point: a
 //! planner's output can be checked on every commit rather than in a meeting.
+//!
+//! ## Route origin
+//!
+//! Every route is timed from its **first stop at t = 0**. The contract is
+//! that the first stop is the depot (`nodes[0]`). A route written as
+//! `["A","B","C"]` instead of `["depot","A","B","C","depot"]` silently drops
+//! the depot-to-A leg, so every arrival is early by that leg's travel time and
+//! a late schedule can PASS. That was a real false PASS, found on
+//! 28 Sep 2026: the same stops FAIL by 5.0 once the depot is written in.
+//!
+//! So a route that does not start at the depot is an **input error (exit 2)**,
+//! not a verdict. `--allow-open-route` accepts it for a genuinely open route
+//! (a vehicle already in the field); the flag is folded into the digest, so an
+//! open-route verdict can never be passed off as a depot-origin one.
 //!
 //! ## Usage
 //!
@@ -68,6 +83,7 @@
 //! lattice117_audit --input schedule.json
 //! cat schedule.json | lattice117_audit
 //! lattice117_audit --input schedule.json --json   # machine-readable
+//! lattice117_audit --input schedule.json --allow-open-route
 //! ```
 
 use std::io::{IsTerminal, Read};
@@ -146,6 +162,8 @@ struct RouteSpec {
 struct AuditReport {
     schema: &'static str,
     verdict: &'static str,
+    /// `"depot"` (the default contract) or `"open"` (`--allow-open-route`).
+    route_origin: &'static str,
     time_unit: Option<String>,
     routes_checked: usize,
     routes_feasible: usize,
@@ -188,6 +206,13 @@ struct Cli {
     /// Never emit ANSI colour, regardless of terminal detection.
     #[arg(long)]
     no_color: bool,
+
+    /// Accept routes that do not start at the depot (`nodes[0]`); each is then
+    /// timed from its own first stop at t = 0. Without this flag such a route
+    /// is an input error (exit 2), because leaving the depot out makes every
+    /// arrival early and can pass a late schedule.
+    #[arg(long)]
+    allow_open_route: bool,
 }
 
 fn main() {
@@ -203,8 +228,33 @@ fn main() {
 
 fn run(cli: &Cli) -> Result<i32, String> {
     let raw = read_input(cli)?;
+    let report = audit(&raw, cli.allow_open_route)?;
+
+    if cli.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .map_err(|e| format!("could not serialise report: {e}"))?
+        );
+    } else {
+        print_human(&report, use_colour(cli));
+    }
+
+    Ok(exit_code(&report))
+}
+
+fn exit_code(report: &AuditReport) -> i32 {
+    if report.violations.is_empty() {
+        0
+    } else {
+        1
+    }
+}
+
+/// Parses, validates and checks one schedule. `Err` is an input error (exit 2).
+fn audit(raw: &str, allow_open_route: bool) -> Result<AuditReport, String> {
     let input: AuditInput =
-        serde_json::from_str(&raw).map_err(|e| format!("could not parse schedule JSON: {e}"))?;
+        serde_json::from_str(raw).map_err(|e| format!("could not parse schedule JSON: {e}"))?;
 
     validate(&input)?;
 
@@ -259,6 +309,20 @@ fn run(cli: &Cli) -> Result<i32, String> {
             ordered.push(idx);
         }
 
+        // The route-origin contract (module note). Checked before evaluation
+        // so an open route is never given a verdict it did not earn.
+        if !allow_open_route && ordered.first() != Some(&0) {
+            let depot = &input.nodes[0].id;
+            let first = route.stops.first().map_or("<none>", String::as_str);
+            return Err(format!(
+                "route \"{label}\" starts at \"{first}\", not at the depot \"{depot}\" (nodes[0]). \
+                 Every route is timed from its first stop at t = 0, so leaving the depot out \
+                 makes each arrival early by the depot leg and can pass a late schedule. \
+                 Write the route as [\"{depot}\", ..., \"{depot}\"], or pass --allow-open-route \
+                 if this vehicle genuinely starts at \"{first}\""
+            ));
+        }
+
         match evaluate_order(&ordered, &distances_q16, nodes_count, &time_windows) {
             Ok(_final_arrival_q16) => feasible += 1,
             Err(v) => violations.push(to_report(&label, v, &input)),
@@ -289,6 +353,11 @@ fn run(cli: &Cli) -> Result<i32, String> {
     let canonical = raw.replace("\r\n", "\n");
     let mut hasher = Sha256::new();
     hasher.update(canonical.as_bytes());
+    // Only the non-default mode is hashed, so every depot-origin digest
+    // published before the flag existed is unchanged.
+    if allow_open_route {
+        hasher.update(b"\x00route-origin:open");
+    }
     hasher.update(b"\x00verdict:");
     hasher.update(verdict.as_bytes());
     for v in &violations {
@@ -299,27 +368,16 @@ fn run(cli: &Cli) -> Result<i32, String> {
     }
     let digest = format!("{:x}", hasher.finalize());
 
-    let report = AuditReport {
+    Ok(AuditReport {
         schema: "lattice117.audit.report.v1",
         verdict,
+        route_origin: if allow_open_route { "open" } else { "depot" },
         time_unit: input.time_unit.clone(),
         routes_checked: input.routes.len(),
         routes_feasible: feasible,
         violations,
         verdict_digest_sha256: digest,
-    };
-
-    if cli.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&report)
-                .map_err(|e| format!("could not serialise report: {e}"))?
-        );
-    } else {
-        print_human(&report, use_colour(cli));
-    }
-
-    Ok(if report.violations.is_empty() { 0 } else { 1 })
+    })
 }
 
 fn read_input(cli: &Cli) -> Result<String, String> {
@@ -450,6 +508,11 @@ fn print_human(report: &AuditReport, colour: bool) {
     println!();
     println!("{bold}LATTICE117 SCHEDULE AUDIT{reset}");
     println!("{dim}air-gapped · deterministic · no data left this machine{reset}");
+    if report.route_origin == "open" {
+        println!(
+            "{dim}--allow-open-route: each route is timed from its own first stop, not the depot{reset}"
+        );
+    }
     println!();
 
     if report.violations.is_empty() {
@@ -499,4 +562,83 @@ fn print_human(report: &AuditReport, colour: bool) {
         "{dim}To generate a cryptographically sealed compliance artifact for this audit, upgrade to a commercial license.{reset}"
     );
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// depot open 0..600; A due 30, B due 50, C due 40. depot->A->B->C is
+    /// 20 + 15 + 10 = 45 at C, so C is late by 5. Leave the depot out and C is
+    /// reached at 15 + 10 = 25: a false PASS.
+    fn schedule(stops: &[&str], c_due: f64) -> String {
+        let stops: Vec<String> = stops.iter().map(|s| format!("\"{s}\"")).collect();
+        format!(
+            r#"{{"schema":"lattice117.audit.v1","time_unit":"minutes",
+            "nodes":[{{"id":"depot","ready":0,"due":600}},{{"id":"A","ready":0,"due":30}},
+                     {{"id":"B","ready":0,"due":50}},{{"id":"C","ready":0,"due":{c_due}}}],
+            "distance_matrix":[[0,20,25,30],[20,0,15,25],[25,15,0,10],[30,25,10,0]],
+            "routes":[{{"vehicle":"van-1","stops":[{}]}}]}}"#,
+            stops.join(",")
+        )
+    }
+
+    #[test]
+    fn a_depot_origin_route_inside_every_window_passes() {
+        let r = audit(&schedule(&["depot", "A", "B", "C", "depot"], 60.0), false).unwrap();
+        assert_eq!(r.verdict, "FEASIBLE");
+        assert_eq!(r.route_origin, "depot");
+        assert_eq!(exit_code(&r), 0);
+    }
+
+    #[test]
+    fn a_late_route_fails_and_names_the_stop_and_the_deficit() {
+        let r = audit(&schedule(&["depot", "A", "B", "C", "depot"], 40.0), false).unwrap();
+        assert_eq!(r.verdict, "INFEASIBLE");
+        assert_eq!(exit_code(&r), 1);
+        assert_eq!(r.violations.len(), 1);
+        let v = &r.violations[0];
+        assert_eq!(v.node_id, "C");
+        assert_eq!(v.arrival_time_q16, 45 * 65_536);
+        assert_eq!(v.window_close_q16, 40 * 65_536);
+        assert_eq!(v.deficit_q16, 5 * 65_536);
+    }
+
+    #[test]
+    fn the_missing_depot_trap_is_an_input_error_not_a_pass() {
+        let err = audit(&schedule(&["A", "B", "C"], 40.0), false).unwrap_err();
+        assert!(err.contains("not at the depot \"depot\""), "{err}");
+        assert!(err.contains("--allow-open-route"), "{err}");
+        let r = audit(&schedule(&["depot", "A", "B", "C", "depot"], 40.0), false).unwrap();
+        assert_eq!(exit_code(&r), 1);
+    }
+
+    #[test]
+    fn an_empty_route_is_an_input_error() {
+        assert!(audit(&schedule(&[], 40.0), false).is_err());
+    }
+
+    #[test]
+    fn allow_open_route_times_from_the_first_stop_and_says_so_in_the_digest() {
+        let open = audit(&schedule(&["A", "B", "C"], 40.0), true).unwrap();
+        assert_eq!(open.verdict, "FEASIBLE");
+        assert_eq!(open.route_origin, "open");
+        let raw = schedule(&["depot", "A", "B", "C", "depot"], 60.0);
+        let strict = audit(&raw, false).unwrap();
+        let loose = audit(&raw, true).unwrap();
+        assert_eq!(strict.verdict, loose.verdict);
+        assert_ne!(strict.verdict_digest_sha256, loose.verdict_digest_sha256);
+    }
+
+    #[test]
+    fn the_published_example_digest_is_unchanged() {
+        // The digest CI pins for examples/infeasible.json. The route-origin
+        // contract must not move a single published depot-origin digest.
+        let raw = include_str!("../../../examples/infeasible.json");
+        let r = audit(raw, false).unwrap();
+        assert_eq!(
+            r.verdict_digest_sha256,
+            "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085"
+        );
+    }
 }

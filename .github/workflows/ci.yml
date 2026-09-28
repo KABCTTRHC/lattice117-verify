@@ -88,6 +88,24 @@ jobs:
           [ "$LF" = "611eef21de58485fe4727b74f54f4f6a06e1e1bf9567384c989a1e75b5cac085" ]
           rm -f lf.json crlf.json
 
+      # The route-origin contract. A route that leaves out the depot is timed
+      # from its first stop and can pass a late schedule, so it must be exit 2
+      # (bad input), never 0, unless --allow-open-route is given.
+      - name: A route without the depot is bad input, not a pass
+        shell: bash
+        run: |
+          BIN=./target/release/lattice117-audit
+          sed 's/"stops": \["depot", "ACME-Ltd", "Bravo-Eng", "depot"\]/"stops": ["ACME-Ltd", "Bravo-Eng"]/' \
+            examples/infeasible.json > open.json
+          grep -q '"stops": \["ACME-Ltd", "Bravo-Eng"\]' open.json
+          set +e
+          "$BIN" --input open.json --json; CODE=$?
+          "$BIN" --input open.json --json --allow-open-route > /dev/null; OPEN=$?
+          set -e
+          if [ "$CODE" -ne 2 ]; then echo "::error::expected exit 2, got $CODE"; exit 1; fi
+          if [ "$OPEN" -eq 2 ]; then echo "::error::--allow-open-route still refused the route"; exit 1; fi
+          rm -f open.json
+
   # The NEON path is cfg'd to target_arch = "aarch64" and every other job here
   # runs on x86_64, so nothing compiled it. It had been broken since Rust
   # started requiring an explicit unsafe block inside `unsafe fn` - which this
