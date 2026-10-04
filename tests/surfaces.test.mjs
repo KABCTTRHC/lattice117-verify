@@ -315,7 +315,7 @@ console.log('\nThe reproduction pack is publishable and complete');
      was missed. */
   const sw = read('demo/sw.js');
   for (const page of ['index.html', 'audit.html', 'determinism.html', 'splash.html',
-                      'dashboard.html']) {
+                      'dashboard.html', 'omni.html']) {
     const html = read(`demo/${page}`);
     const refs = [...html.matchAll(/(?:href|src)="(\.\/brand\/[^"]+)"/g)].map((m) => m[1]);
     ok(`  demo/${page} references at least one brand asset`, refs.length > 0);

@@ -39,7 +39,6 @@ is worth, and the two are not related.
 | C / C++ / headers | 116 files, 17,790 lines | — |
 | JavaScript / TypeScript | 14 files, 391 lines | 23 files, 3,696 lines |
 | HTML | — | 11 files, 5,674 lines |
-| Solidity | 4 files, 377 lines | — |
 | Markdown documentation | 84 files | 6 files, 2,474 lines |
 | Commits | 104 | 47 |
 

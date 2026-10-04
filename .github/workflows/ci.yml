@@ -207,6 +207,7 @@ jobs:
         run: |
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
+          [ -d crates/lattice117-omni/src ] && CRATES="$CRATES crates/lattice117-omni/src"
           FOUND=0
           strip_tests() {
             awk '
@@ -256,6 +257,7 @@ jobs:
         run: |
           CRATES="crates/lattice117-verify/src crates/lattice117-wasm/src"
           [ -d crates/lattice117-solve/src ] && CRATES="$CRATES crates/lattice117-solve/src"
+          [ -d crates/lattice117-omni/src ] && CRATES="$CRATES crates/lattice117-omni/src"
           FOUND=0
           strip_tests() {
             awk '
@@ -292,6 +294,11 @@ jobs:
       # section of the suite checks it stays that way.
       - name: Convex-position benchmark is reproducible from its geometry
         run: node tools/fixture/convex.mjs --check
+      # The omni soak page compares every device against checkpoints pinned
+      # from the native build. This recomputes them from the committed module
+      # with node:crypto's SHA-256, so the kernel's own hash is checked too.
+      - name: Omni soak module reproduces its pinned checkpoints
+        run: node tests/omni.test.mjs
       - name: Fixture B, and the benchmark harness
         run: node tests/benchmark.test.mjs
       - name: Rota rest and break boundaries
