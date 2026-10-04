@@ -309,7 +309,9 @@ async function keepAwake(){
   try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch {}
 }
 document.addEventListener('visibilitychange', () => {
-  if (!run) return;
+  // Only time hidden while the soak runs counts; after finish() the sealed
+  // record already holds the total, and the JSON must not grow past it.
+  if (!run || run.done) return;
   if (document.visibilityState === 'hidden') run.hiddenSince = performance.now();
   else { if (run.hiddenSince) { run.hiddenMs += performance.now() - run.hiddenSince; run.minHidden += performance.now() - run.hiddenSince; run.hiddenSince = 0; }
          keepAwake(); }
@@ -488,11 +490,12 @@ async function finish(why){
   const first = m.minutes[0], last = m.minutes[m.minutes.length - 1];
   const allOk = !(m.chainFails || m.repeatFails || m.fixtureFails || m.preflightFail);
   const t0 = $('t0').value.trim(), t1 = $('t1').value.trim();
+  const endedAt = new Date().toISOString();
   const L = [];
   L.push('LATTICE117 OMNI-HARDWARE SOAK RECORD');
   L.push('device label  ' + (m.label || '(not given)'));
   L.push('started       ' + m.startedAt);
-  L.push('ended         ' + new Date().toISOString() + '  (' + why + ')');
+  L.push('ended         ' + endedAt + '  (' + why + ')');
   L.push('duration      ' + Math.floor(secs / 60) + ' min ' + Math.round(secs % 60) + ' s of ' + (m.durationMin ? m.durationMin + ' min planned' : 'open-ended'));
   L.push('');
   L.push('DEVICE');
@@ -530,7 +533,7 @@ async function finish(why){
   const seal = await sha256hex(body);
   $('block').textContent = body + '\nRECORD SEAL ' + seal;
   $('blockPanel').style.display = '';
-  run.recordSeal = seal; run.endedAt = new Date().toISOString();
+  run.recordSeal = seal; run.endedAt = endedAt;
   $('status').textContent = allOk ? 'Done. Every result matched. Copy or download the record below.'
     : 'Done — a divergence was detected. That is a finding; keep the record and the log.';
 }

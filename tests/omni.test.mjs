@@ -76,5 +76,25 @@ ok('  the page re-checks the same reference digests as determinism.html',
 ok('  the published referee module is not the soak module',
    !readFileSync(join(ROOT, 'demo/lattice117_wasm.wasm')).equals(readFileSync(join(ROOT, 'demo/lattice117_omni.wasm'))));
 
+// The 4 October soak found the JSON's hiddenMs including time after the run
+// ended, while the sealed record said 0 s. The page's own handler is run here against a fake clock.
+console.log('record and download agree');
+{
+  const src = page.match(/document\.addEventListener\('visibilitychange', (\(\) => \{[\s\S]*?\n\})\);/)[1];
+  let now = 0, state = 'visible';
+  const run = { done: false, hiddenMs: 0, minHidden: 0, hiddenSince: 0 };
+  const onVis = new Function('document', 'performance', 'keepAwake', 'run', `return ${src};`)(
+    { get visibilityState() { return state; } }, { now: () => now }, () => {}, run);
+  const flip = (s, t) => { state = s; now = t; onVis(); };
+  flip('hidden', 1000); flip('visible', 3000);
+  const during = run.hiddenMs;
+  run.done = true;
+  flip('hidden', 4000); flip('visible', 900000);
+  ok('  hidden time during the run is counted', during === 2000, String(during));
+  ok('  hidden time after the run ends is not', run.hiddenMs === 2000, String(run.hiddenMs));
+  ok('  the record and the JSON carry the same end time',
+     page.includes("L.push('ended         ' + endedAt + ") && page.includes('run.endedAt = endedAt;'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
