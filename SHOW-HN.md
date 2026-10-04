@@ -71,7 +71,7 @@ On provenance: the verification core is extracted from a larger engine where it
 sits under 540 passing tests and is validated against the published SINTEF
 Solomon C101 instance and its published Rochat & Taillard solution. That engine
 is not public, so treat the 540 as a claim, not as evidence — the open
-repository ships 86 Rust tests and 497 JavaScript checks, and those you can run. The part you can actually check is the
+repository ships 86 Rust tests and 500 JavaScript checks, and those you can run. The part you can actually check is the
 determinism: CI pins the verdict digest for a known input across Linux, macOS
 and Windows and fails if they disagree.
 

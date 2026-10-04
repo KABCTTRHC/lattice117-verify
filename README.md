@@ -140,7 +140,7 @@ match evaluate_order(&route, &distances_q16, node_count, &windows) {
 ## Provenance
 
 This verification core is extracted from the Lattice117 engine. **This
-repository ships 86 Rust tests and 497 JavaScript checks** — `cargo test --all`
+repository ships 86 Rust tests and 500 JavaScript checks** — `cargo test --all`
 and the eleven `node tests/*.test.mjs` suites, all passing as of 4 October 2026
 (the "4 tests" this line used to say was long out of date). The parent engine's
 669-test figure is not something this repository lets you check; read it as our
