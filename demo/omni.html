@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni-Hardware Soak</title>
+<link rel="icon" type="image/png" sizes="32x32" href="./brand/glyph-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./brand/mark-180.png">
+<style>
+  :root{
+    --bg:#07090e;--ink:#e8eef6;--ink-dim:#94a3b8;--ink-faint:#64748b;
+    --ok:#10b981;--bad:#f43f5e;--warn:#f59e0b;--accent:#0ea5e9;
+    --glass:rgba(17,24,39,.65);--glass-2:rgba(23,32,48,.58);
+    --line:rgba(255,255,255,.08);--rim:inset 0 1px 0 rgba(255,255,255,.07);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg)}
+  body{margin:0;padding:18px 14px 60px;color:var(--ink);font:15px/1.55 var(--sans);
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(600px 400px at 8% -6%,rgba(16,185,129,.10),transparent 62%),
+      radial-gradient(520px 380px at 96% 4%,rgba(14,165,233,.09),transparent 60%);
+    background-attachment:fixed}
+  .wrap{max-width:880px;margin:0 auto}
+  h1{font:800 clamp(19px,5vw,26px)/1.2 var(--sans);margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--ink-dim);font-size:13.5px;margin:0 0 18px}
+  .panel{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:16px;
+    margin-bottom:14px;box-shadow:var(--rim);
+    -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+  h2{font:700 11px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;
+     color:var(--ink-faint);margin:0 0 12px}
+  button{width:100%;font:700 15px var(--sans);padding:15px;border-radius:12px;cursor:pointer;
+    border:1px solid rgba(16,185,129,.6);color:#06251a;
+    background:linear-gradient(180deg,#34d399,var(--ok));
+    box-shadow:var(--rim)}
+  button.sec{background:var(--glass-2);color:var(--ink);
+    border-color:rgba(255,255,255,.14);margin-top:9px;font-weight:600}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  label{display:block;font-size:13px;color:var(--ink-dim);margin:10px 0 4px}
+  input,select{width:100%;font:14px var(--sans);padding:10px;border-radius:10px;color:var(--ink);
+    background:rgba(8,11,18,.55);border:1px solid var(--line)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  pre{font:11.5px/1.65 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0;
+    background:rgba(8,11,18,.55);border:1px solid var(--line);border-radius:11px;padding:13px}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;
+       border-bottom:1px solid var(--line);font-size:13.5px}
+  .row:last-child{border-bottom:0}
+  .row .k{color:var(--ink-dim)}
+  .row .v{font:600 12.5px var(--mono);text-align:right;word-break:break-all}
+  .v.ok{color:var(--ok)} .v.bad{color:var(--bad)} .v.warn{color:var(--warn)}
+  .pill{display:inline-block;font:700 10.5px/1 var(--mono);letter-spacing:.06em;
+        padding:6px 10px;border-radius:999px;border:1px solid transparent}
+  .pill.ok{color:var(--ok);background:rgba(16,185,129,.13);border-color:rgba(16,185,129,.38)}
+  .pill.bad{color:var(--bad);background:rgba(244,63,94,.13);border-color:rgba(244,63,94,.38)}
+  .pill.run{color:var(--accent);background:rgba(14,165,233,.13);border-color:rgba(14,165,233,.38)}
+  .note{font-size:12.5px;color:var(--ink-faint);margin:12px 0 0;line-height:1.55}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .stat{background:rgba(8,11,18,.45);border:1px solid var(--line);border-radius:11px;padding:10px}
+  .stat .n{font:700 18px var(--mono)} .stat .l{font-size:11.5px;color:var(--ink-faint)}
+  table{width:100%;border-collapse:collapse;font:12px var(--mono)}
+  th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--ink-faint);font-weight:600}
+  .scroll{overflow-x:auto;max-height:360px;overflow-y:auto}
+  canvas{width:100%;height:140px;display:block}
+  .lockup{display:flex;align-items:center;gap:.7rem;margin:0 0 .35rem}
+  .lockup img{width:34px;height:34px;flex-shrink:0;display:block}
+  .lockup .wordmark{font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+                    font-size:.78rem;opacity:.85}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="lockup"><img src="./brand/glyph-48.png" width="34" height="34" alt=""><span class="wordmark">Lattice117</span></div>
+<h1>Omni-hardware soak</h1>
+<p class="sub">Runs the same integer arithmetic on <i>this</i> device for as long as you
+choose, a different generated planning problem every cycle, and checks that it lands on
+exactly the same numbers as every other device. Everything computes locally; nothing is
+sent anywhere. Once loaded it works with the network off.</p>
+
+<div class="panel" id="setup">
+  <h2>Set up</h2>
+  <label for="label">Device name (goes in the record)</label>
+  <input id="label" placeholder="e.g. Pixel 8 Pro, Chrome 129" autocomplete="off">
+  <label for="duration">Duration</label>
+  <select id="duration">
+    <option value="2">2 minutes (quick check)</option>
+    <option value="30" selected>30 minutes (standard soak)</option>
+    <option value="60">60 minutes</option>
+    <option value="0">Until I press stop</option>
+  </select>
+  <div class="two">
+    <div><label for="t0">Device temperature at start, °C (optional)</label><input id="t0" inputmode="decimal"></div>
+    <div><label for="t1">Device temperature at end, °C (optional)</label><input id="t1" inputmode="decimal"></div>
+  </div>
+  <p class="note">Web pages cannot read a temperature sensor; no browser exposes one. If you
+  can read it from the device (Android: battery temperature in Settings or
+  <code>termux-battery-status</code>; laptops: the OS sensor tool), enter it here and the
+  record marks it as entered by the operator. For measured temperature every cycle, use the
+  native soak (<code>omni_soak</code>) on Linux, Android (Termux), Pine64 or a Chromebook.</p>
+  <button id="start" style="margin-top:14px">Start the soak</button>
+  <button id="stop" class="sec" disabled>Stop now and write the record</button>
+  <p class="note" id="status">Ready. Plug the device in and keep this tab in front: a hidden
+  tab is slowed down by the browser, and the record says how long it was hidden.</p>
+</div>
+
+<div class="panel" id="livePanel" style="display:none">
+  <h2>Live</h2>
+  <p style="margin:0 0 12px"><span class="pill run" id="verdictPill">RUNNING</span></p>
+  <div class="stats">
+    <div class="stat"><div class="n" id="sElapsed">0:00</div><div class="l">elapsed</div></div>
+    <div class="stat"><div class="n" id="sCycles">0</div><div class="l">cycles (problems solved)</div></div>
+    <div class="stat"><div class="n" id="sRate">–</div><div class="l">cycles per second</div></div>
+    <div class="stat"><div class="n" id="sP50">–</div><div class="l">median ms per cycle</div></div>
+    <div class="stat"><div class="n" id="sP95">–</div><div class="l">95th pct ms (last minute)</div></div>
+    <div class="stat"><div class="n" id="sThrottle">–</div><div class="l">slow-down vs first minute</div></div>
+  </div>
+  <canvas id="spark" width="840" height="140" style="margin-top:12px"></canvas>
+  <p class="note">Median (green) and 95th percentile (amber) milliseconds per cycle, minute by
+  minute. A rising line is the device slowing down as it heats: the results must not change.</p>
+</div>
+
+<div class="panel" id="testsPanel" style="display:none">
+  <h2>Every test</h2>
+  <div id="tests"></div>
+</div>
+
+<div class="panel" id="cpPanel" style="display:none">
+  <h2>Determinism checkpoints</h2>
+  <div class="scroll"><table><thead><tr><th>after cycle</th><th>chain on this device</th><th>result</th></tr></thead>
+  <tbody id="cpBody"></tbody></table></div>
+  <p class="note">The chain folds every result of every cycle into one SHA-256 value. Every
+  device that reaches a checkpoint must show the same 64 characters as every other device,
+  and as the value pinned here from the native build.</p>
+</div>
+
+<div class="panel" id="minPanel" style="display:none">
+  <h2>Minute by minute</h2>
+  <div class="scroll"><table><thead><tr><th>min</th><th>cycles</th><th>p50 ms</th><th>p95 ms</th><th>max ms</th>
+  <th>battery</th><th>cpu pressure</th><th>heap MB</th><th>hidden s</th><th>fixtures</th></tr></thead>
+  <tbody id="minBody"></tbody></table></div>
+</div>
+
+<div class="panel" id="devPanel">
+  <h2>This device</h2>
+  <div id="device"></div>
+</div>
+
+<div class="panel" id="blockPanel" style="display:none">
+  <h2>Evidence record</h2>
+  <pre id="block"></pre>
+  <button id="copy" class="sec">Copy the record</button>
+  <button id="dlJson" class="sec">Download full log (JSON, every cycle)</button>
+  <button id="dlCsv" class="sec">Download minute log (CSV)</button>
+  <p class="note">The last line is SHA-256 over every line above it, so a pasted record can be
+  checked for edits by re-hashing it. The checkpoint values are what must match across
+  devices; the timings and telemetry are this device's own.</p>
+</div>
+
+</div>
+
+<script type="module">
+import { verdictDigest, rotaDigest, toQ, Q } from './digest.js';
+import { evaluateRota } from './rota.js';
+
+/* Pinned from the native build (crates/lattice117-omni/examples/omni_checkpoints.rs)
+   and checked against node:crypto by tests/omni.test.mjs. Kernel version 1. */
+const KERNEL_VERSION = 1;
+const EXPECT = {
+  // OMNI-CHECKPOINTS-BEGIN
+  10: '445986e880b974951c9e892707b7b231ddd4a54d24f5625361ddd5cac0a489eb',
+  100: '9a89085eb18263d2a44862603237c93b96bf9f1ccdbdf51974b0a46565c6d6c3',
+  1000: 'c6ca94561415ca3f5136d5edee604c3b53df7d3d42b180579ac444460acf6a15',
+  5000: '2e402bec9f6c4d4af279977bebe10c726996bfc8ff573ec8deb79e40179a1f71',
+  10000: '5a5a5aa22f5433339ff6bc642a3079f196945b4702ceef4383107b679b8d5f3c',
+  25000: 'b5867b6f8dfc4becfb46f170ad8ea0e38c5d76466c42b3f0e6c8f1109a727afa',
+  50000: '78f731c27724508214c2daf0f436ec401d830cc53e67c563a325663abcdbc1ab',
+  100000: 'd41f69b73b8fd04a88f4ef652c6da865349b12976a16f91e60e10c269a74ebd7',
+  // OMNI-CHECKPOINTS-END
+};
+const CHECKPOINTS = Object.keys(EXPECT).map(Number).sort((a, b) => a - b);
+
+/* The same reference fixtures, and the same expected digests, as determinism.html. */
+const FIXTURE_EXPECT = {
+  fleet: 'e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d',
+  rota : '83c66e6dfdd2f1b304364f65a102397b85bf1c225396c2dbd36df9272c92f3cf',
+};
+const REPEAT_EVERY = 500;
+
+const $ = (id) => document.getElementById(id);
+const csv = async (f) => (await (await fetch(f)).text()).trim().split(/\r?\n/).map((l) => l.split(','));
+const fmt = (n, d = 1) => (n == null || !isFinite(n)) ? '–' : n.toFixed(d);
+const pct = (arr, p) => { if (!arr.length) return null; const s = [...arr].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
+
+/* ---- Reference fixtures: same code path as determinism.html ---- */
+function exactQ(s){
+  const m = /^\s*(-?)(\d*)(?:\.(\d*))?\s*$/.exec(String(s));
+  if (!m) return null;
+  const [, sign, ip, fp = ''] = m;
+  const frac = (fp + '0'.repeat(20)).slice(0, 20);
+  const den = 10n ** BigInt(frac.length);
+  const v = BigInt(ip || '0') * BigInt(Q) + (BigInt(frac) * BigInt(Q) * 2n + den) / (den * 2n);
+  return Number(sign === '-' ? -v : v);
+}
+let referee = null;
+async function loadReferee(){
+  if (referee) return referee;
+  const bytes = await (await fetch('lattice117_wasm.wasm')).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  referee = { ex: instance.exports, bytes: bytes.byteLength };
+  return referee;
+}
+let routeSheet = null, rotaSheet = null;
+async function fleetDigest(){
+  routeSheet = routeSheet || await csv('example-route-sheet.csv');
+  const r = routeSheet, h = r[0].map((x) => x.trim()), ix = (n) => h.indexOf(n);
+  const m = new Map();
+  for (const row of r.slice(1)){
+    const v = row[ix('vehicle')].trim();
+    if (!m.has(v)) m.set(v, []);
+    m.get(v).push({ id: row[ix('stop')].trim(), open: row[ix('window_open')],
+      close: row[ix('window_close')], travel: row[ix('travel_mins_from_previous')],
+      seq: Number(row[ix('seq')]) });
+  }
+  const routes = [...m].map(([id, stops]) => ({ id, stops: stops.sort((a,b)=>a.seq-b.seq) }));
+  const { ex } = await loadReferee();
+  const put = (a) => { const b = a.length*4, p = ex.lattice_alloc(b), dv = new DataView(ex.memory.buffer);
+    for (let i=0;i<a.length;i++) dv.setInt32(p+i*4, a[i], true); return { p, b }; };
+  const verdict = [];
+  for (const r0 of routes){
+    const st = r0.stops, k = st.length;
+    st[0] = { ...st[0], travel: 0 };
+    const dist = new Array(k*k).fill(0);
+    for (let i=1;i<k;i++) dist[(i-1)*k+i] = toQ(st[i].travel, 'travel');
+    const wins = []; for (const s of st) wins.push(toQ(s.open ?? 0,'o'), toQ(s.close ?? 0,'c'));
+    const db=put(dist), wb=put(wins), rb=put(st.map((_,i)=>i)), ob=put([0,0,0,0,0,0]);
+    ex.lattice_verify(rb.p, k, db.p, k, wb.p, ob.p);
+    const dv = new DataView(ex.memory.buffer), o = [];
+    for (let i=0;i<6;i++) o.push(dv.getInt32(ob.p+i*4, true));
+    [db,wb,rb,ob].forEach(x=>ex.lattice_free(x.p,x.b));
+    verdict.push(o[0]===0 ? { id:r0.id, feasible:true, violation:null }
+      : { id:r0.id, feasible:false, violation:{ stop: st[o[1]]?.id ?? String(o[1]),
+          raw:{ arrival:o[2], windowClose:o[3], deficit:o[4] } } });
+  }
+  return verdictDigest(routes, verdict);
+}
+async function rotaDigestNow(){
+  rotaSheet = rotaSheet || await csv('example-rota.csv');
+  const rows = rotaSheet.slice(1).map((c,i)=>({ staff:c[0], date:c[1], start:c[2], end:c[3], break:c[4], row:i+2 }));
+  const rep = evaluateRota(rows);
+  return rotaDigest(rep.people, rep.verdict, rep.rules);
+}
+function floatSweep(){
+  let n = 0, diverged = 0;
+  const push = (s) => { n++; if (toQ(s, 'x') !== exactQ(s)) diverged++; };
+  for (let i=0;i<=6000;i++) push((i/10).toFixed(1));
+  for (let i=0;i<=6000;i++) push((i/100).toFixed(2));
+  for (let i=0;i<=20000;i++) push((i/1000).toFixed(3));
+  for (let i=0;i<4000;i++)   push((i + 0.5/Q).toFixed(10));
+  return { n, diverged };
+}
+
+/* ---- Device and telemetry ---- */
+function env(){
+  const nav = navigator;
+  const gl = (() => { try {
+    const c = document.createElement('canvas').getContext('webgl');
+    const d = c && c.getExtension('WEBGL_debug_renderer_info');
+    return d ? c.getParameter(d.UNMASKED_RENDERER_WEBGL) : null;
+  } catch { return null; } })();
+  return {
+    ua: nav.userAgent, platform: nav.platform || '(none)',
+    cores: nav.hardwareConcurrency ?? '?', memoryGB: nav.deviceMemory ?? '?',
+    dpr: window.devicePixelRatio, screen: `${screen.width}x${screen.height}`,
+    renderer: gl || '(unavailable)', tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    wakeLock: 'wakeLock' in nav ? 'yes' : 'no',
+    battery: typeof nav.getBattery === 'function' ? 'yes' : 'no',
+    pressure: 'PressureObserver' in window ? 'yes' : 'no',
+    heap: performance.memory ? 'yes' : 'no',
+    worker: typeof Worker !== 'undefined' ? 'yes' : 'no',
+  };
+}
+const row = (k, v, cls) => `<div class="row"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`;
+function showDevice(){
+  const e = env();
+  $('device').innerHTML = row('Browser', e.ua) + row('Platform', e.platform) +
+    row('Cores / memory', `${e.cores} / ${e.memoryGB} GB`) + row('Screen', `${e.screen} @ ${e.dpr}`) +
+    row('GPU', e.renderer) + row('Time zone', e.tz) +
+    row('Telemetry this browser offers', `battery ${e.battery} · cpu pressure ${e.pressure} · heap ${e.heap} · keep-awake ${e.wakeLock} · worker ${e.worker}`) +
+    row('Temperature', 'not available to web pages (see Set up)', 'warn');
+  return e;
+}
+
+let battery = null, pressure = null, wake = null;
+async function startTelemetry(){
+  try { if (navigator.getBattery) battery = await navigator.getBattery(); } catch {}
+  try {
+    if ('PressureObserver' in window){
+      const po = new PressureObserver((recs) => { pressure = recs[recs.length - 1].state; });
+      await po.observe('cpu', { sampleInterval: 1000 });
+    }
+  } catch {}
+  await keepAwake();
+}
+async function keepAwake(){
+  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (!run) return;
+  if (document.visibilityState === 'hidden') run.hiddenSince = performance.now();
+  else { if (run.hiddenSince) { run.hiddenMs += performance.now() - run.hiddenSince; run.minHidden += performance.now() - run.hiddenSince; run.hiddenSince = 0; }
+         keepAwake(); }
+});
+
+/* ---- Tests panel ---- */
+const TESTS = [
+  ['fleet', 'Reference fleet fixture: verdict digest (referee WASM, 21,525 bytes)'],
+  ['rota', 'Reference rota fixture: verdict digest'],
+  ['sweep', 'Q16.16 boundary sweep: 36,003 decimal values against exact BigInt'],
+  ['chain', 'Soak chain: every checkpoint equals the pinned value'],
+  ['repeat', `Repeat check: every ${REPEAT_EVERY}th cycle run twice, outputs identical`],
+  ['recheck', 'Reference fixtures re-checked every minute under load'],
+  ['awake', 'Tab kept in front (hidden time recorded)'],
+];
+const testState = {};
+function setTest(k, state, detail){ testState[k] = { state, detail }; renderTests(); }
+function renderTests(){
+  $('tests').innerHTML = TESTS.map(([k, name]) => {
+    const t = testState[k] || { state: 'pending', detail: '' };
+    const cls = t.state === 'pass' ? 'ok' : t.state === 'fail' ? 'bad' : t.state === 'warn' ? 'warn' : '';
+    const word = { pass: 'PASS', fail: 'FAIL', warn: 'NOTE', run: 'RUNNING', pending: 'PENDING' }[t.state];
+    return row(`${name}${t.detail ? ` <span style="color:var(--ink-faint)">· ${t.detail}</span>` : ''}`, word, cls);
+  }).join('');
+}
+
+/* ---- The run ---- */
+let run = null, worker = null, tickTimer = null;
+
+function drawSpark(){
+  const c = $('spark'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const rows = run.minutes;
+  if (rows.length < 1) return;
+  const max = Math.max(...rows.map((r) => r.p95 || 0), 1);
+  const line = (key, color) => {
+    g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
+    rows.forEach((r, i) => { const x = rows.length === 1 ? W / 2 : i * (W - 10) / (rows.length - 1) + 5;
+      const y = H - 8 - (r[key] / max) * (H - 20); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+  };
+  line('p95', '#f59e0b'); line('p50', '#10b981');
+  g.fillStyle = '#64748b'; g.font = '12px ui-monospace,monospace'; g.fillText(`${max.toFixed(1)} ms`, 6, 14);
+}
+
+async function minuteTick(final){
+  const m = run;
+  const lat = m.minLat; m.minLat = [];
+  let fixtures = '–';
+  try {
+    const [f, r] = await Promise.all([fleetDigest(), rotaDigestNow()]);
+    const okF = f === FIXTURE_EXPECT.fleet, okR = r === FIXTURE_EXPECT.rota;
+    fixtures = okF && okR ? 'MATCH' : 'MISMATCH';
+    if (!(okF && okR)) m.fixtureFails++;
+    m.fixtureChecks++;
+    setTest('recheck', m.fixtureFails ? 'fail' : 'pass', `${m.fixtureChecks} re-checks, ${m.fixtureFails} mismatches`);
+  } catch (e) { fixtures = 'ERROR'; }
+  if (m.hiddenSince) { const now = performance.now(); m.hiddenMs += now - m.hiddenSince; m.minHidden += now - m.hiddenSince; m.hiddenSince = now; }
+  const r = {
+    minute: m.minutes.length + 1, cycles: lat.length, total: m.cycles,
+    p50: pct(lat, 0.5), p95: pct(lat, 0.95), max: lat.length ? Math.max(...lat) : null,
+    mean: lat.length ? lat.reduce((a, b) => a + b, 0) / lat.length : null,
+    battery: battery ? Math.round(battery.level * 100) + (battery.charging ? '% chg' : '%') : 'n/a',
+    pressure: pressure || 'n/a',
+    heapMB: performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) : 'n/a',
+    hiddenS: Math.round(m.minHidden / 1000), fixtures, partial: !!final,
+  };
+  m.minHidden = 0;
+  if (lat.length) m.minutes.push(r);
+  $('minBody').insertAdjacentHTML('beforeend', `<tr><td>${r.minute}${r.partial ? '*' : ''}</td><td>${r.cycles}</td><td>${fmt(r.p50, 2)}</td>
+    <td>${fmt(r.p95, 2)}</td><td>${fmt(r.max, 2)}</td><td>${r.battery}</td><td>${r.pressure}</td><td>${r.heapMB}</td>
+    <td>${r.hiddenS}</td><td>${r.fixtures}</td></tr>`);
+  setTest('awake', m.hiddenMs > 1000 ? 'warn' : 'pass', `hidden ${Math.round(m.hiddenMs / 1000)} s in total`);
+  if (m.minutes.length && m.minutes[0].p50 && r.p50) $('sThrottle').textContent = (r.p50 / m.minutes[0].p50).toFixed(2) + '×';
+  $('sP95').textContent = fmt(r.p95, 1);
+  drawSpark();
+}
+
+function updateLive(){
+  const m = run, s = (performance.now() - m.t0) / 1000;
+  $('sElapsed').textContent = `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  $('sCycles').textContent = m.cycles.toLocaleString();
+  $('sRate').textContent = s > 1 ? (m.cycles / s).toFixed(1) : '–';
+  $('sP50').textContent = fmt(pct(m.lastLat, 0.5), 1);
+  if (m.durationMin && s >= m.durationMin * 60) finish('completed');
+}
+
+function checkpoint(cycles, chain){
+  const want = EXPECT[cycles], ok = chain === want;
+  run.checkpoints.push({ cycles, chain, expected: want, ok });
+  if (!ok) run.chainFails++;
+  $('cpBody').insertAdjacentHTML('beforeend', `<tr><td>${cycles.toLocaleString()}</td><td>${chain}</td>
+    <td class="v ${ok ? 'ok' : 'bad'}">${ok ? 'MATCH' : 'MISMATCH'}</td></tr>`);
+  setTest('chain', run.chainFails ? 'fail' : 'pass', `${run.checkpoints.length} checkpoints reached, ${run.chainFails} mismatches`);
+  setVerdict();
+}
+
+function setVerdict(){
+  const bad = run.chainFails || run.repeatFails || run.fixtureFails || run.preflightFail;
+  const p = $('verdictPill');
+  if (bad) { p.className = 'pill bad'; p.textContent = 'DIVERGENCE DETECTED'; }
+  else if (run.done) { p.className = 'pill ok'; p.textContent = 'DETERMINISTIC — ALL MATCH'; }
+  else { p.className = 'pill run'; p.textContent = 'RUNNING — ALL MATCH SO FAR'; }
+}
+
+async function start(){
+  $('start').disabled = true; $('stop').disabled = false;
+  ['livePanel', 'testsPanel', 'cpPanel', 'minPanel'].forEach((id) => $(id).style.display = '');
+  $('blockPanel').style.display = 'none';
+  $('cpBody').innerHTML = ''; $('minBody').innerHTML = '';
+  run = { t0: performance.now(), startedAt: new Date().toISOString(), cycles: 0, lat: [], minLat: [], lastLat: [],
+    minutes: [], checkpoints: [], chainFails: 0, repeats: 0, repeatFails: 0, fixtureChecks: 0, fixtureFails: 0,
+    hiddenMs: 0, minHidden: 0, hiddenSince: 0, durationMin: Number(new URLSearchParams(location.search).get('minutes') || $('duration').value), done: false,
+    label: $('label').value.trim(), env: showDevice(), preflight: {}, preflightFail: false };
+  renderTests();
+  $('status').textContent = 'Pre-flight: reference fixtures and the boundary sweep…';
+  await startTelemetry();
+
+  try {
+    const t = performance.now();
+    const [f, r] = await Promise.all([fleetDigest(), rotaDigestNow()]);
+    const sw = floatSweep();
+    run.preflight = { fleet: f, rota: r, sweep: sw, ms: performance.now() - t, refereeBytes: referee.bytes };
+    const okF = f === FIXTURE_EXPECT.fleet, okR = r === FIXTURE_EXPECT.rota, okS = sw.diverged === 0;
+    setTest('fleet', okF ? 'pass' : 'fail', f.slice(0, 16) + '…');
+    setTest('rota', okR ? 'pass' : 'fail', r.slice(0, 16) + '…');
+    setTest('sweep', okS ? 'pass' : 'fail', `${sw.n.toLocaleString()} values, ${sw.diverged} divergences`);
+    run.preflightFail = !(okF && okR && okS);
+  } catch (e) {
+    run.preflightFail = true; setTest('fleet', 'fail', 'error: ' + e.message);
+  }
+  setTest('chain', 'run', `first checkpoint at ${CHECKPOINTS[0]} cycles`);
+  setTest('repeat', 'run', `first at cycle ${REPEAT_EVERY}`);
+  setTest('recheck', 'run', 'first re-check after one minute');
+  setTest('awake', 'run', '');
+  setVerdict();
+
+  $('status').textContent = 'Soaking. Keep this tab in front; the record is written when the time is up.';
+  const onMsg = (d) => {
+    if (d.t === 'cycle') {
+      run.cycles++; run.lat.push(d.ms); run.minLat.push(d.ms);
+      run.lastLat.push(d.ms); if (run.lastLat.length > 200) run.lastLat.shift();
+    } else if (d.t === 'checkpoint') checkpoint(d.cycles, d.chain);
+    else if (d.t === 'repeat') {
+      run.repeats++; if (!d.same) run.repeatFails++;
+      setTest('repeat', run.repeatFails ? 'fail' : 'pass', `${run.repeats} repeats, ${run.repeatFails} differed`);
+      setVerdict();
+    } else if (d.t === 'ready') { run.kernel = { version: d.version, bytes: d.bytes }; }
+    else if (d.t === 'error') { $('status').textContent = 'Kernel failed to load: ' + d.message; finish('error'); }
+  };
+  worker = new Worker('omni-worker.js');
+  worker.onmessage = (e) => onMsg(e.data);
+  worker.onerror = (e) => { $('status').textContent = 'Worker error: ' + e.message; };
+  worker.postMessage({ cmd: 'start', checkpoints: CHECKPOINTS, repeatEvery: REPEAT_EVERY });
+  tickTimer = { live: setInterval(updateLive, 1000), minute: setInterval(() => minuteTick(false), 60000) };
+}
+
+async function sha256hex(text){
+  if (!crypto?.subtle) return '(SubtleCrypto unavailable: open the page over https)';
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function finish(why){
+  if (!run || run.done) return;
+  run.done = true; run.endedBy = why;
+  clearInterval(tickTimer.live); clearInterval(tickTimer.minute);
+  if (worker) { worker.postMessage({ cmd: 'stop' }); worker.terminate(); }
+  updateLive();
+  await minuteTick(true);
+  setVerdict();
+  $('start').disabled = false; $('stop').disabled = true;
+  try { if (wake) await wake.release(); } catch {}
+
+  const m = run, e = m.env, secs = (performance.now() - m.t0) / 1000;
+  const first = m.minutes[0], last = m.minutes[m.minutes.length - 1];
+  const allOk = !(m.chainFails || m.repeatFails || m.fixtureFails || m.preflightFail);
+  const t0 = $('t0').value.trim(), t1 = $('t1').value.trim();
+  const L = [];
+  L.push('LATTICE117 OMNI-HARDWARE SOAK RECORD');
+  L.push('device label  ' + (m.label || '(not given)'));
+  L.push('started       ' + m.startedAt);
+  L.push('ended         ' + new Date().toISOString() + '  (' + why + ')');
+  L.push('duration      ' + Math.floor(secs / 60) + ' min ' + Math.round(secs % 60) + ' s of ' + (m.durationMin ? m.durationMin + ' min planned' : 'open-ended'));
+  L.push('');
+  L.push('DEVICE');
+  L.push('  user agent  ' + e.ua);
+  L.push('  platform    ' + e.platform + '   cores ' + e.cores + '   memory ' + e.memoryGB + ' GB');
+  L.push('  screen      ' + e.screen + ' @ dpr ' + e.dpr);
+  L.push('  gpu         ' + e.renderer);
+  L.push('  timezone    ' + e.tz);
+  L.push('');
+  L.push('PRE-FLIGHT (reference fixtures, as determinism.html)');
+  L.push('  fleet       ' + (m.preflight.fleet || 'error') + '  ' + (m.preflight.fleet === FIXTURE_EXPECT.fleet ? 'MATCH' : '*** MISMATCH ***'));
+  L.push('  rota        ' + (m.preflight.rota || 'error') + '  ' + (m.preflight.rota === FIXTURE_EXPECT.rota ? 'MATCH' : '*** MISMATCH ***'));
+  L.push('  sweep       ' + (m.preflight.sweep ? m.preflight.sweep.n + ' values, ' + m.preflight.sweep.diverged + ' divergences' : 'error'));
+  L.push('');
+  L.push('SOAK  kernel v' + (m.kernel?.version ?? '?') + ', ' + (m.kernel?.bytes ?? '?') + ' bytes WASM (pinned for v' + KERNEL_VERSION + ')');
+  L.push('  cycles      ' + m.cycles + '  (each a different generated planning problem: plan, referee, resequence, repair)');
+  L.push('  rate        ' + (m.cycles / Math.max(secs, 1)).toFixed(2) + ' cycles/s');
+  L.push('  ms/cycle    median ' + fmt(pct(m.lat, 0.5), 2) + '  p95 ' + fmt(pct(m.lat, 0.95), 2) + '  max ' + fmt(m.lat.length ? Math.max(...m.lat) : null, 2));
+  if (first && last) L.push('  slow-down   first minute median ' + fmt(first.p50, 2) + ' ms, last minute ' + fmt(last.p50, 2) + ' ms (' + (last.p50 / first.p50).toFixed(2) + 'x)');
+  L.push('');
+  L.push('CHECKPOINTS (must equal every other device)');
+  if (!m.checkpoints.length) L.push('  none reached (first is at ' + CHECKPOINTS[0] + ' cycles)');
+  for (const c of m.checkpoints) L.push('  ' + String(c.cycles).padStart(6) + '  ' + c.chain + '  ' + (c.ok ? 'MATCH' : '*** MISMATCH ***'));
+  L.push('');
+  L.push('REPEATS      ' + m.repeats + ' cycles re-run, ' + m.repeatFails + ' differed');
+  L.push('RE-CHECKS    ' + m.fixtureChecks + ' reference fixture re-checks under load, ' + m.fixtureFails + ' mismatched');
+  L.push('HIDDEN       ' + Math.round(m.hiddenMs / 1000) + ' s with the tab in the background');
+  L.push('');
+  L.push('TELEMETRY (per minute: min cycles p50 p95 max battery pressure heapMB hidden fixtures)');
+  for (const r of m.minutes) L.push('  ' + [r.minute + (r.partial ? '*' : ''), r.cycles, fmt(r.p50, 2), fmt(r.p95, 2), fmt(r.max, 2), r.battery, r.pressure, r.heapMB, r.hiddenS, r.fixtures].join(' '));
+  L.push('  temperature ' + (t0 || t1 ? 'start ' + (t0 || '?') + ' C, end ' + (t1 || '?') + ' C (entered by operator)' : 'not measured (no web page can read it)'));
+  L.push('');
+  L.push('OVERALL ' + (allOk ? 'DETERMINISTIC' : '*** DIVERGENCE DETECTED ***'));
+  const body = L.join('\n');
+  const seal = await sha256hex(body);
+  $('block').textContent = body + '\nRECORD SEAL ' + seal;
+  $('blockPanel').style.display = '';
+  run.recordSeal = seal; run.endedAt = new Date().toISOString();
+  $('status').textContent = allOk ? 'Done. Every result matched. Copy or download the record below.'
+    : 'Done — a divergence was detected. That is a finding; keep the record and the log.';
+}
+
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const stamp = () => (run.label || 'device').replace(/[^A-Za-z0-9]+/g, '-') + '-' + run.startedAt.slice(0, 19).replace(/[:T]/g, '');
+$('dlJson').addEventListener('click', () => download(`omni-${stamp()}.json`, JSON.stringify({
+  kernelVersion: KERNEL_VERSION, label: run.label, env: run.env, startedAt: run.startedAt, endedAt: run.endedAt,
+  endedBy: run.endedBy, preflight: run.preflight, checkpoints: run.checkpoints, repeats: run.repeats,
+  repeatFails: run.repeatFails, fixtureChecks: run.fixtureChecks, fixtureFails: run.fixtureFails,
+  hiddenMs: Math.round(run.hiddenMs), minutes: run.minutes, msPerCycle: run.lat.map((x) => +x.toFixed(3)),
+  temperatureOperator: { start: $('t0').value.trim() || null, end: $('t1').value.trim() || null },
+  record: $('block').textContent }, null, 1), 'application/json'));
+$('dlCsv').addEventListener('click', () => download(`omni-${stamp()}.csv`,
+  'minute,cycles,total,p50_ms,p95_ms,max_ms,mean_ms,battery,cpu_pressure,heap_mb,hidden_s,fixtures,partial\n' +
+  run.minutes.map((r) => [r.minute, r.cycles, r.total, fmt(r.p50, 3), fmt(r.p95, 3), fmt(r.max, 3), fmt(r.mean, 3),
+    r.battery, r.pressure, r.heapMB, r.hiddenS, r.fixtures, r.partial].join(',')).join('\n') + '\n', 'text/csv'));
+$('copy').addEventListener('click', async () => {
+  const t = $('block').textContent;
+  try { await navigator.clipboard.writeText(t); $('copy').textContent = 'Copied'; }
+  catch {
+    const rng = document.createRange(); rng.selectNodeContents($('block'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+    $('copy').textContent = 'Selected — copy with your keyboard or long-press';
+  }
+  setTimeout(() => { $('copy').textContent = 'Copy the record'; }, 2600);
+});
+$('start').addEventListener('click', start);
+$('stop').addEventListener('click', () => finish('stopped by operator'));
+showDevice();
+if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
+  $('start').disabled = true;
+  $('status').textContent = 'This browser lacks WebAssembly or Web Workers, so it cannot run the soak. Record that: it is a result too.';
+}
+</script>
+</body>
+</html>

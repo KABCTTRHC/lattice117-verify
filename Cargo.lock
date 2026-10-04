@@ -182,6 +182,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice117-omni"
+version = "0.1.0"
+dependencies = [
+ "lattice117-solve",
+ "lattice117-verify",
+]
+
+[[package]]
 name = "lattice117-solve"
 version = "0.1.0"
 dependencies = [

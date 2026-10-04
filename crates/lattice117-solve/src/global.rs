@@ -259,7 +259,7 @@ pub fn solve_unassigned(
         // disagreement between two numbers that ought to match, and quietly
         // restating the improved one here would make it always agree and so
         // say nothing.
-        pipeline_cost_q16: total_distance_q16 as i64,
+        pipeline_cost_q16: total_distance_q16,
         clusters: cluster_count,
         qubo_valid: qubo_solution_valid,
         exact: false,
@@ -277,6 +277,43 @@ pub fn solve_unassigned_default(matrix: &[Q16], n: usize) -> GlobalOutcome {
 mod tests {
     use super::*;
     use crate::Q16_ONE;
+
+    /// 39 nodes bunched at one end and one far away: two clusters, one of them
+    /// 39 strong. Both defects the omni soak kernel found on 2026-10-04 show
+    /// here: the chain DP truncated a cluster to 32 members, so seven stops
+    /// vanished from the tour with no error, and with stops `spacing` units
+    /// apart its i32 running cost overflowed (a panic in debug, a silent wrap
+    /// in release).
+    fn lopsided(n: usize, spacing: i32) -> Vec<Q16> {
+        let pos = |i: usize| {
+            if i == n - 1 {
+                1000 * spacing
+            } else {
+                i as i32 * spacing
+            }
+        };
+        let mut m = alloc::vec![0; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                m[i * n + j] = (pos(i) - pos(j)).abs() * Q16_ONE;
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn a_cluster_larger_than_the_qubo_cap_keeps_every_stop() {
+        let n = 40;
+        let out = solve_unassigned_default(&lopsided(n, 1), n);
+        assert!(out.visits_every_node_once(n), "tour {:?}", out.tour);
+    }
+
+    #[test]
+    fn long_distances_do_not_overflow_the_chain_dp() {
+        let n = 40;
+        let out = solve_unassigned_default(&lopsided(n, 20), n);
+        assert!(out.visits_every_node_once(n), "tour {:?}", out.tour);
+    }
 
     /// Nodes on a line, node i at position i. Distances are `|i - j|`, so every
     /// assertion below can be checked by hand.

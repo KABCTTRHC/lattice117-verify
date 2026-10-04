@@ -1,0 +1,21 @@
+[package]
+name = "lattice117-omni"
+description = "Omni-hardware soak kernel: one deterministic, generated workload per cycle through the solver and the referee, for running the same arithmetic for hours on every device."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# cdylib for the browser page, rlib for the native tests that pin the
+# checkpoints the page compares against.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# The same rule as lattice117-solve: path dependencies on this workspace only.
+# A registry crate here would be a new way for the soak page to stop meaning
+# "the same code, on this device".
+[dependencies]
+lattice117-verify = { path = "../lattice117-verify" }
+lattice117-solve = { path = "../lattice117-solve" }

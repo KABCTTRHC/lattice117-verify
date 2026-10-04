@@ -5,6 +5,7 @@ members = [
   "crates/lattice117-audit",
   "crates/lattice117-wasm",
   "crates/lattice117-solve",
+  "crates/lattice117-omni",
 ]
 
 [workspace.package]

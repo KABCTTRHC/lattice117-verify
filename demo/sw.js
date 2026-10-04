@@ -14,7 +14,7 @@
  * on activate, so a stale shell cannot outlive a deploy.
  */
 
-const CACHE = 'lattice117-v19';
+const CACHE = 'lattice117-v20';
 
 // Same-directory paths, so this works at a project-pages sub-path
 // (/lattice117-verify/) exactly as it does at a domain root.
@@ -25,6 +25,7 @@ const SHELL = [
   './determinism.html',
   './splash.html',
   './dashboard.html',
+  './omni.html',
   // Every ES module the pages import. A module missing from this list is not
   // a slow load offline - it is a page that does not run at all, because the
   // import fails and the script never executes. Adding a module without
@@ -38,6 +39,10 @@ const SHELL = [
   './toolpath.js',
   './freetier.js',
   './lattice117_wasm.wasm',
+  // The omni soak: its worker and its own module, beside (never instead of)
+  // the published referee above.
+  './omni-worker.js',
+  './lattice117_omni.wasm',
   // Fixtures. Story mode loads all four, so leaving one out makes a tier's
   // demonstration fail silently for a visitor who reloaded offline — which is
   // exactly the visitor the offline claim is aimed at.

@@ -218,7 +218,13 @@ pub fn build_inter_cluster_qubo(
     inter_cluster_distances: &[i32],
 ) -> [i32; 32 * 32] {
     let k = clusters.len();
-    let mut q = [0i32; 32 * 32];
+    // Built in i64, then brought into i32 by one common right shift if it
+    // does not fit (2026-10-04). In i32, `2 * penalty_a` overflowed once
+    // cluster centres were a few thousand units apart: a panic in debug, a
+    // wrap in release that turned penalties into rewards. Shifting every entry
+    // by the same amount keeps their order, so the annealer still sees the
+    // same landscape; a matrix that already fitted is shifted by 0, unchanged.
+    let mut wide = [0i64; 32 * 32];
     // Must exceed the total possible objective savings from violating a
     // constraint, not just be "a big constant": a fixed `4 * Q16_ONE`
     // (bug found while testing this port) is only larger than "any travel
@@ -231,10 +237,11 @@ pub fn build_inter_cluster_qubo(
     let max_travel_cost = inter_cluster_distances
         .iter()
         .copied()
-        .map(i32::abs)
+        .map(|d| (d as i64).abs())
         .max()
         .unwrap_or(0);
-    let penalty_a = (max_travel_cost.saturating_mul(k.max(1) as i32)).max(4 * Q16_ONE);
+    let penalty_a = (max_travel_cost * k.max(1) as i64).max(4 * Q16_ONE as i64);
+    let q = &mut wide;
 
     for c in 0..k {
         // Constraint 1: each cluster visited exactly once
@@ -262,7 +269,7 @@ pub fn build_inter_cluster_qubo(
             if c1 == c2 {
                 continue;
             }
-            let travel_cost = inter_cluster_distances[c1 * k + c2];
+            let travel_cost = inter_cluster_distances[c1 * k + c2] as i64;
             for p in 0..(k.saturating_sub(1)) {
                 let i = c1 * k + p;
                 let j = c2 * k + (p + 1);
@@ -271,6 +278,17 @@ pub fn build_inter_cluster_qubo(
         }
     }
 
+    // Headroom of a factor of four: the annealer sums entries in i64, but a
+    // caller-supplied solver may not.
+    let peak = wide.iter().map(|v| v.abs()).max().unwrap_or(0);
+    let mut shift = 0;
+    while (peak >> shift) > (i32::MAX / 4) as i64 {
+        shift += 1;
+    }
+    let mut q = [0i32; 32 * 32];
+    for (dst, src) in q.iter_mut().zip(wide.iter()) {
+        *dst = (src >> shift) as i32;
+    }
     q
 }
 
@@ -478,8 +496,14 @@ pub fn solve_intra_cluster_chain(
         distance_matrix[node as usize * n_nodes + cluster.center_idx as usize]
     });
 
-    let m = ordered.len().min(MAX_NODES_PER_CLUSTER);
-    ordered.truncate(m);
+    // Every member, however many (2026-10-04). This used to truncate to
+    // MAX_NODES_PER_CLUSTER, but assignment is nearest-centre with no balancing,
+    // so a cluster can exceed it, and the truncated members vanished from the
+    // route with no error: a 40-node instance came back with 39 stops. The cap
+    // belongs to the 32x32 inter-cluster QUBO, not to this chain DP, which is
+    // linear in the member count. Found by the omni soak kernel. An instance
+    // whose clusters all fitted is unchanged.
+    let m = ordered.len();
 
     let mut linear_costs = alloc::vec![0i32; m];
     let mut coupling_costs = alloc::vec![0i32; m.saturating_sub(1)];
@@ -511,15 +535,21 @@ pub fn solve_intra_cluster_chain(
         *cost = -inclusion_bias;
     }
 
-    let mut cost = alloc::vec![[0i32; 2]; m];
+    // Running costs are i64 (2026-10-04). Each step adds an inclusion bias of
+    // twice the largest coupling plus a coupling, so in i32 a cluster of a
+    // dozen members a few hundred units apart overflowed: a panic in a debug
+    // build and a silent wrap in release, which flips include/skip decisions.
+    // The omni soak kernel found it on its first run. Widening changes no
+    // result that did not overflow: the same sums, compared the same way.
+    let mut cost = alloc::vec![[0i64; 2]; m];
     let mut best_prev: Vec<[i8; 2]> = alloc::vec![[0i8; 2]; m];
 
     cost[0][0] = 0;
-    cost[0][1] = linear_costs[0];
+    cost[0][1] = linear_costs[0] as i64;
 
     for i in 1..m {
-        let j = coupling_costs[i - 1];
-        let c_i = linear_costs[i];
+        let j = coupling_costs[i - 1] as i64;
+        let c_i = linear_costs[i] as i64;
 
         let from0 = cost[i - 1][0];
         let from1 = cost[i - 1][1];
@@ -576,7 +606,8 @@ pub fn solve_intra_cluster_chain(
 #[derive(Debug)]
 pub struct LogisticsResult {
     pub route: Vec<u32>,
-    pub total_distance_q16: i32,
+    /// i64 since 2026-10-04: an i32 total overflowed past 32,767 units.
+    pub total_distance_q16: i64,
     pub cluster_count: usize,
     /// False if the inter-cluster QUBO solve returned an invalid tour
     /// (see `validate_tour`) and the pipeline fell back to visiting
@@ -639,7 +670,7 @@ pub fn solve_logistics_kondo(
     let phase2_ns = 0u64;
 
     let mut final_route: Vec<u32> = Vec::with_capacity(n_nodes);
-    let mut total_dist = 0i32;
+    let mut total_dist = 0i64;
     let mut prev_last_node: Option<u32> = None;
 
     for &cluster_idx in &cluster_tour {
@@ -648,12 +679,12 @@ pub fn solve_logistics_kondo(
 
         if let Some(prev) = prev_last_node {
             if let Some(&first) = local_route.first() {
-                total_dist += distance_matrix[prev as usize * n_nodes + first as usize];
+                total_dist += distance_matrix[prev as usize * n_nodes + first as usize] as i64;
             }
         }
 
         for window in local_route.windows(2) {
-            total_dist += distance_matrix[window[0] as usize * n_nodes + window[1] as usize];
+            total_dist += distance_matrix[window[0] as usize * n_nodes + window[1] as usize] as i64;
         }
 
         prev_last_node = local_route.last().copied();
