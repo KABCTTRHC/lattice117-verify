@@ -122,7 +122,7 @@ platform, `armv7l`, which is 32-bit ARM.
   every chain value equals the pin. The television's JSON was not saved; its
   record was checked from a transcription, whose seal also recomputes.
 - **Page fix found by this run.** The downloaded JSON's `hiddenMs` kept
-  counting after the soak ended (a phone put down before its file was saved),
+  counting after the soak ended,
   while the sealed record correctly said 0 s. The page now stops counting at
   the end, and the record and the JSON carry the same end time. No result,
   checkpoint or seal was affected.

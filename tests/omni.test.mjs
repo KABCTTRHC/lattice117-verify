@@ -76,9 +76,8 @@ ok('  the page re-checks the same reference digests as determinism.html',
 ok('  the published referee module is not the soak module',
    !readFileSync(join(ROOT, 'demo/lattice117_wasm.wasm')).equals(readFileSync(join(ROOT, 'demo/lattice117_omni.wasm'))));
 
-// The 4 October soak found the JSON's hiddenMs growing after the run ended
-// (a phone put down before its file was saved), while the sealed record said
-// 0 s. The page's own handler is run here against a fake clock.
+// The 4 October soak found the JSON's hiddenMs including time after the run
+// ended, while the sealed record said 0 s. The page's own handler is run here against a fake clock.
 console.log('record and download agree');
 {
   const src = page.match(/document\.addEventListener\('visibilitychange', (\(\) => \{[\s\S]*?\n\})\);/)[1];
