@@ -1,6 +1,6 @@
 {
   "name": "lattice117-verify",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Deterministic schedule feasibility verification. Checks whether a planned route holds against its own time windows and names the exact violation when it does not. Runs entirely locally — no network, no server, no telemetry.",
   "keywords": [
     "scheduling",
@@ -60,6 +60,7 @@
     "lattice117-verify": "./bin/lattice117-verify.mjs"
   },
   "scripts": {
-    "reproduce": "node bin/lattice117-verify.mjs"
+    "reproduce": "node bin/lattice117-verify.mjs",
+    "prepublishOnly": "node bin/lattice117-verify.mjs reproduce"
   }
 }
