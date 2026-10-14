@@ -140,10 +140,10 @@ match evaluate_order(&route, &distances_q16, node_count, &windows) {
 ## Provenance
 
 This verification core is extracted from the Lattice117 engine. **This
-repository ships 86 Rust tests and 500 JavaScript checks** — `cargo test --all`
-and the eleven `node tests/*.test.mjs` suites, all passing as of 4 October 2026
+repository ships 87 Rust tests and 506 JavaScript checks** — `cargo test --all`
+and the eleven `node tests/*.test.mjs` suites, all passing as of 14 October 2026
 (the "4 tests" this line used to say was long out of date). The parent engine's
-669-test figure is not something this repository lets you check; read it as our
+781-test figure is not something this repository lets you check; read it as our
 claim. What this repository does let you check is the
 digest: CI pins the verdict digest for `examples/infeasible.json` and fails if
 Linux, macOS and Windows disagree.

@@ -505,7 +505,7 @@ pub fn solve_intra_cluster_chain(
     // whose clusters all fitted is unchanged.
     let m = ordered.len();
 
-    let mut linear_costs = alloc::vec![0i32; m];
+    let mut linear_costs = alloc::vec![0i64; m];
     let mut coupling_costs = alloc::vec![0i32; m.saturating_sub(1)];
 
     for i in 0..(m.saturating_sub(1)) {
@@ -524,13 +524,18 @@ pub fn solve_intra_cluster_chain(
     // from the route, the opposite of "all nodes must be visited". Scaling
     // per the actual max coupling cost present closes that gap, matching
     // the same fix applied to `build_inter_cluster_qubo`'s penalty above.
+    //
+    // The bias is i64 (2026-10-14, ER-004 D10). In i32, `saturating_mul(2)`
+    // capped it at `i32::MAX` once a coupling passed 16,383 units, so the bias
+    // fell below twice the coupling and skipping every other member became the
+    // cheaper path: half the cluster vanished from the route with no error.
+    // Below 16,383 units nothing saturated, so no result there changes.
     let max_coupling = coupling_costs
         .iter()
-        .copied()
-        .map(i32::abs)
+        .map(|&c| i64::from(c).abs())
         .max()
         .unwrap_or(0);
-    let inclusion_bias = max_coupling.saturating_mul(2).max(Q16_ONE);
+    let inclusion_bias = (max_coupling * 2).max(i64::from(Q16_ONE));
     for cost in linear_costs.iter_mut() {
         *cost = -inclusion_bias;
     }
@@ -545,11 +550,11 @@ pub fn solve_intra_cluster_chain(
     let mut best_prev: Vec<[i8; 2]> = alloc::vec![[0i8; 2]; m];
 
     cost[0][0] = 0;
-    cost[0][1] = linear_costs[0] as i64;
+    cost[0][1] = linear_costs[0];
 
     for i in 1..m {
         let j = coupling_costs[i - 1] as i64;
-        let c_i = linear_costs[i] as i64;
+        let c_i = linear_costs[i];
 
         let from0 = cost[i - 1][0];
         let from1 = cost[i - 1][1];
@@ -897,6 +902,34 @@ mod tests {
             result.route
         );
         assert_eq!(result.route.len(), n, "route must not contain duplicates");
+    }
+
+    /// ER-004 D10 (OPEN-ISSUES N13). Five stops, every pair 20,000 units
+    /// apart (a valid metric). The inclusion bias must be twice the largest
+    /// coupling; doubled in i32 it saturated at `i32::MAX`, below that, and
+    /// the DP kept stops 0, 2 and 4 only. At 16,383 units nothing saturates,
+    /// so that case pins the behaviour the fix must leave alone.
+    #[test]
+    fn the_chain_keeps_every_member_when_legs_pass_16383_units() {
+        for units in [16_383i32, 16_384, 20_000, 32_767] {
+            let n = 5;
+            let leg = units * Q16_ONE;
+            let mut matrix = alloc::vec![leg; n * n];
+            for i in 0..n {
+                matrix[i * n + i] = 0;
+            }
+            let cluster = KondoCluster {
+                center_idx: 0,
+                members: (0..n as u32).collect(),
+                shielding_radius: Q16_858_MILLI,
+                resonance_centroid: Q16_ONE,
+            };
+            assert_eq!(
+                solve_intra_cluster_chain(&cluster, &matrix, n),
+                alloc::vec![0, 1, 2, 3, 4],
+                "legs of {units} units"
+            );
+        }
     }
 
     #[test]
