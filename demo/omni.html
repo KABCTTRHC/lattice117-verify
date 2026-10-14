@@ -79,6 +79,20 @@
 choose, a different generated planning problem every cycle, and checks that it lands on
 exactly the same numbers as every other device. Everything computes locally; nothing is
 sent anywhere. Once loaded it works with the network off.</p>
+<p class="note" style="margin:-8px 0 16px">Page version <b id="pageVer">–</b> · kernel v1, the same
+checkpoints as the 4 October runs. If this does not show today's version, reload once.</p>
+
+<div class="panel" id="prevPanel" style="display:none">
+  <h2>Last run on this device</h2>
+  <div id="prevInfo"></div>
+  <pre id="prevBlock" style="display:none;margin-top:10px"></pre>
+  <button id="prevShow" class="sec">Show its record</button>
+  <button id="prevJson" class="sec">Download its log (JSON)</button>
+  <button id="prevShare" class="sec" style="display:none">Share its log and record</button>
+  <button id="prevClear" class="sec">Forget it</button>
+  <p class="note">Kept in this browser only, and saved every minute while a soak runs, so a tab
+  the phone closed still leaves what it reached. Starting a new soak replaces it: save it first.</p>
+</div>
 
 <div class="panel" id="setup">
   <h2>Set up</h2>
@@ -154,6 +168,7 @@ sent anywhere. Once loaded it works with the network off.</p>
   <button id="copy" class="sec">Copy the record</button>
   <button id="dlJson" class="sec">Download full log (JSON, every cycle)</button>
   <button id="dlCsv" class="sec">Download minute log (CSV)</button>
+  <button id="share" class="sec" style="display:none">Share the log and record (email, Drive, messages)</button>
   <p class="note">The last line is SHA-256 over every line above it, so a pasted record can be
   checked for edits by re-hashing it. The checkpoint values are what must match across
   devices; the timings and telemetry are this device's own.</p>
@@ -168,6 +183,10 @@ import { evaluateRota } from './rota.js';
 /* Pinned from the native build (crates/lattice117-omni/examples/omni_checkpoints.rs)
    and checked against node:crypto by tests/omni.test.mjs. Kernel version 1. */
 const KERNEL_VERSION = 1;
+/* The page, not the kernel: shown at the top and written into the record, so
+   a stale copy from the offline cache is visible as one. */
+const PAGE_VERSION = '2026-10-14';
+const SAVE_KEY = 'lattice117-omni-last';
 const EXPECT = {
   // OMNI-CHECKPOINTS-BEGIN
   10: '445986e880b974951c9e892707b7b231ddd4a54d24f5625361ddd5cac0a489eb',
@@ -281,12 +300,37 @@ function env(){
     pressure: 'PressureObserver' in window ? 'yes' : 'no',
     heap: performance.memory ? 'yes' : 'no',
     worker: typeof Worker !== 'undefined' ? 'yes' : 'no',
+    hints,
   };
 }
+/* Client hints: Chrome and Edge report the CPU architecture, its bitness, the
+   device model and the OS version when asked. Chrome on Android otherwise
+   reports a fixed platform string, which is why 4 October's record could not
+   say whether two Android phones ran 32- or 64-bit code. Safari and Firefox
+   do not offer them; the record then says so. */
+let hints = null;
+async function clientHints(){
+  try {
+    const ua = navigator.userAgentData;
+    if (!ua || !ua.getHighEntropyValues) return null;
+    const h = await ua.getHighEntropyValues(['architecture', 'bitness', 'model', 'platformVersion', 'fullVersionList']);
+    return {
+      architecture: h.architecture || null, bitness: h.bitness || null, model: h.model || null,
+      platform: h.platform || null, platformVersion: h.platformVersion || null, mobile: h.mobile ?? null,
+      browsers: (h.fullVersionList || []).filter((b) => !/not.?a.?brand/i.test(b.brand)).map((b) => b.brand + ' ' + b.version).join(', ') || null,
+    };
+  } catch { return null; }
+}
+const cpuText = (h) => !h ? 'not reported (this browser offers no client hints)'
+  : [h.architecture || '?', h.bitness ? h.bitness + '-bit' : 'bitness not reported'].join(' ') + ' (browser-reported)';
+const modelText = (h) => !h ? 'not reported'
+  : [h.model || '(model not reported)', h.platform && (h.platform + ' ' + (h.platformVersion || '')).trim(), h.browsers].filter(Boolean).join(' · ');
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const row = (k, v, cls) => `<div class="row"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`;
 function showDevice(){
   const e = env();
-  $('device').innerHTML = row('Browser', e.ua) + row('Platform', e.platform) +
+  $('device').innerHTML = row('Browser', esc(e.ua)) + row('Platform', esc(e.platform)) +
+    row('CPU', esc(cpuText(e.hints)), e.hints && e.hints.bitness ? '' : 'warn') + row('Model / OS', esc(modelText(e.hints))) +
     row('Cores / memory', `${e.cores} / ${e.memoryGB} GB`) + row('Screen', `${e.screen} @ ${e.dpr}`) +
     row('GPU', e.renderer) + row('Time zone', e.tz) +
     row('Telemetry this browser offers', `battery ${e.battery} · cpu pressure ${e.pressure} · heap ${e.heap} · keep-awake ${e.wakeLock} · worker ${e.worker}`) +
@@ -305,8 +349,22 @@ async function startTelemetry(){
   } catch {}
   await keepAwake();
 }
+let wakeState = 'not requested';
 async function keepAwake(){
-  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch {}
+  if (!('wakeLock' in navigator)) { wakeState = 'not supported by this browser'; return; }
+  if (wake && !wake.released) return;
+  try {
+    wake = await navigator.wakeLock.request('screen');
+    wakeState = 'held';
+    // The system can drop the lock (battery saver, a hidden tab). Count it and
+    // ask again while the soak runs and the tab is in front.
+    wake.addEventListener('release', () => {
+      if (!run || run.done) return;
+      run.wakeReleases = (run.wakeReleases || 0) + 1;
+      wakeState = 'held, released and re-requested';
+      if (document.visibilityState === 'visible') keepAwake();
+    });
+  } catch (err) { wakeState = 'refused (' + ((err && err.name) || 'error') + ')'; }
 }
 document.addEventListener('visibilitychange', () => {
   // Only time hidden while the soak runs counts; after finish() the sealed
@@ -316,6 +374,9 @@ document.addEventListener('visibilitychange', () => {
   else { if (run.hiddenSince) { run.hiddenMs += performance.now() - run.hiddenSince; run.minHidden += performance.now() - run.hiddenSince; run.hiddenSince = 0; }
          keepAwake(); }
 });
+// A phone may kill a hidden tab without warning: save what the run has reached.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && run && !run.done) save(); });
+addEventListener('pagehide', () => { if (run && !run.done) save(); });
 
 /* ---- Tests panel ---- */
 const TESTS = [
@@ -388,6 +449,7 @@ async function minuteTick(final){
   if (m.minutes.length && m.minutes[0].p50 && r.p50) $('sThrottle').textContent = (r.p50 / m.minutes[0].p50).toFixed(2) + '×';
   $('sP95').textContent = fmt(r.p95, 1);
   drawSpark();
+  if (!final) save();
 }
 
 function updateLive(){
@@ -419,6 +481,7 @@ function setVerdict(){
 
 async function start(){
   $('start').disabled = true; $('stop').disabled = false;
+  if (!hints) hints = await clientHints();
   ['livePanel', 'testsPanel', 'cpPanel', 'minPanel'].forEach((id) => $(id).style.display = '');
   $('blockPanel').style.display = 'none';
   $('cpBody').innerHTML = ''; $('minBody').innerHTML = '';
@@ -497,10 +560,13 @@ async function finish(why){
   L.push('started       ' + m.startedAt);
   L.push('ended         ' + endedAt + '  (' + why + ')');
   L.push('duration      ' + Math.floor(secs / 60) + ' min ' + Math.round(secs % 60) + ' s of ' + (m.durationMin ? m.durationMin + ' min planned' : 'open-ended'));
+  L.push('page          ' + PAGE_VERSION);
   L.push('');
   L.push('DEVICE');
   L.push('  user agent  ' + e.ua);
   L.push('  platform    ' + e.platform + '   cores ' + e.cores + '   memory ' + e.memoryGB + ' GB');
+  L.push('  cpu         ' + cpuText(e.hints));
+  L.push('  model / os  ' + modelText(e.hints));
   L.push('  screen      ' + e.screen + ' @ dpr ' + e.dpr);
   L.push('  gpu         ' + e.renderer);
   L.push('  timezone    ' + e.tz);
@@ -523,6 +589,7 @@ async function finish(why){
   L.push('REPEATS      ' + m.repeats + ' cycles re-run, ' + m.repeatFails + ' differed');
   L.push('RE-CHECKS    ' + m.fixtureChecks + ' reference fixture re-checks under load, ' + m.fixtureFails + ' mismatched');
   L.push('HIDDEN       ' + Math.round(m.hiddenMs / 1000) + ' s with the tab in the background');
+  L.push('KEEP-AWAKE   ' + wakeState + (m.wakeReleases ? ' (dropped by the system ' + m.wakeReleases + ' times)' : ''));
   L.push('');
   L.push('TELEMETRY (per minute: min cycles p50 p95 max battery pressure heapMB hidden fixtures)');
   for (const r of m.minutes) L.push('  ' + [r.minute + (r.partial ? '*' : ''), r.cycles, fmt(r.p50, 2), fmt(r.p95, 2), fmt(r.max, 2), r.battery, r.pressure, r.heapMB, r.hiddenS, r.fixtures].join(' '));
@@ -533,7 +600,10 @@ async function finish(why){
   const seal = await sha256hex(body);
   $('block').textContent = body + '\nRECORD SEAL ' + seal;
   $('blockPanel').style.display = '';
+  $('share').style.display = canShareFiles() ? '' : 'none';
   run.recordSeal = seal; run.endedAt = endedAt;
+  save();
+  showPrevious();
   $('status').textContent = allOk ? 'Done. Every result matched. Copy or download the record below.'
     : 'Done — a divergence was detected. That is a finding; keep the record and the log.';
 }
@@ -545,13 +615,71 @@ function download(name, text, type){
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 const stamp = () => (run.label || 'device').replace(/[^A-Za-z0-9]+/g, '-') + '-' + run.startedAt.slice(0, 19).replace(/[:T]/g, '');
-$('dlJson').addEventListener('click', () => download(`omni-${stamp()}.json`, JSON.stringify({
-  kernelVersion: KERNEL_VERSION, label: run.label, env: run.env, startedAt: run.startedAt, endedAt: run.endedAt,
-  endedBy: run.endedBy, preflight: run.preflight, checkpoints: run.checkpoints, repeats: run.repeats,
-  repeatFails: run.repeatFails, fixtureChecks: run.fixtureChecks, fixtureFails: run.fixtureFails,
-  hiddenMs: Math.round(run.hiddenMs), minutes: run.minutes, msPerCycle: run.lat.map((x) => +x.toFixed(3)),
-  temperatureOperator: { start: $('t0').value.trim() || null, end: $('t1').value.trim() || null },
-  record: $('block').textContent }, null, 1), 'application/json'));
+/* The full log: what the JSON download, the share sheet and the autosave all
+   carry. `complete` is false for a snapshot taken while the soak still ran. */
+function logObject(withCycles = true){
+  return {
+    kernelVersion: KERNEL_VERSION, pageVersion: PAGE_VERSION, complete: !!run.done, savedAt: new Date().toISOString(),
+    label: run.label, env: run.env, startedAt: run.startedAt, endedAt: run.endedAt || null,
+    endedBy: run.endedBy || null, cycles: run.cycles, preflight: run.preflight, checkpoints: run.checkpoints, repeats: run.repeats,
+    repeatFails: run.repeatFails, fixtureChecks: run.fixtureChecks, fixtureFails: run.fixtureFails,
+    hiddenMs: Math.round(run.hiddenMs), keepAwake: wakeState, wakeReleases: run.wakeReleases || 0, minutes: run.minutes,
+    msPerCycle: withCycles ? run.lat.map((x) => +x.toFixed(3)) : null,
+    temperatureOperator: { start: $('t0').value.trim() || null, end: $('t1').value.trim() || null },
+    record: run.done ? $('block').textContent : null,
+  };
+}
+function save(){
+  if (!run) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(logObject(true))); }
+  catch { try { localStorage.setItem(SAVE_KEY, JSON.stringify(logObject(false))); } catch {} }
+}
+function loadSaved(){ try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { return null; } }
+const savedName = (o) => 'omni-' + (o.label || 'device').replace(/[^A-Za-z0-9]+/g, '-') + '-' + String(o.startedAt).slice(0, 19).replace(/[:T]/g, '');
+
+/* Chrome shares only some file types, and JSON is not one of them, so the log
+   travels as plain text named .json.txt; drop the .txt to read it as JSON. */
+function shareFile(o){
+  return new File([JSON.stringify(o, null, 1)], savedName(o) + '.json.txt', { type: 'text/plain' });
+}
+function canShareFiles(){
+  try { return !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'x.txt', { type: 'text/plain' })] })); }
+  catch { return false; }
+}
+async function shareLog(o, button){
+  try {
+    await navigator.share({ files: [shareFile(o)], title: 'Lattice117 omni soak: ' + (o.label || 'device'), text: o.record || '' });
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    button.textContent = 'Sharing failed here: use Download';
+  }
+}
+
+function showPrevious(){
+  const o = loadSaved();
+  if (!o) { $('prevPanel').style.display = 'none'; return; }
+  const cps = o.checkpoints || [], bad = cps.filter((c) => !c.ok).length;
+  $('prevInfo').innerHTML = row('Device', esc(o.label || '(not given)')) + row('Started', esc(o.startedAt)) +
+    row('State', o.complete ? 'finished: ' + esc(o.endedBy || '') : 'INCOMPLETE: last saved ' + esc(o.savedAt) + '; the tab was closed or stopped before the end',
+        o.complete ? 'ok' : 'warn') +
+    row('Cycles', Number(o.cycles || 0).toLocaleString()) +
+    row('Checkpoints', `${cps.length - bad} match, ${bad} mismatch` + (cps.length ? ' (to ' + cps[cps.length - 1].cycles.toLocaleString() + ')' : ''), bad ? 'bad' : 'ok') +
+    row('Page version', esc(o.pageVersion || 'before 2026-10-14'));
+  $('prevShow').style.display = o.record ? '' : 'none';
+  $('prevShare').style.display = canShareFiles() ? '' : 'none';
+  $('prevBlock').style.display = 'none';
+  $('prevPanel').style.display = '';
+}
+$('prevShow').addEventListener('click', () => {
+  const o = loadSaved(); if (!o || !o.record) return;
+  $('prevBlock').textContent = o.record; $('prevBlock').style.display = '';
+});
+$('prevJson').addEventListener('click', () => { const o = loadSaved(); if (o) download(savedName(o) + '.json', JSON.stringify(o, null, 1), 'application/json'); });
+$('prevShare').addEventListener('click', () => { const o = loadSaved(); if (o) shareLog(o, $('prevShare')); });
+$('prevClear').addEventListener('click', () => { try { localStorage.removeItem(SAVE_KEY); } catch {} showPrevious(); });
+
+$('dlJson').addEventListener('click', () => download(`omni-${stamp()}.json`, JSON.stringify(logObject(true), null, 1), 'application/json'));
+$('share').addEventListener('click', () => shareLog(logObject(true), $('share')));
 $('dlCsv').addEventListener('click', () => download(`omni-${stamp()}.csv`,
   'minute,cycles,total,p50_ms,p95_ms,max_ms,mean_ms,battery,cpu_pressure,heap_mb,hidden_s,fixtures,partial\n' +
   run.minutes.map((r) => [r.minute, r.cycles, r.total, fmt(r.p50, 3), fmt(r.p95, 3), fmt(r.max, 3), fmt(r.mean, 3),
@@ -568,7 +696,10 @@ $('copy').addEventListener('click', async () => {
 });
 $('start').addEventListener('click', start);
 $('stop').addEventListener('click', () => finish('stopped by operator'));
+$('pageVer').textContent = PAGE_VERSION;
 showDevice();
+clientHints().then((h) => { hints = h; if (!run) showDevice(); });
+showPrevious();
 if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
   $('start').disabled = true;
   $('status').textContent = 'This browser lacks WebAssembly or Web Workers, so it cannot run the soak. Record that: it is a result too.';
