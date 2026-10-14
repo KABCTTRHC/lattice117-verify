@@ -40,6 +40,13 @@ show as a mismatch at the next checkpoint.
     to a thermal signal a web page can see);
   - JavaScript heap;
   - seconds the tab was hidden.
+- The CPU architecture and its bitness, the device model and the OS version,
+  where the browser reports them (Chrome and Edge do, through client hints;
+  Safari and Firefox do not, and the record says so). Added 14 October:
+  on 4 October, Chrome on Android gave only a fixed platform string, so two
+  phones' 32- or 64-bit status went unrecorded.
+- Whether the screen was kept awake, and how often the system dropped the
+  lock (the page asks again while the tab is in front).
 - Temperature: **no browser exposes a temperature sensor.** The page takes
   start and end readings entered by the operator and marks them as such.
   Measured temperature every cycle comes from the native soak
@@ -52,10 +59,19 @@ show as a mismatch at the next checkpoint.
 
 1. Plug the device in and set the screen not to sleep (the page also asks the
    browser to keep it awake where supported).
-2. Open the page, enter a device name, choose **30 minutes**, press start.
-3. Keep the tab in front. A background tab is slowed by the browser; the
+2. Open the page and check the page version under the title. A phone that
+   opened the page before keeps a cached copy until it reloads once.
+3. Enter a device name, choose **30 minutes**, press start.
+4. Keep the tab in front. A background tab is slowed by the browser; the
    record states how long it was hidden.
-4. When it finishes, download the JSON and copy the record.
+5. When it finishes, press **Share** (on phones: email, Drive or messages) or
+   download the JSON, and copy the record. A shared log arrives named
+   `.json.txt`, because Chrome will not share a `.json` file; drop the `.txt`.
+
+Since 14 October the page saves the run in the browser every minute and when
+the tab is hidden. If the phone closes the tab, reopen the page: **Last run on
+this device** shows what it reached (marked INCOMPLETE) and offers its log.
+Starting a new soak replaces it.
 
 A pass is `OVERALL DETERMINISTIC`, with every reached checkpoint `MATCH`.
 Throughput, slow-down and telemetry differ by device by design: they describe

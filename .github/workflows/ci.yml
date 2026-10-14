@@ -166,6 +166,16 @@ jobs:
         run: |
           cmp demo/lattice117_wasm.wasm npm/lattice117_wasm.wasm
           cmp demo/lattice117_wasm.wasm excel-addin/lattice117_wasm.wasm
+      # REPRODUCE.md tells a stranger to run `npx lattice117-verify reproduce`.
+      # 0.2.1 shipped without the CLI, and 0.2.2 was published from the wrong
+      # folder and shipped with no code at all. Both passed every check above,
+      # because nothing here ran the package a stranger actually downloads.
+      # This packs it, installs it into an empty folder and runs it.
+      - name: The packed npm package reproduces the digests from an empty folder
+        run: |
+          (cd npm && npm pack --pack-destination "$RUNNER_TEMP")
+          mkdir "$RUNNER_TEMP/clean" && cd "$RUNNER_TEMP/clean"
+          npx --yes --package="$(ls "$RUNNER_TEMP"/lattice117-verify-*.tgz)" lattice117-verify reproduce
       # Boundary cases decide whether a lawful rota gets flagged. A false
       # positive at exactly 11 hours sends someone to rewrite a compliant
       # roster; a false negative tells them an unlawful one is fine.

@@ -96,5 +96,19 @@ console.log('record and download agree');
      page.includes("L.push('ended         ' + endedAt + ") && page.includes('run.endedAt = endedAt;'));
 }
 
+// 14 October: what the page adds for phones. The kernel and its checkpoints
+// are unchanged, so these runs compare directly with 4 October's.
+console.log('phone run, 14 October');
+ok('  kernel version and pins unchanged', page.includes('const KERNEL_VERSION = 1;') &&
+   page.includes("10: '445986e880b974951c9e892707b7b231ddd4a54d24f5625361ddd5cac0a489eb'"));
+ok('  the page states its version in the record', page.includes("L.push('page          ' + PAGE_VERSION);"));
+ok('  the record carries the browser-reported CPU and bitness',
+   page.includes("'bitness'") && page.includes("L.push('  cpu         ' + cpuText(e.hints));"));
+ok('  every minute, and on hide, the run is saved for recovery',
+   page.includes('if (!final) save();') && page.includes("addEventListener('pagehide'"));
+ok('  shared logs travel as text/plain (Chrome will not share a .json file)',
+   page.includes("'.json.txt', { type: 'text/plain' }"));
+ok('  the offline cache was bumped with the page', !sw.includes("'lattice117-v21'"));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
