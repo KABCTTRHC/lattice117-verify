@@ -265,6 +265,59 @@ function toQ(value, what) {
   return Math.round(n * Q);
 }
 
+/* ---- vehicle loads (optional) ---------------------------------------------
+   A stop may carry a `demand` and a route a `capacity` (alias
+   `vehicleCapacity`). Loads are counts of whole things - kilograms, parcels,
+   pallets - so they are held as exact integers, never Q16.16 and never
+   rounded: a fractional load is refused by name. Whole numbers up to LOAD_MAX
+   are exact in a double, so the check is integer arithmetic throughout.
+-------------------------------------------------------------------------- */
+
+/** Largest load or capacity accepted, in whole units. */
+const LOAD_MAX = 1000000000;
+
+/**
+ * One load value as an exact non-negative integer, or a RangeError naming it.
+ * Strings are accepted because a CSV or spreadsheet hands you strings.
+ */
+function toUnits(value, what) {
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new RangeError(`${what}: "${value}" is not a number`);
+  }
+  const text = typeof value === 'string' ? value.trim() : value;
+  const n = Number(text);
+  if (text === '' || !Number.isFinite(n)) {
+    throw new RangeError(`${what}: "${value}" is not a number`);
+  }
+  if (!Number.isInteger(n)) {
+    throw new RangeError(
+      `${what}: ${n} is not a whole number. Loads are counted in whole units ` +
+      `(kilograms, parcels, pallets); choose a smaller unit rather than rounding.`
+    );
+  }
+  if (n < 0 || n > LOAD_MAX) {
+    throw new RangeError(`${what}: ${n} is outside 0..${LOAD_MAX}`);
+  }
+  return n;
+}
+
+/** A route's stated capacity, from `capacity` or `vehicleCapacity`, or null. */
+function capacityOf(route) {
+  const a = route.capacity ?? null;
+  const b = route.vehicleCapacity ?? null;
+  if (a !== null && b !== null && toUnits(a, `${route.id} capacity`) !== toUnits(b, `${route.id} vehicleCapacity`)) {
+    throw new RangeError(`${route.id}: capacity (${a}) and vehicleCapacity (${b}) disagree`);
+  }
+  const v = a ?? b;
+  return v === null ? null : toUnits(v, `${route.id} capacity`);
+}
+
+/** True when any route states a capacity or any stop a demand. */
+function hasLoads(routes) {
+  return routes.some((r) => (r.capacity ?? r.vehicleCapacity ?? null) !== null
+    || r.stops.some((s) => (s.demand ?? null) !== null));
+}
+
 /**
  * The exact string that gets hashed. Exposed so a surface can show it, and so
  * a test can diff two surfaces' canonical forms rather than only their hashes
@@ -311,6 +364,20 @@ function canonicalise(routes, verdict) {
     ]),
   };
   if (departs.some((d) => d !== 0)) form.departs = departs;
+  /* Loads follow the same rule as departures: the keys exist only when the
+     schedule carries a capacity or a demand, so every schedule without them
+     hashes exactly as it did before loads existed. When present they change
+     the verdict, so they must be in the canonical form. */
+  if (hasLoads(routes)) {
+    form.loads = routes.map((r) => [
+      capacityOf(r),
+      r.stops.map((s) => ((s.demand ?? null) === null ? 0 : toUnits(s.demand, `${s.id} demand`))),
+    ]);
+    form.loadVerdict = verdict.map((v) => (v.capacityViolation
+      ? [v.capacityViolation.stop, v.capacityViolation.load,
+         v.capacityViolation.capacity, v.capacityViolation.excess]
+      : null));
+  }
   return JSON.stringify(form);
 }
 
@@ -372,7 +439,7 @@ async function rotaDigest(people, verdict, rules) {
   return sha256(canonicaliseRota(people, verdict, rules));
 }
 
-return { Q, Q16_MAX, Q16_MIN, toQ, canonicalise, verdictDigest, canonicaliseRota, rotaDigest };
+return { Q, Q16_MAX, Q16_MIN, toQ, LOAD_MAX, toUnits, capacityOf, hasLoads, canonicalise, verdictDigest, canonicaliseRota, rotaDigest };
 })();
 
 /* ---- L117_ROTA ---- */

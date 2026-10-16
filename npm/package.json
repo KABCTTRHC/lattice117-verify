@@ -1,7 +1,7 @@
 {
   "name": "lattice117-verify",
-  "version": "0.2.3",
-  "description": "Deterministic schedule feasibility verification. Checks whether a planned route holds against its own time windows and names the exact violation when it does not. Runs entirely locally — no network, no server, no telemetry.",
+  "version": "0.3.0",
+  "description": "Deterministic schedule feasibility verification. Checks whether a planned route holds against its own time windows and names the exact violation when it does not. Includes lattice117-mcp, a Model Context Protocol server over stdio for AI agents. Runs entirely locally — no network, no server, no telemetry.",
   "keywords": [
     "scheduling",
     "vrptw",
@@ -22,7 +22,11 @@
     "route-sheet",
     "time-windows",
     "delivery-windows",
-    "offline-first"
+    "offline-first",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "capacity"
   ],
   "license": "AGPL-3.0-or-later",
   "author": "Brierley Sovereign Group Ltd",
@@ -46,6 +50,10 @@
     "index.d.ts",
     "digest.js",
     "resequence.js",
+    "bin/lattice117-mcp.mjs",
+    "mcp.js",
+    "rota.js",
+    "toolpath.js",
     "lattice117_wasm.wasm",
     "example-route-sheet.csv",
     "example-fleet-nottingham.csv",
@@ -57,10 +65,12 @@
   },
   "sideEffects": false,
   "bin": {
-    "lattice117-verify": "./bin/lattice117-verify.mjs"
+    "lattice117-verify": "./bin/lattice117-verify.mjs",
+    "lattice117-mcp": "./bin/lattice117-mcp.mjs"
   },
   "scripts": {
     "reproduce": "node bin/lattice117-verify.mjs",
-    "prepublishOnly": "node bin/lattice117-verify.mjs reproduce"
+    "prepublishOnly": "node bin/lattice117-verify.mjs reproduce",
+    "mcp": "node bin/lattice117-mcp.mjs"
   }
 }

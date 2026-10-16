@@ -95,6 +95,47 @@ normalises before it computes anything. Digests from 0.1.0 do not carry over.
 Pre-loads the WASM module. Optional — the verify functions call it themselves.
 Use it to control when the load cost is paid.
 
+### Optional vehicle capacity (0.3.0)
+
+A route may carry `capacity` (or `vehicleCapacity`) and its stops a `demand`,
+in whole units: kilograms, parcels, pallets. The result then carries
+`load: { total, capacity }` and `capacityViolation`, which names the first stop
+whose demand takes the round's running total past the capacity, with the load
+and the excess. A route over capacity is not feasible.
+
+- A demand with no capacity is refused rather than passed.
+- A fractional load is refused; choose a smaller unit.
+- Loads are checked in integer arithmetic in `index.js`; the 21,525-byte WASM
+  referee is unchanged.
+- **No digest moves for a schedule without loads.** The capacity keys enter
+  the canonical form only when a route states a capacity or a stop a demand,
+  the same rule the `depart` column follows. `e249d90e…` is unchanged.
+
+## lattice117-mcp: the verifier as tools for AI agents (0.3.0)
+
+```sh
+npx -p lattice117-verify lattice117-mcp
+```
+
+A Model Context Protocol server over stdio (newline-delimited JSON-RPC 2.0).
+Add it to an MCP client as a stdio server with that command. It opens no
+socket and writes nothing to stdout but protocol messages.
+
+| Tool | What it does |
+|---|---|
+| `verify_fleet` | Routes against their time windows (and capacity, when given). Returns whether each holds, the first stop that breaks with the exact deficit (and its Q16.16 integers), and the `verdictDigest` |
+| `verify_rota` | Shifts against rest and break thresholds, with every shortfall in minutes and a `rotaDigest`. Indicative, not legal advice |
+| `resequence_round` | Every order of a round's interior stops (up to 8) against a distance matrix; the referee grades the original and the best order, and the repaired route comes back ready to re-verify |
+| `optimize_toolpath` | The cut order that minimises rapid travel for SVG, G-code or a point list (up to 8 cuts searched; cuts never reversed) |
+| `self_test` | Re-derives the three published digests |
+
+The loop an agent is meant to run: propose a plan, call `verify_fleet` or
+`verify_rota`, read the first failure and its deficit, repair the plan
+(`resequence_round` can do it for a round), and verify again. Treat a plan as
+certified only when the referee says it holds. `tests/mcp.test.mjs` runs that
+loop on the Nottingham round: refused at Chilwell, 11.4 minutes late, with the
+published `da1650fc…`; repaired and re-certified with the published `2b9d863c…`.
+
 ## What it does not do
 
 It verifies time windows and travel times. It does **not** build routes, does
@@ -107,7 +148,8 @@ assumptions. Route construction is a much harder problem and this does not
 claim to have solved it. Verification does not depend on having solved it,
 which is why this is the part that is published.
 
-Vehicle capacity is not yet checked as a hard constraint.
+Vehicle capacity is checked only when you give it (above). Service time at a
+stop is not modelled: add it to the next leg's travel time.
 
 ## Provenance
 

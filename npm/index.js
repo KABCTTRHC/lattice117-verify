@@ -27,9 +27,11 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 // One canonicalisation, shared byte-for-byte with the browser audit and the
 // Excel task pane. CI fails if the three copies drift.
-import { Q, toQ, canonicalise, verdictDigest as digestOf } from './digest.js';
+import {
+  Q, toQ, canonicalise, verdictDigest as digestOf, toUnits, capacityOf, hasLoads,
+} from './digest.js';
 
-export { Q16_MAX, Q16_MIN, canonicalise } from './digest.js';
+export { Q16_MAX, Q16_MIN, LOAD_MAX, canonicalise } from './digest.js';
 
 let _exports = null;
 let _loading = null;
@@ -140,11 +142,11 @@ export async function verifyRoute(route) {
 
   for (const b of [db, wb, rb, ob]) ex.lattice_free(b.ptr, b.bytes);
 
+  let result;
   if (out[0] === 0) {
-    return { id: label, feasible: true, cost: fromQ(out[5]), violation: null };
-  }
-  if (out[0] === 1) {
-    return {
+    result = { id: label, feasible: true, cost: fromQ(out[5]), violation: null };
+  } else if (out[0] === 1) {
+    result = {
       id: label,
       feasible: false,
       cost: null,
@@ -156,8 +158,46 @@ export async function verifyRoute(route) {
         raw: { arrival: out[2], windowClose: out[3], deficit: out[4] },
       },
     };
+  } else {
+    throw new Error(`route "${label}" was rejected before evaluation (bad shape)`);
   }
-  throw new Error(`route "${label}" was rejected before evaluation (bad shape)`);
+  return withLoad(route, label, result);
+}
+
+/**
+ * The optional load check, added to a route's result only when the route
+ * states a capacity or a stop states a demand. A route with neither returns
+ * exactly the result it always did, so no published digest moves.
+ *
+ * Loads are exact integers and the check is integer arithmetic in this file,
+ * not in the WASM engine: the 21,525-byte referee binary is pinned and does
+ * not change. The violation names the first stop whose demand takes the
+ * round's running total past the capacity, and by how much.
+ *
+ * A demand with no capacity to check it against is refused, not passed: a
+ * load nobody checked must not come back as a clean verdict.
+ */
+function withLoad(route, label, result) {
+  if (!hasLoads([route])) return result;
+  const capacity = capacityOf(route);
+  let total = 0;
+  let violation = null;
+  for (const s of route.stops) {
+    total += (s.demand ?? null) === null ? 0 : toUnits(s.demand, `${label} → ${s.id} demand`);
+    if (capacity !== null && violation === null && total > capacity) {
+      violation = { stop: s.id, load: total, capacity, excess: total - capacity };
+    }
+  }
+  if (capacity === null && total > 0) {
+    throw new RangeError(
+      `route "${label}" carries a demand of ${total} but states no capacity. Give the ` +
+      `route a capacity (or vehicleCapacity): a load with nothing to check it against ` +
+      `would otherwise pass unchecked.`
+    );
+  }
+  const out = { ...result, load: { total, capacity }, capacityViolation: violation };
+  if (violation) { out.feasible = false; out.cost = null; }
+  return out;
 }
 
 /**

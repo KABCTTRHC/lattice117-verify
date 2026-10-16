@@ -149,6 +149,7 @@ jobs:
           cmp demo/rota.js npm/rota.js
           cmp demo/freetier.js excel-addin/freetier.js
           cmp demo/freetier.js npm/freetier.js
+          cmp demo/toolpath.js npm/toolpath.js
       # Every module a page imports exists beside it, every shared module is
       # byte-identical across surfaces, and the service worker's SHELL covers
       # everything audit.html needs. Two bugs of this shape got through in one
@@ -344,6 +345,13 @@ jobs:
       # product cannot survive. This rebuilds and diffs.
       - name: Sheets bundle is current, scoped and self-contained
         run: node tests/sheets.test.mjs
+      - name: Toolpath adapter (SVG, G-code, rapid-travel matrix)
+        run: node tests/toolpath.test.mjs
+      # lattice117-mcp: the protocol, every tool, the refuse-repair-recertify
+      # loop an agent runs, the optional capacity check's digest parity, no
+      # network, and a real stdio session.
+      - name: lattice117-mcp stdio server and the agent repair loop
+        run: node tests/mcp.test.mjs
       # The ask we make of outside engineers to close §8 of the paper. It runs
       # here on every push because it is the one command a stranger will judge
       # the whole project by, and it must never be broken in main.

@@ -137,13 +137,24 @@ match evaluate_order(&route, &distances_q16, node_count, &windows) {
 }
 ```
 
+## For AI agents: lattice117-mcp
+
+`npx -p lattice117-verify lattice117-mcp` (from 0.3.0) is a Model Context
+Protocol server over stdio. It gives an agent five read-only tools:
+`verify_fleet`, `verify_rota`, `resequence_round`, `optimize_toolpath` and
+`self_test`. A plan that does not hold comes back refused with the first stop
+or shift that breaks and the exact deficit; the agent repairs it and verifies
+again, and a plan counts as certified only when the referee says it holds. It
+opens no socket. See `npm/README.md` and `tests/mcp.test.mjs`.
+
 ## Provenance
 
 This verification core is extracted from the Lattice117 engine. **This
-repository ships 87 Rust tests and 506 JavaScript checks** — `cargo test --all`
-and the eleven `node tests/*.test.mjs` suites, all passing as of 14 October 2026
-(the "4 tests" this line used to say was long out of date). The parent engine's
-781-test figure is not something this repository lets you check; read it as our
+repository ships 87 Rust tests and 585 JavaScript checks** — `cargo test --all`
+and the twelve `node tests/*.test.mjs` suites, all passing as of 16 October 2026
+(the "4 tests" this line used to say was long out of date). 79 of the JavaScript
+checks are `lattice117-mcp`'s (`tests/mcp.test.mjs`). The parent engine's
+test figure is not something this repository lets you check; read it as our
 claim. What this repository does let you check is the
 digest: CI pins the verdict digest for `examples/infeasible.json` and fails if
 Linux, macOS and Windows disagree.
