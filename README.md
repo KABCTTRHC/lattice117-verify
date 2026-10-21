@@ -149,7 +149,9 @@ opens no socket. See `npm/README.md` and `tests/mcp.test.mjs`.
 `tests/mcp-cycle/run.sh` checks it as an agent meets it: the packed tarball,
 installed into an empty project and driven by the official MCP SDK client
 (24 checks, run twice, the second time with the server in a namespace that has
-no network), then a raw stdio session. CI runs it on every push.
+no network), then a raw stdio session. CI runs it on every push; GitHub's
+runners do not allow `unshare`, so there the no-network pass is skipped and says
+so (the in-process suite still fails any tool that reaches for the network).
 
 ## Provenance
 
