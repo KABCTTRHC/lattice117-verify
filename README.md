@@ -146,6 +146,10 @@ Protocol server over stdio. It gives an agent five read-only tools:
 or shift that breaks and the exact deficit; the agent repairs it and verifies
 again, and a plan counts as certified only when the referee says it holds. It
 opens no socket. See `npm/README.md` and `tests/mcp.test.mjs`.
+`tests/mcp-cycle/run.sh` checks it as an agent meets it: the packed tarball,
+installed into an empty project and driven by the official MCP SDK client
+(24 checks, run twice, the second time with the server in a namespace that has
+no network), then a raw stdio session. CI runs it on every push.
 
 ## Provenance
 

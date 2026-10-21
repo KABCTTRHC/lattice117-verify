@@ -352,6 +352,12 @@ jobs:
       # network, and a real stdio session.
       - name: lattice117-mcp stdio server and the agent repair loop
         run: node tests/mcp.test.mjs
+      # The same server as an agent meets it: the packed npm tarball installed
+      # into an empty project and driven by the official MCP SDK client, then
+      # a raw stdio session. Catches what in-process tests cannot: a file left
+      # out of the package, stray output on stdout, a protocol mismatch.
+      - name: lattice117-mcp full cycle (packed, installed, official SDK client)
+        run: bash tests/mcp-cycle/run.sh
       # The ask we make of outside engineers to close §8 of the paper. It runs
       # here on every push because it is the one command a stranger will judge
       # the whole project by, and it must never be broken in main.
