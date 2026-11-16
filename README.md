@@ -196,3 +196,12 @@ Dual-licensed: **AGPL-3.0-or-later** (see [LICENSE](LICENSE)) or a
 organisations that cannot release their source.
 
 Built in Nottingham.
+
+## Project records
+
+| Record | What it holds |
+|---|---|
+| [`docs/OVERVIEW.md`](docs/OVERVIEW.md) | What this repository is, what is in it, and how it relates to the others |
+| [`docs/TRACKING.md`](docs/TRACKING.md) | What has landed, what is in progress and what is next, dated |
+| [`docs/TRL-ROADMAP.md`](docs/TRL-ROADMAP.md) | Where each part stands on the TRL scale, and the gate to the next level |
+| [`docs/OPEN-ISSUES.md`](docs/OPEN-ISSUES.md) | Known problems and open decisions |
