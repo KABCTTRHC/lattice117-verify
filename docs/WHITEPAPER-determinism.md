@@ -424,8 +424,14 @@ implemented.)
 
 **Test set.** Two fixtures, not a corpus.
 
-**No independent re-derivation.** No external party has yet re-derived a digest.
-Until one has, the claim rests on our own CI.
+**One independent re-derivation.** On 17 November 2026 Basit Tijani, an
+engineer outside BSG, ran `npx lattice117-verify reproduce` (package 0.2.3) on
+his own Windows x64 PC (Intel Core i7-8665U, Node v24.21.0) and re-derived,
+bit for bit, all three digests it checks: the example route sheet of §10, and
+the Nottingham round before and after re-sequencing
+(`docs/FIXTURE-NOTTINGHAM.md`). His output is on record in `docs/reproductions/`. That is one outside machine running our fixtures, not
+a schedule of his own, so the claim now rests on our CI and one outside
+reproduction.
 
 **Provenance of the captures.** Device blocks are self-reported by the author,
 not attested. Nothing binds a pasted block to the hardware that produced it —

@@ -16,18 +16,28 @@ Then paste the output here:
 
 ---
 
+## Reproductions on record
+
+| Date | Who | Machine | Result |
+|---|---|---|---|
+| 17 Nov 2026 | Basit Tijani, independent engineer | His own Windows x64 PC (Intel Core i7-8665U, Node v24.21.0), package 0.2.3 | **3 of 3 match** ([output](docs/reproductions/2026-11-17-windows-x64.txt)) |
+
+Every record, kept as sent: [`docs/reproductions/`](docs/reproductions/).
+
 ## Why we are asking
 
-§8 of [the white paper](docs/WHITEPAPER-determinism.md) records an open gap, in
-our own words: **every digest in it was produced by us.**
+§8 of [the white paper](docs/WHITEPAPER-determinism.md) recorded the gap in
+our own words: **every digest in it was produced by us**, nine device captures
+across three phones, all on hardware we held. The claim this product rests on
+is that the same schedule produces the same verdict and the same digest on any
+machine, anywhere, and that is not a claim we can close by running it again
+ourselves.
 
-There are nine device captures in there — three phones, three runs each — and
-they are still nine captures on hardware we held. The claim this product rests
-on is that the same schedule produces the same verdict and the same digest on
-any machine, anywhere. That is not a claim we can close by running it again
-ourselves, however many times we do it.
-
-One person who is not us, on a machine we have never touched, closes it.
+On 17 November 2026 the first person who is not us, on a machine we have never
+touched, got the same three strings. That opened the record; it did not finish
+it. Every further machine, operating system and runtime makes the claim
+stronger, and the next step is someone running a schedule of their own
+(open issue V2).
 
 **A non-match is the more useful result.** If your output differs from the
 expected values, that is a defect in a claim we are selling, and we would much

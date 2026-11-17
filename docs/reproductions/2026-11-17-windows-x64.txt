@@ -1,0 +1,47 @@
+
+Lattice117 — independent digest re-derivation
+==============================================================
+
+Environment
+  node                   v24.21.0
+  platform               win32 10.0.26200 (x64)
+  cpu                    Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+  cores                  8
+  memory                 16 GB
+  package                0.2.3
+  engine bytes           21525
+
+1. Fleet fixture (example-route-sheet.csv)
+  rounds checked         8
+  feasible               5 of 8
+
+2/3. Nottingham benchmark (Tier 5 re-sequencing)
+  before                 99.6 min, INFEASIBLE
+  after                  60.2 min, FEASIBLE
+  order found            DEPOT -> Beeston -> Chilwell -> Bulwell -> Arnold -> Carlton -> DEPOT
+
+Digests
+
+  MATCH     fleet v1
+    expected  e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+    got       e249d90ef7b895243e48c9f8315e3fe3a3ab02732604a898c2c6922fda24888d
+
+  MATCH     nottingham before
+    expected  da1650fc0e63e26eba33913f25f24fb9fbdc78ce4c55549279cb9582d3119993
+    got       da1650fc0e63e26eba33913f25f24fb9fbdc78ce4c55549279cb9582d3119993
+
+  MATCH     nottingham after
+    expected  2b9d863c5ab89a90a2416a9a708ce09fa8876b6d8d91e58199696181e7da7b15
+    got       2b9d863c5ab89a90a2416a9a708ce09fa8876b6d8d91e58199696181e7da7b15
+
+==============================================================
+
+All three digests match.
+
+Please paste this entire output into a reproduction report:
+  https://github.com/KABCTTRHC/lattice117-verify/issues/new?template=digest-reproduction.yml
+
+That is the whole ask. It closes an open gap in the white paper
+that we cannot close ourselves, because every digest in it so far
+was produced on hardware we held.
+

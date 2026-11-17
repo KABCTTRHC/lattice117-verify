@@ -11,14 +11,13 @@
  *
  * # Why this command exists
  *
- * §8 of the white paper records an open gap: every digest in it was produced by
- * us. Nine device captures across three phones are still nine captures on
- * hardware we held. The claim the product rests on — same schedule, same
- * verdict, same digest, anywhere — is not something we can close by running it
- * again ourselves, however many times.
+ * §8 of the white paper recorded a gap: every digest in it was produced by us.
+ * The claim the product rests on — same schedule, same verdict, same digest,
+ * anywhere — is not something we can close by running it again ourselves.
  *
- * Closing it takes one person who is not us, on a machine we have never
- * touched, getting the same strings. This command exists to make that take
+ * It takes people who are not us, on machines we have never touched, getting
+ * the same strings. The first such reproduction went on record on 17 November
+ * 2026 (docs/reproductions/); every further machine strengthens the claim. This command exists to make that take
  * thirty seconds rather than an afternoon, because an ask that costs an
  * afternoon does not get done.
  *
@@ -139,9 +138,9 @@ if (mismatched === 0) {
   console.log('Please paste this entire output into a reproduction report:');
   console.log('  https://github.com/KABCTTRHC/lattice117-verify/issues/new'
               + '?template=digest-reproduction.yml\n');
-  console.log('That is the whole ask. It closes an open gap in the white paper');
-  console.log('that we cannot close ourselves, because every digest in it so far');
-  console.log('was produced on hardware we held.\n');
+  console.log('That is the whole ask. Every machine we have never touched that');
+  console.log('gets the same three strings strengthens the white paper\'s claim;');
+  console.log('a report from yours adds to the reproductions on record.\n');
 } else {
   console.log(`\n${mismatched} of ${EXPECTED.length} digests DID NOT MATCH.\n`);
   console.log('This is the more useful result, and we would rather hear it from');
