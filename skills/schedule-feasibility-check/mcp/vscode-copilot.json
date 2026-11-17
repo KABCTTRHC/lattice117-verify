@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "lattice117": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "-p", "lattice117-verify@0.3.0", "lattice117-mcp"]
+    }
+  }
+}

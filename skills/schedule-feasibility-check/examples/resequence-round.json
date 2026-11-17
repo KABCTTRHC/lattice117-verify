@@ -1,0 +1,72 @@
+{
+  "tool": "resequence_round",
+  "arguments": {
+    "route": {
+      "id": "Round1",
+      "depart": 0,
+      "stops": [
+        {
+          "id": "Depot",
+          "close": 0
+        },
+        {
+          "id": "A",
+          "close": 30
+        },
+        {
+          "id": "B",
+          "close": 20
+        },
+        {
+          "id": "End",
+          "close": 100
+        }
+      ]
+    },
+    "matrix": {
+      "nodes": [
+        "Depot",
+        "A",
+        "B",
+        "End"
+      ],
+      "times": [
+        [
+          0,
+          10,
+          10,
+          0
+        ],
+        [
+          10,
+          0,
+          15,
+          10
+        ],
+        [
+          10,
+          15,
+          0,
+          10
+        ],
+        [
+          0,
+          10,
+          10,
+          0
+        ]
+      ]
+    }
+  },
+  "expect": {
+    "summary": "Searched every order of 2 interior stop(s). Referee: before refused, after holds.",
+    "orderAfter": [
+      "Depot",
+      "B",
+      "A",
+      "End"
+    ],
+    "beforeDigest": "1dcc6ccd15dd3fa767410ddb236ebc65ddcd5a5d957a63618d55a80d1374cd22",
+    "afterDigest": "12c4f7ffca503ee802b9ad6fce95798119bb09e99b7c507ce0b8a248937fb149"
+  }
+}

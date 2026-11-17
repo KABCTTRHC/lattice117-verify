@@ -153,6 +153,13 @@ no network), then a raw stdio session. CI runs it on every push; GitHub's
 runners do not allow `unshare`, so there the no-network pass is skipped and says
 so (the in-process suite still fails any tool that reaches for the network).
 
+`skills/schedule-feasibility-check/` is an agent skill built on the server:
+a `SKILL.md` that tells an agent when to call the referee and how to report
+what it finds, with set-up lines for each agent and five worked examples.
+`tests/skill.test.mjs` keeps it in step with the server, and
+`python3 tools/build_skill_zip.py skills/schedule-feasibility-check` packs it
+for a skills marketplace.
+
 ## Provenance
 
 This verification core is extracted from the Lattice117 engine. **This

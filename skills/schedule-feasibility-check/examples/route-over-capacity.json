@@ -1,0 +1,34 @@
+{
+  "tool": "verify_fleet",
+  "arguments": {
+    "routes": [
+      {
+        "id": "V1",
+        "depart": 0,
+        "capacity": 10,
+        "stops": [
+          {
+            "id": "Depot",
+            "close": 0
+          },
+          {
+            "id": "A",
+            "travel": 10,
+            "close": 100,
+            "demand": 6
+          },
+          {
+            "id": "B",
+            "travel": 10,
+            "close": 100,
+            "demand": 7
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "summary": "0 of 1 route(s) hold. Route V1 reaches a load of 13 at stop B, over its capacity of 10 by 3.",
+    "verdictDigest": "a6010f3ce05295f646a7ac6d8e6470f41adb3b0b86919bf3c719a619b0eb8301"
+  }
+}

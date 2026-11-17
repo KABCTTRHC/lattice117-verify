@@ -1,0 +1,33 @@
+{
+  "tool": "verify_fleet",
+  "arguments": {
+    "routes": [
+      {
+        "id": "R1",
+        "depart": 0,
+        "stops": [
+          {
+            "id": "Depot",
+            "close": 0
+          },
+          {
+            "id": "A",
+            "travel": 30,
+            "open": 0,
+            "close": 40
+          },
+          {
+            "id": "B",
+            "travel": 25,
+            "open": 0,
+            "close": 60
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "summary": "1 of 1 route(s) hold.",
+    "verdictDigest": "fa02d4a1915db98f2e29b3039676bc7c074ef217d73985b3dfca470160ebf34a"
+  }
+}

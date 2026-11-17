@@ -1,0 +1,32 @@
+{
+  "tool": "verify_rota",
+  "arguments": {
+    "rows": [
+      {
+        "staff": "Sam",
+        "date": "2026-11-16",
+        "start": "14:00",
+        "end": "23:00",
+        "break": 30
+      },
+      {
+        "staff": "Sam",
+        "date": "2026-11-17",
+        "start": "08:00",
+        "end": "16:00",
+        "break": 30
+      },
+      {
+        "staff": "Jo",
+        "date": "2026-11-17",
+        "start": "07:00",
+        "end": "14:30",
+        "break": 0
+      }
+    ]
+  },
+  "expect": {
+    "summary": "0 of 2 people clear. First breach: Sam, row 2 (rest): 540 min against 660, short by 120.",
+    "rotaDigest": "45518ee600f02d8ca98c299cf518e6aaaf031db643e9c206e6b9ee96e4f6d772"
+  }
+}
