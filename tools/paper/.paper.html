@@ -567,8 +567,14 @@ keeps 24 fractional. Q16.16 never reaches that magnitude, which is exactly why
 §6.3&#39;s sweep found nothing. (Analysis only; parked as a specification, not
 implemented.)</p>
 <p><strong>Test set.</strong> Two fixtures, not a corpus.</p>
-<p><strong>No independent re-derivation.</strong> No external party has yet re-derived a digest.
-Until one has, the claim rests on our own CI.</p>
+<p><strong>One independent re-derivation.</strong> On 17 November 2026 Basit Tijani, an
+engineer outside BSG, ran <code>npx lattice117-verify reproduce</code> (package 0.2.3) on
+his own Windows x64 PC (Intel Core i7-8665U, Node v24.21.0) and re-derived,
+bit for bit, all three digests it checks: the example route sheet of §10, and
+the Nottingham round before and after re-sequencing
+(<code>docs/FIXTURE-NOTTINGHAM.md</code>). His output is on record in <code>docs/reproductions/</code>. That is one outside machine running our fixtures, not
+a schedule of his own, so the claim now rests on our CI and one outside
+reproduction.</p>
 <p><strong>Provenance of the captures.</strong> Device blocks are self-reported by the author,
 not attested. Nothing binds a pasted block to the hardware that produced it —
 the same limitation as the digest itself, one level up.</p>
