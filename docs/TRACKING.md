@@ -6,7 +6,7 @@ Updated 19 November 2026.
 
 | Date | What | Record |
 |---|---|---|
-| 19 Nov | `lattice117-verify@0.3.0` published as `latest` from the owner's Windows PC, with `lattice117-mcp`; checked from the registry: reproduce 3 of 3, the MCP server lists its five tools; tarball byte-identical to `80a64e7`, tagged `v0.3.0`. The Windows `import()` fix restored first | `80a64e7`; `docs/RELEASES.md` |
+| 19 Nov | `lattice117-verify@0.3.0` published as `latest` from the owner's Windows PC, with `lattice117-mcp`; checked from the registry: reproduce 3 of 3, the MCP server lists its five tools; tarball byte-identical to `80a64e7`, the commit for the `v0.3.0` tag. The Windows `import()` fix restored first | `80a64e7`; `docs/RELEASES.md` |
 | 18 Nov | The 18 Nov test gauntlet: 87 Rust tests (1 ignored) and 590 JavaScript checks pass; the skill zip builds byte-identical twice; the MCP full cycle 24 of 24; `npx -y lattice117-verify reproduce` (0.2.3) gives 3 of 3 digests; the six demo pages pass in Chromium (no errors; the round's fix and the Nottingham story give the CLI's results). The Pages deploys have failed since 16 Nov (V5), but the site's files are unchanged since 16 Oct, so the live site is current | `sovereign_api` `docs/ALIGNMENT-2026-11-18.md` §5–6 |
 | 17 Nov | Agent skill `schedule-feasibility-check` for Agensi and other skill hubs, with `tests/skill.test.mjs` (5 checks) and a reproducible zip | `a31e32f`; `docs/AGENSI-LISTING.md` |
 | 17 Nov | The first outside reproduction on record: 3 of 3 digests on Windows x64; white paper section 8 updated | `3a71a57`, `759cf1a`; `docs/reproductions/` |
