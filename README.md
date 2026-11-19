@@ -158,7 +158,8 @@ a `SKILL.md` that tells an agent when to call the referee and how to report
 what it finds, with set-up lines for each agent and five worked examples.
 `tests/skill.test.mjs` keeps it in step with the server, and
 `python3 tools/build_skill_zip.py skills/schedule-feasibility-check` packs it
-for a skills marketplace.
+for a skills marketplace. The skill is listed free on Agensi:
+**[agensi.io/skills/schedule-feasibility-check](https://agensi.io/skills/schedule-feasibility-check)**.
 
 ## Provenance
 
