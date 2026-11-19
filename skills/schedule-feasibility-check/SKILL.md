@@ -26,6 +26,8 @@ machine over stdio. It opens no socket and sends nothing anywhere; `npx`
 downloads the package once.
 
 - **Claude Code:** `claude mcp add lattice117 -- npx -y -p lattice117-verify@0.3.0 lattice117-mcp`
+  (on native Windows, not WSL, start it through `cmd /c`:
+  `claude mcp add lattice117 -- cmd /c npx -y -p lattice117-verify@0.3.0 lattice117-mcp`)
 - **Claude Desktop, Cursor:** add `mcp/claude-desktop.json` (or `mcp/cursor.json`)
   to the client's MCP settings. On Windows, use `mcp/windows-claude-desktop.json`.
 - **VS Code with Copilot:** put `mcp/vscode-copilot.json` in `.vscode/mcp.json`.

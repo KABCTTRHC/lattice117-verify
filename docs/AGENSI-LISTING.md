@@ -91,7 +91,8 @@ window closes at 50: 5 late.") and `self_test` with `allMatch: true`.
       empty folder (19 Nov).
 - [ ] `node tests/skill.test.mjs` passes (CI runs it on every push).
 - [ ] The zip's SHA-256 is noted here when it is uploaded:
-      `b2b4f136b366abb5ac944b50b23e33d8d63ba022110a82189b161f84d11fbe56`
-      (rebuilt 19 Nov from the same files: the same bytes).
+      `898f116196e19bfaab1504a3569f1db7f2dabd95bdbb3a85c102203856640b35`
+      (19 Nov, after adding the native-Windows `cmd /c` line for Claude Code;
+      the build gives the same bytes every time).
 - [ ] Your affiliate link from Agensi is saved; use it when you share the
       listing.

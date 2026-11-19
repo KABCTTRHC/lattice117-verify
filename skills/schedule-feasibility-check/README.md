@@ -6,7 +6,8 @@ server from the npm package `lattice117-verify`.
 
 - `SKILL.md`: the skill itself, which the agent reads.
 - `mcp/`: one-line set-up for Claude Desktop, Cursor, VS Code with Copilot
-  and Windows. Claude Code: `claude mcp add lattice117 -- npx -y -p lattice117-verify@0.3.0 lattice117-mcp`.
+  and Windows. Claude Code: `claude mcp add lattice117 -- npx -y -p lattice117-verify@0.3.0 lattice117-mcp`
+  (on native Windows: `claude mcp add lattice117 -- cmd /c npx -y -p lattice117-verify@0.3.0 lattice117-mcp`).
 - `examples/`: five worked calls. Each file holds the tool, its arguments and
   the expected summary and digest; `tests/skill.test.mjs` runs every one on
   each push, so the examples cannot drift from the engine.

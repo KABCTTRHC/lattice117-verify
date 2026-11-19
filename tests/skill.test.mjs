@@ -39,6 +39,8 @@ test('the set-up lines pin the package version being published', () => {
     assert.ok(readFileSync(join(dir, 'mcp', f), 'utf8').includes(pin), `${f} pins ${pin}`);
   }
   assert.ok(skill.includes(`claude mcp add lattice117 -- npx -y -p ${pin} lattice117-mcp`));
+  // Native Windows cannot start npx without cmd /c (npx is a .cmd file there).
+  assert.ok(skill.includes(`claude mcp add lattice117 -- cmd /c npx -y -p ${pin} lattice117-mcp`));
   const pinned = [...skill.matchAll(/lattice117-verify@(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
   assert.ok(pinned.length > 0 && pinned.every((v) => v === version), `every pin is ${version}`);
 });

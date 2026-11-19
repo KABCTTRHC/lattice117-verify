@@ -23,7 +23,7 @@ Tests at 18 November: 87 Rust tests and 590 JavaScript checks (the
 
 | Item | State | Waiting on |
 |---|---|---|
-| The Agensi listing of `schedule-feasibility-check` (free) | 0.3.0 is on npm, so the skill's set-up line works; zip SHA-256 `b2b4f136…` | The owner, at agensi.io |
+| The Agensi listing of `schedule-feasibility-check` (free) | 0.3.0 is on npm, so the skill's set-up line works; zip SHA-256 `898f1161…` (with the Windows set-up line) | The owner, at agensi.io |
 | Pages deploys (V5) | None since 21 Oct: every run since 16 Nov fails before any step. The live site is current, since its files have not changed | The owner: the account's Actions settings (`sovereign_api` U15) |
 
 ## Next
