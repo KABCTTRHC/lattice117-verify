@@ -28,7 +28,11 @@ for (const f of pkg.files ?? []) {
   if (f.endsWith('.wasm')) continue;
   if (readFileSync(p).includes(0x0d)) problems.push(`${f}: has Windows (CRLF) line endings`);
 }
-for (const bin of Object.values(pkg.bin ?? {})) {
+for (const [name, bin] of Object.entries(pkg.bin ?? {})) {
+  // npm 11 rewrites "./bin/x.mjs" to "bin/x.mjs" at publish time and warns that
+  // the original "was invalid and removed" (seen publishing 0.3.0). Keep the
+  // form npm stores, so the manifest published is the one in this file.
+  if (bin.startsWith('./') || bin.includes('\\')) problems.push(`bin ${name}: write "${bin.replace(/^\.\//, '')}" (no leading ./, forward slashes)`);
   const first = readFileSync(join(HERE, bin), 'utf8').split('\n', 1)[0];
   if (first !== '#!/usr/bin/env node') problems.push(`${bin}: first line is not "#!/usr/bin/env node"`);
 }

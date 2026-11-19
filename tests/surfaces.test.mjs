@@ -191,7 +191,7 @@ console.log('\nThe reproduction pack is publishable and complete');
 {
   const pkg = JSON.parse(read('npm/package.json'));
   ok('npm package exposes the lattice117-verify binary',
-     pkg.bin?.['lattice117-verify'] === './bin/lattice117-verify.mjs');
+     pkg.bin?.['lattice117-verify'] === 'bin/lattice117-verify.mjs');
   ok('and the binary exists', here('npm/bin/lattice117-verify.mjs'));
   ok('the package still declares no dependencies',
      !pkg.dependencies || Object.keys(pkg.dependencies).length === 0);

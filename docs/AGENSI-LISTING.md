@@ -1,8 +1,8 @@
 # Agensi listing: Schedule feasibility check
 
-**Status, 17 November 2026:** ready to list once `lattice117-verify@0.3.0` is
-on npm. The skill's set-up lines install 0.3.0, the first release that carries
-`lattice117-mcp`; until it is published they fail. Agensi's terms, from its
+**Status, 19 November 2026:** ready to list. `lattice117-verify@0.3.0` is on
+npm (`docs/RELEASES.md`), the first release that carries `lattice117-mcp`, and
+the skill's set-up line was checked from the registry in an empty folder. Agensi's terms, from its
 email of 16 November: a skill is a zip with `SKILL.md` at the root;
 Agensi does not host MCP servers, so the skill carries the instructions and a
 config template and states the requirement plainly; a free listing needs no
@@ -87,10 +87,11 @@ window closes at 50: 5 late.") and `self_test` with `allMatch: true`.
 
 ## Before submitting
 
-- [ ] `lattice117-verify@0.3.0` is on npm, and the set-up line works in an
-      empty folder.
+- [x] `lattice117-verify@0.3.0` is on npm, and the set-up line works in an
+      empty folder (19 Nov).
 - [ ] `node tests/skill.test.mjs` passes (CI runs it on every push).
 - [ ] The zip's SHA-256 is noted here when it is uploaded:
-      `________________`.
+      `b2b4f136b366abb5ac944b50b23e33d8d63ba022110a82189b161f84d11fbe56`
+      (rebuilt 19 Nov from the same files: the same bytes).
 - [ ] Your affiliate link from Agensi is saved; use it when you share the
       listing.

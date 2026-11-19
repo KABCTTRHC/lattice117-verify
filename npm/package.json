@@ -65,8 +65,8 @@
   },
   "sideEffects": false,
   "bin": {
-    "lattice117-verify": "./bin/lattice117-verify.mjs",
-    "lattice117-mcp": "./bin/lattice117-mcp.mjs"
+    "lattice117-verify": "bin/lattice117-verify.mjs",
+    "lattice117-mcp": "bin/lattice117-mcp.mjs"
   },
   "scripts": {
     "reproduce": "node bin/lattice117-verify.mjs",
