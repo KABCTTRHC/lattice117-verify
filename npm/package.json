@@ -70,7 +70,7 @@
   },
   "scripts": {
     "reproduce": "node bin/lattice117-verify.mjs",
-    "prepublishOnly": "node bin/lattice117-verify.mjs reproduce",
+    "prepublishOnly": "node bin/lattice117-verify.mjs reproduce && node prepublish-check.mjs",
     "mcp": "node bin/lattice117-mcp.mjs"
   }
 }

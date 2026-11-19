@@ -207,6 +207,28 @@ console.log('\nThe reproduction pack is publishable and complete');
     ok(`  and npm/${f} exists`, here(`npm/${f}`));
   }
 
+  /* import() takes a URL, not a path. On Windows a path such as
+     C:\\...\\index.js reads as a URL with the scheme "c:" and Node refuses it
+     (ERR_UNSUPPORTED_ESM_URL_SCHEME). 0.2.3 shipped that fix, but it never
+     reached this repository, and `npm publish` of 0.3.0 from a Windows PC
+     failed on 19 Nov 2026. A Linux run cannot hit the failure, so this reads
+     the source: every dynamic import in a shipped file must take a quoted
+     relative or node: specifier, or a file URL. */
+  {
+    let code = null;
+    try { await import('C:\\lattice117\\index.js'); } catch (e) { code = e.code; }
+    ok('  a Windows path given to import() is refused here too (why the rule exists)',
+       code === 'ERR_UNSUPPORTED_ESM_URL_SCHEME', String(code));
+  }
+  for (const f of (pkg.files ?? []).filter((x) => /\.m?js$/.test(x))) {
+    const args = [...read(`npm/${f}`).matchAll(/\bimport\(\s*([^)]*)\)/g)]
+      .map((m) => m[1].trim());
+    const byPath = args.filter((a) => a && !/^['"`](\.{1,2}\/|node:)/.test(a)
+      && !/^pathToFileURL\(/.test(a) && !/^new URL\(/.test(a));
+    ok(`  npm/${f} loads modules by URL, never by a filesystem path`,
+       byPath.length === 0, byPath.join(' | '));
+  }
+
   /* The copies under npm/ must be the same bytes as demo/, or a stranger
      reproduces a digest from a fixture that is not the documented one. */
   for (const f of ['resequence.js', 'example-route-sheet.csv',

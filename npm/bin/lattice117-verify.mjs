@@ -26,7 +26,7 @@
  * and we would rather learn it from you than from a customer.
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { arch, platform, release, cpus, totalmem } from 'node:os';
 
@@ -34,9 +34,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, '..');
 const read = (f) => readFileSync(join(PKG, f), 'utf8');
 
-const { verifyFleet, verdictDigest } = await import(join(PKG, 'index.js'));
+// import() takes a URL, not a path. On Windows a path such as C:\...\index.js
+// reads as a URL with the scheme "c:" and Node refuses it
+// (ERR_UNSUPPORTED_ESM_URL_SCHEME), so every module is loaded by file URL.
+const load = (f) => import(pathToFileURL(join(PKG, f)).href);
+const { verifyFleet, verdictDigest } = await load('index.js');
 const { parseMatrix, resequenceRound, roundsFromRows, applyToRoute } =
-  await import(join(PKG, 'resequence.js'));
+  await load('resequence.js');
 
 /** The three strings this command exists to reproduce. */
 const EXPECTED = [
