@@ -1,8 +1,10 @@
 # Agensi listing: Schedule feasibility check
 
-**Status, 19 November 2026:** ready to list. `lattice117-verify@0.3.0` is on
-npm (`docs/RELEASES.md`), the first release that carries `lattice117-mcp`, and
-the skill's set-up line was checked from the registry in an empty folder. Agensi's terms, from its
+**Status, 19 November 2026:** listed, free, through Agensi's own MCP server
+from the owner's Claude Code: https://agensi.io/skills/schedule-feasibility-check
+(its status shows on the Agensi dashboard). `lattice117-verify@0.3.0` is on npm
+(`docs/RELEASES.md`), and the listed skill carries the native-Windows set-up
+line (zip SHA-256 `898f1161…`). Agensi's terms, from its
 email of 16 November: a skill is a zip with `SKILL.md` at the root;
 Agensi does not host MCP servers, so the skill carries the instructions and a
 config template and states the requirement plainly; a free listing needs no
